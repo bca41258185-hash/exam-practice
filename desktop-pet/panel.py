@@ -107,10 +107,14 @@ def remove_source(path: str) -> None:
 
 
 def _overlap(folder: str) -> str | None:
-    """若這個資料夾與已加入的專案重疊（在裡面，或把它包在裡面），回傳那個專案的名稱。"""
+    """若這個資料夾與已加入的資料夾重疊，回傳給使用者看的說明；沒有重疊回傳 None。"""
     for f in _folders():
-        if folder == f or folder.startswith(f + os.sep) or f.startswith(folder + os.sep):
-            return os.path.basename(project_of(f) or f)
+        name = os.path.basename(f)
+        if folder == f or folder.startswith(f + os.sep):
+            return f"這個資料夾已經包含在「{name}」裡，不需要再加一次。"
+        if f.startswith(folder + os.sep):
+            return (f"這個資料夾裡面已經有加過的「{name}」。"
+                    "請先到「⋯」→「已加入的資料夾」把它移除，再加這一層。")
     return None
 
 
@@ -173,8 +177,15 @@ def unmerge(folder: str) -> str:
 
 
 def folder_info(project: str) -> list[dict]:
-    singles = {_clean(p) for p in core.load_config().get("projects", [])}
-    return [{"path": f, "main": i == 0, "single": f in singles} for i, f in enumerate(folders_of(project))]
+    cfg = core.load_config()
+    singles = {_clean(p) for p in cfg.get("projects", [])}
+    out = [{"path": f, "main": i == 0, "single": f in singles, "missing": False}
+           for i, f in enumerate(folders_of(project))]
+    known = {o["path"] for o in out}
+    # 併入這個專案、但目前讀不到的資料夾（例如網路磁碟沒連上）也要列出來
+    out += [{"path": f, "main": False, "single": True, "missing": True}
+            for f, into in cfg.get("merged", {}).items() if into == project and f not in known and not os.path.isdir(f)]
+    return out
 
 
 def add_folder(project: str, folder: str) -> str:
@@ -193,8 +204,8 @@ def add_project(folder: str, as_root: bool) -> str:
     if p in [_clean(x) for x in cur]:
         return p
     hit = _overlap(p)
-    if hit and not (as_root and p in [_clean(x) for x in core.load_config().get("project_roots", [])]):
-        raise core.ProtectedFolderError(f"這個資料夾和已加入的「{hit}」重疊，不需要再加一次。")
+    if hit:
+        raise core.ProtectedFolderError(hit)
     core.set_config(**{key: cur + [p]})
     return p
 
@@ -596,7 +607,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             path = self.path
             if path == "/api/open":
-                self._send(200, {"did": open_file(body["path"], bool(body.get("reveal")))})
+                try:
+                    self._send(200, {"did": open_file(body["path"], bool(body.get("reveal")))})
+                except FileNotFoundError:   # 檔案被移走了：讓下一次查詢重新掃描，清單才不會留著它
+                    self.index.data = {k: (0, rows) for k, (_, rows) in self.index.data.items()}
+                    raise
             elif path == "/api/pin":
                 if not project_of(body["path"]):
                     raise PermissionError("不在專案資料夾範圍內")

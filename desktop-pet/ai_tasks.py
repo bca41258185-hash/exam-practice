@@ -24,15 +24,20 @@ ORDER = {"failed": 0, "waiting": 1, "running": 2, "done": 3, "idle": 4}
 
 NEXT_STEP = {
     "running": "助手還在做，不需要你處理。",
-    "waiting": "輪到你了：打開來看成果，沒問題就同意採用，有問題就回覆請它修改。",
+    "waiting": "輪到你了：回到你交代這件事的對話，看它的回覆。",
     "failed": "成果沒通過自動檢查。回到你交代這件事的對話，請助手修正即可。",
     "done": "這件事已經完成，成果已經收進正式版本。",
     "idle": "這件事目前停著。需要的話，回到原本的對話請助手繼續。",
 }
+NEXT_STEP_GITHUB = {
+    "waiting": "輪到你了：按下面的「在 GitHub 開啟」看成果。沒問題的話，在那個頁面最下方按綠色的按鈕"
+               "（Ready for review，接著 Merge pull request）就是同意採用；有問題就回到原本的對話請助手修改。",
+}
 
 
 def _finish(task: dict) -> dict:
-    task["next"] = NEXT_STEP.get(task.get("state"), "")
+    by_source = NEXT_STEP_GITHUB if task.get("source") == "GitHub" else {}
+    task["next"] = by_source.get(task.get("state")) or NEXT_STEP.get(task.get("state"), "")
     todos = task.get("todos") or []
     task["progress"] = [sum(t["status"] == "completed" for t in todos), len(todos)]
     doing = next((t["text"] for t in todos if t["status"] == "in_progress"), "")
@@ -245,13 +250,17 @@ def check_repo(repo: str) -> tuple[bool, str]:
     token = core.load_config().get("github_token", "")
     prefixes = tuple(core.load_config().get("ai_branch_prefixes") or ["claude/"])
     try:
-        n = sum(t["state"] != "idle" for t in _fetch_repo(repo, token, prefixes))
+        tasks = _fetch_repo(repo, token, prefixes)
     except urllib.error.HTTPError as e:
         return False, explain_http(repo, e.code, bool(token))
     except (urllib.error.URLError, ValueError, KeyError, TypeError, OSError):
         return False, "目前連不上 GitHub，稍後會自動再試。"
     _gh_cache["at"] = 0.0  # 讓面板與寵物馬上重新整理
-    return True, f"連得上「{repo}」，目前有 {n} 件進行中的任務。" if n else f"連得上「{repo}」，目前沒有進行中的任務。"
+    doing = sum(t["state"] == "running" for t in tasks)
+    yours = sum(t["state"] in ("waiting", "failed") for t in tasks)
+    if not (doing or yours):
+        return True, f"連得上「{repo}」，目前沒有進行中的事情。"
+    return True, f"連得上「{repo}」：{doing} 件正在做、{yours} 件等你處理。"
 
 
 def github_tasks() -> tuple[list[dict], str]:

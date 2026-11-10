@@ -303,6 +303,14 @@ class IndexTest(Base):
         outside.mkdir(parents=True)
         panel.add_folder(main, str(outside))
         self.assertEqual([f["single"] for f in panel.folder_info(main)], [False, True])
+        import shutil
+        shutil.move(str(outside), str(outside) + "_離線")   # 模擬網路磁碟沒連上
+        self.assertEqual([(f["missing"], f["single"]) for f in panel.folder_info(main)], [(False, False), (True, True)])
+        shutil.move(str(outside) + "_離線", str(outside))
+        with self.assertRaisesRegex(core.ProtectedFolderError, "已經包含在"):
+            panel.add_project(str(outside / "子"), False) if (outside / "子").mkdir() is None else None
+        with self.assertRaisesRegex(core.ProtectedFolderError, "請先到"):
+            panel.add_project(str(outside.parent), True)
         self.assertEqual(panel.unmerge(str(outside)), "removed", "單獨加入的資料夾拿掉後不會變成新專案")
         self.assertEqual(sorted(panel.projects()), sorted([main, str(self.root / "乙案")]))
         panel.merge(str(self.root / "乙案"), main)
@@ -373,7 +381,7 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/tasks")[0], 200)
         proj = urllib.request.quote(str(self.root / "甲案"))
         self.assertEqual(self.call("/api/folders?project=" + proj)[1]["folders"],
-                         [{"path": str(self.root / "甲案"), "main": True, "single": False}])
+                         [{"path": str(self.root / "甲案"), "main": True, "single": False, "missing": False}])
         self.assertEqual(self.call("/api/sources")[1]["sources"][0]["batch"], True)
         self.assertEqual(self.call("/api/remove_source", {"path": "/etc"})[0], 400)
         self.assertEqual(self.call("/api/merge", {"path": "/etc", "into": str(self.root / "甲案")})[0], 400)
@@ -402,6 +410,7 @@ class TasksTest(unittest.TestCase):
         ]
         f.write_text("\n".join(r if isinstance(r, str) else json.dumps(r, ensure_ascii=False) for r in rows), "utf-8")
         t = ai_tasks.parse_session(f)
+        self.assertIn("不需要你處理", t["next"])
         self.assertEqual((t["title"], t["state"], t["progress"], t["doing"], t["where"]),
                          ("法規檢討表", "running", [1, 3], "計算容積", "信義住宅"))
         t = ai_tasks.parse_session(f, now=time.time() + 600)
@@ -420,6 +429,7 @@ class TasksTest(unittest.TestCase):
               "body": "說明\n- [x] 後端\n- [X] 測試\n- [ ] 簡報\n"}
         t = ai_tasks.pr_task("o/r", pr, [], now)
         self.assertEqual((t["state"], t["progress"], t["doing"]), ("waiting", [2, 3], "簡報"))
+        self.assertIn("在 GitHub 開啟", t["next"])
         self.assertEqual(ai_tasks.pr_task("o/r", pr, [{"status": "in_progress"}], now)["state"], "running")
         self.assertEqual(ai_tasks.pr_task("o/r", pr, [{"status": "completed", "conclusion": "failure"}], now)["state"], "failed")
         self.assertEqual(ai_tasks.pr_task("o/r", dict(pr, updated_at=iso(60)), [], now)["state"], "running")

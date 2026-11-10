@@ -125,7 +125,7 @@ class Pet:
             news = ai_tasks.changes(self.known, self.tasks)
             if news:
                 t = news[0][0]
-                text = {"waiting": "做完一輪了，等你看！", "failed": "出錯了，需要你看一下。", "done": "已經合併完成！"}[t["state"]]
+                text = {"waiting": "做完一輪了，等你看！", "failed": "出錯了，需要你看一下。", "done": "已經完成並採用！"}[t["state"]]
                 extra = f"\n（另外還有 {len(news) - 1} 件有新進度）" if len(news) > 1 else ""
                 self.say(f"「{t['title'][:22]}」\n{text}{extra}", seconds=12)
                 if t["state"] == "done":
@@ -146,7 +146,9 @@ class Pet:
         # 頭上的狀態標籤：寫出文字，不必記顏色
         shown = [(COLORS[s], f"{LABELS[s]} {self.counts[s]}") for s in ("running", "waiting", "failed") if self.counts.get(s)]
         if self.error:  # 連不上或設定有問題：不要讓人以為「沒事」
-            shown = shown[:2] + [("#d7dbe2", "連線?")]
+            if len(shown) == 3:   # 放不下四個時，犧牲最不需要你處理的「執行」，保留「等你」「出錯」
+                shown = shown[1:]
+            shown.append(("#d7dbe2", "連線?"))
         x = W / 2 - len(shown) * 24 + 1
         for color, text in shown:
             c.create_rectangle(x, 4, x + 46, 26, fill=color, outline="white", width=2)
@@ -267,7 +269,9 @@ class Pet:
         bw, bh = win.winfo_reqwidth(), win.winfo_reqheight()
         x = max(4, min(self.root.winfo_x() + W // 2 - bw // 2, self.root.winfo_screenwidth() - bw - 4))
         y = self.root.winfo_y() - bh - 4
-        win.geometry(f"+{x}+{y if y >= 0 else self.root.winfo_y() + H + 4}")
+        if y < 0:  # 上面放不下就放下面；再放不下就貼齊螢幕邊緣，不要超出去
+            y = min(self.root.winfo_y() + H + 4, self.root.winfo_screenheight() - bh - 4)
+        win.geometry(f"+{x}+{max(0, y)}")
 
     def _hide_bubble(self) -> None:
         if self.bubble_job:
@@ -374,7 +378,7 @@ class Pet:
         if self.popup:
             self.toggle_popup()
         panel.launch_browser()
-        self.say("觸控面板開好了。\n拖到副螢幕後按右上角的全螢幕。")
+        self.say("觸控面板開好了。\n拖到副螢幕後，點右上角「⋯」→「全螢幕」。", seconds=9)
 
     def add_project(self, as_root: bool) -> None:
         title = "加入一整批專案：請選總資料夾（裡面每個子資料夾是一個專案）" if as_root else "加入一個專案：請選那個專案的資料夾"
@@ -499,7 +503,16 @@ class Pet:
             return  # 留空或取消都不會動到已存的權杖
         core.set_config(github_token=token.strip())
         ai_tasks._gh_cache["at"] = 0.0
-        self.say("權杖已存好，稍後就會更新進度。")
+        repos = core.load_config().get("github_repos", [])
+        if not repos:
+            return self.say("權杖已存好。\n接著請用右鍵「追蹤 AI 助手的 GitHub 專案…」加入專案。", seconds=12)
+        self.say("權杖已存好，正在連線確認…", seconds=20)
+
+        def check():   # 立刻用新權杖試連每個專案，回報第一個有問題的
+            results = [ai_tasks.check_repo(r) for r in repos]
+            bad = next((text for ok, text in results if not ok), None)
+            self.notes.put(bad or "權杖有效。" + results[0][1])
+        threading.Thread(target=check, daemon=True).start()
 
 
 if __name__ == "__main__":

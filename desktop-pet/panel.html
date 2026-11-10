@@ -169,7 +169,7 @@
 
 <div class="sheet-bg" id="sheet-bg"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
-<div id="offline">檔案管家已經關閉。<br>請回到電腦上重新雙擊 <b>pet.pyw</b>，這個畫面會自動恢復。</div>
+<div id="offline"><div>檔案管家已經關閉。<br>請回到電腦上重新雙擊 <b>pet.pyw</b>，這個畫面會自動恢復。</div></div>
 
 <script>
 const TOKEN = "__TOKEN__";
@@ -366,7 +366,7 @@ function taskSheet(id) {
   sheet(head(esc(t.title)) + `<div class="detail list s-${t.state}">
     <p style="color:var(--s);font-weight:700;font-size:1.05rem">${esc(t.state_text)}・${ago(t.updated)}</p>
     <p style="color:var(--text)">${esc(t.next || "")}</p>
-    ${t.where ? `<p>所在的 GitHub 專案：${esc(t.where)}${t.branch ? "（工作分支 " + esc(t.branch) + "）" : ""}</p>` : ""}
+    ${t.where ? `<p>所在的 GitHub 專案：${esc(t.where)}</p>` : ""}
     ${t.todos.length ? `<ul>${t.todos.map(x => `<li class="${x.status}">${esc(x.text)}</li>`).join("")}</ul>` : ""}
     ${t.prompt ? `<p>你交代的：${esc(t.prompt)}</p>` : ""}${t.reply ? `<p>${esc(t.reply)}</p>` : ""}
     ${t.url ? `<button class="big" data-url="${esc(t.url)}">在 GitHub 開啟</button>` : ""}</div>`);
@@ -429,6 +429,7 @@ async function foldersSheet() {
     <div class="list two"><button class="big main" data-act="add-folder">${icon("plus")}加入其他位置的資料夾</button>
       ${others.length ? `<button class="big" data-act="merge-pick">${icon("plus")}把清單上另一個專案併進來…</button>` : "<span></span>"}</div>
     ${d.folders.map(x => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(base(x.path))}</div><div class="m">${esc(x.path)}</div></span></div>
+      ${x.missing ? `<span class="ver" style="color:var(--failed);border:0">目前讀不到</span>` : ""}
       ${x.main ? `<span class="ver" style="color:var(--dim)">主資料夾</span>` : `<button class="ver" data-detach-ask="${esc(x.path)}" data-single="${x.single ? 1 : ""}">${x.single ? "移除" : "拆出"}</button>`}</div>`).join("")}</div>`);
 }
 function mergePickSheet() {
