@@ -34,6 +34,21 @@ LABELS = {"running": "執行", "waiting": "等你", "failed": "出錯"}
 POLL_SECONDS = 15
 
 
+def clip(text: str, n: int) -> str:
+    return text if len(text) <= n else text[:n - 1] + "…"
+
+
+def pick_rows(tasks: list[dict], n: int) -> list[dict]:
+    """任務很多時每種狀態輪流取，免得清單被同一種狀態（例如全是出錯）佔滿。"""
+    groups = [[t for t in tasks if t["state"] == s] for s in ("failed", "waiting", "running", "done")]
+    out: list[dict] = []
+    while len(out) < n and any(groups):
+        for g in groups:
+            if g and len(out) < n:
+                out.append(g.pop(0))
+    return sorted(out, key=lambda t: ai_tasks.ORDER.get(t["state"], 9))
+
+
 def mood_of(counts: dict) -> str:
     """需要你處理的優先：出錯 > 等你 > 執行中 > 睡覺。"""
     for state in ("failed", "waiting", "running"):
@@ -95,7 +110,10 @@ class Pet:
             threading.Thread(target=self._poll_loop, daemon=True).start()
         self._tick()
         self._drain()
-        root.after(1200, lambda: self.say("我會幫你盯著 AI 助手的進度。\n點我看清單，雙擊開觸控面板，\n按右鍵可以設定。", seconds=9))
+        hello = "我會幫你盯著 AI 助手的進度。\n點我看清單，雙擊開觸控面板，\n按右鍵可以設定。"
+        if core.config_problem:   # 設定檔壞了：說清楚發生什麼事，不要讓人以為設定憑空消失
+            hello = core.config_problem + "\n請重新加入專案資料夾。"
+        root.after(1200, lambda: self.say(hello, seconds=15 if core.config_problem else 9))
 
     # ------------------------------------------------------------ 資料
     def _poll_loop(self) -> None:
@@ -299,7 +317,8 @@ class Pet:
             child.destroy()
         box = tk.Frame(p, bg="#1a1d23", padx=10, pady=8)
         box.pack()
-        rows = [t for t in self.tasks if t["state"] != "idle"][:6] or self.tasks[:3]
+        live = [t for t in self.tasks if t["state"] != "idle"]
+        rows = pick_rows(live, 6) or self.tasks[:3]
         if not rows:
             hint = ("目前沒有進行中的 AI 任務。" if core.load_config().get("github_repos")
                     else "還沒設定要看哪裡的 AI 助手。\n在我身上按右鍵 →\n「追蹤 AI 助手的 GitHub 專案…」")
@@ -312,16 +331,19 @@ class Pet:
             tk.Label(row, text="●", font=(FONT, 12), bg="#1a1d23", fg=COLORS[t["state"]]).pack(side="left", anchor="n")
             text = tk.Frame(row, bg="#1a1d23")
             text.pack(side="left", padx=(4, 0))
-            tk.Label(text, text=t["title"][:26], font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
+            tk.Label(text, text=clip(t["title"], 26), font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
             detail = t["state_text"] + (f"・{done}/{total}" if total else "")
             if t.get("doing") and t["state"] == "running":
-                detail += f"\n正在：{t['doing'][:24]}"
+                detail += f"\n正在：{clip(t['doing'], 24)}"
             if t.get("where"):
-                detail += f"\n在 {t['where']}"
+                detail += f"\n在 {clip(t['where'], 28)}"
             tk.Label(text, text=detail, font=(FONT, 9), bg="#1a1d23", fg=COLORS[t["state"]], justify="left").pack(anchor="w")
             if t.get("url"):
                 for w in (row, text, *row.winfo_children(), *text.winfo_children()):
                     w.bind("<Button-1>", lambda e, u=t["url"]: webbrowser.open(u))
+        if len(live) > len(rows):
+            tk.Label(box, text=f"還有 {len(live) - len(rows)} 件沒列出，雙擊我開觸控面板看全部。", font=(FONT, 9),
+                     bg="#1a1d23", fg="#9aa0ab").pack(anchor="w", pady=(4, 0))
         if self.error:
             tk.Label(box, text=self.error, font=(FONT, 9), bg="#1a1d23", fg=COLORS["failed"], wraplength=280,
                      justify="left").pack(anchor="w", pady=(4, 0))

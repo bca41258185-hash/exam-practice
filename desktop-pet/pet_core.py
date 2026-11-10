@@ -5,6 +5,8 @@ import json
 import os
 import stat
 import sys
+import tempfile
+import threading
 from pathlib import Path
 
 CATEGORIES: dict[str, set[str]] = {
@@ -57,25 +59,77 @@ def data_dir() -> Path:
     return d
 
 
-def load_config() -> dict:
-    cfg = {"walk": True}
+_LOCK = threading.RLock()          # 寵物與面板在同一個程式裡，讀改寫設定要排隊
+_cache: dict = {"stamp": None, "cfg": None}
+config_problem = ""                 # 設定檔壞掉時，給畫面顯示的一句話
+# 各欄位應有的型別；型別不對的欄位當作沒設定，不讓它弄壞其他功能
+_TYPES = {"project_roots": list, "projects": list, "hidden_projects": list, "pinned": list,
+          "github_repos": list, "ai_branch_prefixes": list, "merged": dict, "opened": dict,
+          "github_token": str, "walk": bool}
+
+
+def _stamp(path: Path):
     try:
-        cfg.update(json.loads((data_dir() / "config.json").read_text("utf-8")))
-    except (OSError, ValueError):
-        pass
-    return cfg
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def load_config() -> dict:
+    """讀設定。檔案沒變就用上次讀到的（慢速磁碟上不必每次重讀）。回傳的是副本，可以放心修改。"""
+    global config_problem
+    path = data_dir() / "config.json"
+    with _LOCK:
+        stamp = _stamp(path)
+        if _cache["cfg"] is None or _cache["stamp"] != stamp:
+            cfg = {"walk": True}
+            if stamp is not None:
+                try:
+                    raw = json.loads(path.read_text("utf-8-sig"))
+                    if not isinstance(raw, dict):
+                        raise ValueError("not an object")
+                    cfg.update({k: v for k, v in raw.items() if k not in _TYPES or isinstance(v, _TYPES[k])})
+                    for key in ("merged", "opened"):   # 內層的值型別也要對
+                        if key in cfg:
+                            want = str if key == "merged" else int
+                            cfg[key] = {k: v for k, v in cfg[key].items() if isinstance(v, want) and not isinstance(v, bool)}
+                    for key in ("project_roots", "projects", "hidden_projects", "pinned", "github_repos", "ai_branch_prefixes"):
+                        if key in cfg:
+                            cfg[key] = [x for x in cfg[key] if isinstance(x, str)]
+                except (OSError, ValueError):
+                    # 設定檔壞了：不要默默蓋掉它，先另存一份再從頭開始
+                    backup = path.with_name("config.bad.json")
+                    try:
+                        os.replace(path, backup)
+                        config_problem = f"原本的設定檔讀不懂，已另存為 {backup}，目前從空白設定開始。"
+                    except OSError:
+                        config_problem = "設定檔讀不懂，目前從空白設定開始。"
+                    stamp = None
+            _cache.update(stamp=stamp, cfg=cfg)
+        return json.loads(json.dumps(_cache["cfg"]))
 
 
 def save_config(cfg: dict) -> None:
-    _write_json(data_dir() / "config.json", cfg)
+    with _LOCK:
+        _write_json(data_dir() / "config.json", cfg)
+        _cache.update(stamp=None, cfg=None)
 
 
 def set_config(**changes) -> dict:
-    """重新讀檔後只改指定欄位再存回，避免寵物與面板互相蓋掉對方的設定。"""
-    cfg = load_config()
-    cfg.update(changes)
-    save_config(cfg)
-    return cfg
+    """重新讀檔後只改指定欄位再存回。整段上鎖，同時發生的修改不會互相蓋掉。"""
+    with _LOCK:
+        cfg = load_config()
+        cfg.update(changes)
+        save_config(cfg)
+        return cfg
+
+
+def config_int(key: str, default: int) -> int:
+    try:
+        return int(load_config().get(key, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def human_size(n: float) -> str:
@@ -127,6 +181,15 @@ def check_folder_allowed(folder: Path) -> Path:
 
 
 def _write_json(path: Path, obj) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=1), "utf-8")
-    os.replace(tmp, path)
+    """先寫到唯一的暫存檔再換過去：寫到一半當機也不會留下半個設定檔。"""
+    fd, tmp = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(obj, ensure_ascii=False, indent=1))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise

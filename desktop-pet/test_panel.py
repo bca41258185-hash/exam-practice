@@ -353,6 +353,127 @@ class IndexTest(Base):
         self.assertIn(str(single.resolve()), panel.projects())
 
 
+class RobustnessTest(Base):
+    def test_shows_cached_list_while_slow_disk_rescans(self):
+        self.put("甲案/a.pdf")
+        idx = panel.Index(blocking=False)
+        proj = str(self.root / "甲案")
+        first = idx.files(proj)
+        self.assertEqual((first["files"], first["scanning"]), ([], True), "第一次還沒讀完：不卡住，回報正在讀取")
+        for _ in range(100):
+            if not idx.files(proj)["scanning"]:
+                break
+            time.sleep(0.02)
+        self.assertEqual(len(idx.files(proj)["files"]), 1)
+
+        self.put("甲案/b.pdf")
+        real_walk, calls = panel.Index._walk, []
+        def slow_walk(top):
+            calls.append(top)
+            time.sleep(0.3)
+            return real_walk(top)
+        panel.Index._walk = staticmethod(slow_walk)
+        try:
+            idx.data[proj] = (0, idx.data[proj][1])   # 快取過期
+            t0 = time.time()
+            for _ in range(5):                         # 連點五下
+                res = idx.files(proj)
+            self.assertLess(time.time() - t0, 0.25, "不等掃描，立刻回上次的清單")
+            self.assertEqual((len(res["files"]), res["scanning"]), (1, True))
+            time.sleep(0.6)
+            self.assertEqual(len(calls), 1, "同一個資料夾同時只掃一趟")
+            self.assertEqual(len(idx.files(proj)["files"]), 2)
+        finally:
+            panel.Index._walk = staticmethod(real_walk)
+
+    def test_project_folder_that_is_a_link_can_be_opened(self):
+        real = Path(self.tmp.name).resolve() / "別處" / "連結案"
+        real.mkdir(parents=True)
+        (real / "a.pdf").write_bytes(b"x")
+        os.symlink(real, self.root / "連結案", target_is_directory=True)
+        idx = panel.Index()
+        proj = str(self.root / "連結案")
+        path = idx.files(proj)["files"][0]["path"]
+        self.assertEqual(panel.project_of(path), proj)
+        os.symlink("/etc/hostname", self.root / "連結案" / "逃出去.txt") if os.path.exists("/etc/hostname") else None
+        self.assertIsNone(panel.project_of(str(self.root / "連結案" / "逃出去.txt")) if os.path.exists("/etc/hostname") else None)
+
+    def test_odd_times_names_and_unreadable_folders(self):
+        future = self.put("甲案/相機.jpg")
+        os.utime(future, (time.time() + 10 * 365 * 86400,) * 2)
+        self.put("甲案/正常.pdf", 1)
+        self.put("甲案/圖說 1.5版")
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        res = idx.files(proj)
+        by = {f["name"]: f for f in res["files"]}
+        self.assertEqual(by["相機.jpg"]["mtime"], 0, "未來的時間不當成今天")
+        self.assertEqual(res["times"]["today"], 1)
+        self.assertEqual(res["files"][-1]["name"], "相機.jpg")
+        self.assertEqual((by["圖說 1.5版"]["ext"], by["正常.pdf"]["ext"]), ("", "PDF"))
+        real_scandir = os.scandir
+        def deny(path):
+            if str(path).endswith("機密"):
+                raise PermissionError(13, "denied")
+            return real_scandir(path)
+        self.put("甲案/機密/x.pdf")
+        os.scandir = deny
+        try:
+            idx.data.clear()
+            self.assertEqual(idx.files(proj)["denied"], 1)
+        finally:
+            os.scandir = real_scandir
+
+    def test_explicit_toggle_and_concurrent_config_writes(self):
+        self.assertTrue(panel.toggle("pinned", "/a", True))
+        self.assertTrue(panel.toggle("pinned", "/a", True), "畫面過期時重複送出，結果仍然是開")
+        self.assertEqual(core.load_config()["pinned"], ["/a"])
+        self.assertFalse(panel.toggle("pinned", "/a", False))
+        import threading
+        errors = []
+        def work(i):
+            try:
+                for j in range(20):
+                    panel.toggle("pinned", f"/p{i}-{j}", True)
+            except Exception as e:
+                errors.append(e)
+        threads = [threading.Thread(target=work, args=(i,)) for i in range(8)]
+        [th.start() for th in threads]
+        [th.join() for th in threads]
+        cfg = core.load_config()
+        self.assertEqual((errors, len(cfg["pinned"]), cfg["project_roots"]), ([], 160, [str(self.root)]), "同時寫入不會互相蓋掉")
+
+    def test_broken_config_is_kept_aside_not_overwritten(self):
+        path = core.data_dir() / "config.json"
+        path.write_text("{這不是 JSON", "utf-8")
+        core._cache.update(stamp=None, cfg=None)
+        self.assertEqual(core.load_config(), {"walk": True})
+        self.assertIn("已另存", core.config_problem)
+        self.assertEqual((core.data_dir() / "config.bad.json").read_text("utf-8"), "{這不是 JSON")
+        core.config_problem = ""
+        path.write_text('{"opened": [1], "pinned": 5, "project_roots": ["/x", 3], "panel_port": "abc"}', "utf-8")
+        core._cache.update(stamp=None, cfg=None)
+        cfg = core.load_config()
+        self.assertEqual((cfg.get("opened"), cfg.get("pinned"), cfg["project_roots"]), (None, None, ["/x"]), "型別不對的欄位當作沒設定")
+        self.assertEqual(core.config_int("panel_port", 8765), 8765)
+
+    def test_dirty_ai_records_do_not_break_the_list(self):
+        d = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-dirty"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "bad.jsonl").write_text("\n".join([
+            '{"type":"assistant","message":"字串"}', '{"type":"ai-title","aiTitle":12345}', '[1,2]',
+            '{"type":"user","cwd":123,"message":{"content":"hi"}}',
+            '{"type":"user","message":{"content":[{"type":"text","text":null}]}}']), "utf-8")
+        got = ai_tasks.all_tasks()
+        self.assertIn("tasks", got)
+        orig = ai_tasks.local_sessions
+        ai_tasks.local_sessions = lambda: 1 / 0
+        try:
+            self.assertEqual(ai_tasks.all_tasks()["tasks"], [t for t in got["tasks"] if t["source"] != "本機"])
+        finally:
+            ai_tasks.local_sessions = orig
+
+
 class ServerTest(Base):
     def setUp(self):
         super().setUp()
@@ -397,6 +518,18 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/open", {"path": "/etc/passwd"})[0], 400)
         self.assertEqual(self.call("/api/open_url", {"url": "https://evil.example/"})[0], 400)
         self.assertEqual(self.call("/api/tasks")[0], 200)
+        self.assertEqual(self.call("/api/ping")[1], {"ok": True})
+        self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
+        for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
+            self.assertEqual(self.call("/api/open", bad)[0], 400, bad)
+        boom = panel.ai_tasks.all_tasks
+        panel.ai_tasks.all_tasks = lambda: 1 / 0
+        try:
+            code, data = self.call("/api/tasks")
+            self.assertEqual((code, data["tasks"]), (200, []))
+            self.assertIn("暫時讀不到", data["error"])
+        finally:
+            panel.ai_tasks.all_tasks = boom
         proj = urllib.request.quote(str(self.root / "甲案"))
         self.assertEqual(self.call("/api/folders?project=" + proj)[1]["folders"],
                          [{"path": str(self.root / "甲案"), "main": True, "single": False, "missing": False}])

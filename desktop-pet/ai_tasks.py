@@ -61,9 +61,11 @@ def _read_slices(path: Path, head: int = 60_000, tail: int = 400_000) -> list[di
         for line in chunk.decode("utf-8", "replace").splitlines():
             if line.startswith("{"):
                 try:
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
                 except ValueError:
-                    pass  # 被切斷的行
+                    continue  # 被切斷的行
+                if isinstance(row, dict):
+                    rows.append(row)
     return rows
 
 
@@ -72,7 +74,7 @@ def _text_of(message) -> str:
     if isinstance(content, str):
         return content.strip()
     if isinstance(content, list):
-        return " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text").strip()
+        return " ".join(str(b.get("text") or "") for b in content if isinstance(b, dict) and b.get("type") == "text").strip()
     return ""
 
 
@@ -87,19 +89,22 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
         todos: list[dict] = []
         for o in _read_slices(path):
             t = o.get("type")
-            cwd, branch = o.get("cwd") or cwd, o.get("gitBranch") or branch
+            if isinstance(o.get("cwd"), str):
+                cwd = o["cwd"] or cwd
+            if isinstance(o.get("gitBranch"), str):
+                branch = o["gitBranch"] or branch
             if t == "ai-title":
-                title = o.get("aiTitle") or title
+                title = o.get("aiTitle") if isinstance(o.get("aiTitle"), str) and o.get("aiTitle") else title
             elif t == "summary":
-                title = title or o.get("summary", "")
+                title = title or str(o.get("summary") or "")
             elif t == "last-prompt":
-                prompt = o.get("lastPrompt") or prompt
+                prompt = o.get("lastPrompt") if isinstance(o.get("lastPrompt"), str) and o.get("lastPrompt") else prompt
             elif t == "user" and not o.get("isSidechain"):
                 txt = _text_of(o.get("message"))
                 if txt and not txt.startswith("<"):
                     prompt, last_kind = txt, "user"
             elif t == "assistant" and not o.get("isSidechain"):
-                msg = o.get("message") or {}
+                msg = o.get("message") if isinstance(o.get("message"), dict) else {}
                 txt = _text_of(msg)
                 reply = txt or reply
                 blocks = msg.get("content") if isinstance(msg.get("content"), list) else []
@@ -144,7 +149,7 @@ def local_sessions(days: float = 3, limit: int = 12) -> list[dict]:
     for _, f in sorted(files, reverse=True)[:limit]:
         try:
             info = parse_session(f)
-        except (OSError, ValueError):
+        except Exception:   # 這份紀錄格式不對就跳過，不影響其他的
             info = None
         if info:
             out.append(info)
@@ -294,8 +299,15 @@ def github_tasks() -> tuple[list[dict], str]:
 
 # ---------------------------------------------------------------- 彙整
 def all_tasks() -> dict:
-    gh, err = github_tasks()
-    tasks = sorted(local_sessions() + gh, key=lambda t: (ORDER.get(t["state"], 9), -t["updated"]))
+    try:
+        gh, err = github_tasks()
+    except Exception:
+        gh, err = [], "暫時讀不到 GitHub 上的進度，稍後會自動再試。"
+    try:
+        local = local_sessions()
+    except Exception:
+        local = []
+    tasks = sorted(local + gh, key=lambda t: (ORDER.get(t["state"], 9), -t["updated"]))
     counts = {s: sum(t["state"] == s for t in tasks) for s in ORDER}
     return {"tasks": tasks, "counts": counts, "error": err,
             "github_configured": bool(core.load_config().get("github_repos"))}

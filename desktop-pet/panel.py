@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -35,6 +36,7 @@ SKIP_DIRS = {"node_modules", "__pycache__", "appdata", "$recycle.bin", "system v
 NO_LAUNCH = {".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".scr", ".com", ".reg", ".lnk",
              ".sh", ".py", ".pyw", ".jar", ".app", ".dmg", ".pkg", ".deb", ".rpm", ".appimage", ".hta"}
 MAX_PER_PROJECT = 50_000
+MAX_LIMIT = 2000   # 一次最多顯示幾張卡片
 OLD_DIRS = {"old", "舊版", "舊檔", "舊", "備份", "backup", "bak", "archive", "歷史", "歷史版本", "history", "_old"}
 
 
@@ -52,9 +54,22 @@ def _skip_name(name: str) -> bool:
     return name.startswith((".", "~$", "$")) or low in core.SKIP_NAMES or os.path.splitext(low)[1] in core.SKIP_EXT
 
 
-def _folders() -> list[str]:
-    """所有候選資料夾：「專案總資料夾」底下的每個子資料夾，加上個別加入的資料夾。"""
+_folder_cache: dict = {"key": None, "at": 0.0, "val": []}
+_EXT = re.compile(r"\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,6}$")   # 真正的副檔名至少含一個英文字母（「圖說 1.5版」不算）
+
+
+def ext_of(name: str) -> str:
+    m = _EXT.search(name)
+    return m.group(0)[1:].upper()[:5] if m else ""
+
+
+def _folders(fresh: bool = False) -> list[str]:
+    """所有候選資料夾：「專案總資料夾」底下的每個子資料夾，加上個別加入的資料夾。
+    結果快取 3 秒（設定一變就失效），避免在慢速網路磁碟上每次點擊都重列目錄。"""
     cfg = core.load_config()
+    key = json.dumps([cfg.get("project_roots", []), cfg.get("projects", [])], ensure_ascii=False)
+    if not fresh and _folder_cache["key"] == key and time.time() - _folder_cache["at"] < 3:
+        return list(_folder_cache["val"])
     out: list[str] = []
     for root in cfg.get("project_roots", []):
         r = _norm(root)
@@ -71,6 +86,7 @@ def _folders() -> list[str]:
         r = _norm(p)
         if r and r not in out:
             out.append(r)
+    _folder_cache.update(key=key, at=time.time(), val=list(out))
     return out
 
 
@@ -84,6 +100,15 @@ class FolderOffline(Exception):
 def _configured(path: str) -> bool:
     """這個路徑是否位於使用者加入過的資料夾之下（不論現在讀不讀得到）。"""
     return any(path == s["path"] or path.startswith(s["path"] + os.sep) for s in sources())
+
+
+def _locked(fn):
+    """「讀設定 → 改 → 存」整段上鎖，同時發生的操作不會互相蓋掉。"""
+    @functools.wraps(fn)
+    def wrapper(*args, **kw):
+        with core._LOCK:
+            return fn(*args, **kw)
+    return wrapper
 
 
 def _clean(p) -> str:
@@ -109,6 +134,7 @@ def missing_folders() -> list[str]:
     return [s["path"] for s in sources() if s["missing"]]
 
 
+@_locked
 def remove_source(path: str) -> None:
     """不再顯示某個加入過的資料夾。只改設定，不動檔案。"""
     cfg = core.load_config()
@@ -151,20 +177,27 @@ def folders_of(project: str) -> list[str]:
     return [project] + [f for f in folders if merged.get(f) == project]
 
 
+def _inside(path: str, folder: str) -> bool:
+    return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
+
+
 def project_of(path) -> str | None:
-    try:
-        p = Path(path).resolve()
-    except OSError:
-        return None
+    """這個路徑屬於哪個專案。專案資料夾本身可以是連結或捷徑；
+    但檔案的真實位置也必須落在該專案的真實位置裡，避免透過連結開到專案以外的東西。"""
+    p = os.path.abspath(str(path))
     folders = _folders()
     merged = _merged(folders)
     for f in folders:
-        fp = Path(f)
-        if p == fp or fp in p.parents:
-            return merged.get(f, f)
+        if _inside(p, f):
+            try:
+                if _inside(os.path.realpath(p), os.path.realpath(f)):
+                    return merged.get(f, f)
+            except OSError:
+                pass
     return None
 
 
+@_locked
 def merge(folder: str, into: str) -> None:
     """把一個專案（連同它底下已併入的資料夾）併進另一個專案。只改設定，不動檔案。"""
     current = projects(include_hidden=True)
@@ -176,6 +209,7 @@ def merge(folder: str, into: str) -> None:
     core.set_config(merged=merged)
 
 
+@_locked
 def unmerge(folder: str) -> str:
     """把併入的資料夾拿掉。單獨加入的資料夾直接移除（'removed'）；
     原本就是清單上的專案則恢復成獨立專案（'split'）。都只改設定。"""
@@ -191,7 +225,7 @@ def unmerge(folder: str) -> str:
 def folder_info(project: str) -> list[dict]:
     cfg = core.load_config()
     singles = {_clean(p) for p in cfg.get("projects", [])}
-    out = [{"path": f, "main": i == 0, "single": f in singles, "missing": False}
+    out = [{"path": f, "main": i == 0, "single": f in singles, "missing": not os.path.isdir(f)}
            for i, f in enumerate(folders_of(project))]
     known = {o["path"] for o in out}
     # 併入這個專案、但目前讀不到的資料夾（例如網路磁碟沒連上）也要列出來
@@ -200,6 +234,7 @@ def folder_info(project: str) -> list[dict]:
     return out
 
 
+@_locked
 def add_folder(project: str, folder: str) -> str:
     """把任意位置的資料夾加進既有專案。"""
     if project not in projects(include_hidden=True):
@@ -209,6 +244,7 @@ def add_folder(project: str, folder: str) -> str:
     return p
 
 
+@_locked
 def add_project(folder: str, as_root: bool) -> str:
     p = str(core.check_folder_allowed(Path(folder)))
     key = "project_roots" if as_root else "projects"
@@ -222,11 +258,14 @@ def add_project(folder: str, as_root: bool) -> str:
     return p
 
 
-def toggle(key: str, value: str) -> bool:
-    """在設定裡的清單切換某個值（例如隱藏專案）。回傳切換後是否存在。"""
+@_locked
+def toggle(key: str, value: str, on: bool | None = None) -> bool:
+    """在設定裡的清單加入或拿掉某個值（釘選、隱藏專案）。on 沒給才是「切換」。
+    畫面可能已經過期（另一個視窗先按過），所以畫面一律明確說要開還是關。"""
     cur = list(core.load_config().get(key, []))
-    on = value not in cur
-    core.set_config(**{key: cur + [value] if on else [x for x in cur if x != value]})
+    if on is None:
+        on = value not in cur
+    core.set_config(**{key: [x for x in cur if x != value] + ([value] if on else [])})
     return on
 
 
@@ -343,16 +382,23 @@ def collapse_versions(entries: list[tuple]) -> list[tuple[tuple, list[tuple], st
 
 # ---------------------------------------------------------------- 索引
 class Index:
-    """每個資料夾一份檔案清單。entry: (小寫檔名, 檔名, 所在資料夾, 修改時間, 大小, 分類, 建立時間)"""
+    """每個資料夾一份檔案清單。entry: (小寫檔名, 檔名, 所在資料夾, 修改時間, 大小, 分類, 建立時間)
 
-    def __init__(self) -> None:
+    blocking=False（面板伺服器用）時採「先給上次的結果，背景再更新」：
+    慢速網路磁碟上掃一次可能要十幾秒，不能讓畫面等。"""
+
+    def __init__(self, blocking: bool = True) -> None:
         self.data: dict[str, tuple[float, list[tuple]]] = {}
+        self.meta: dict[str, dict] = {}          # 每個資料夾：讀不到的子資料夾數、是否超過上限
+        self.blocking = blocking
         self.indexing = False
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()            # refresh_all 同時只跑一個
+        self._scanning: dict[str, threading.Lock] = {}
+        self._guard = threading.Lock()
 
     @staticmethod
-    def _walk(top: str) -> list[tuple]:
-        out, stack = [], [top]
+    def _walk(top: str) -> tuple[list[tuple], dict]:
+        out, stack, denied, now = [], [top], 0, time.time()
         while stack and len(out) < MAX_PER_PROJECT:
             d = stack.pop()
             try:
@@ -368,33 +414,62 @@ class Index:
                             elif e.is_file(follow_symlinks=False):
                                 st = e.stat()
                                 born = getattr(st, "st_birthtime", None) or (st.st_ctime if sys.platform == "win32" else 0)
-                                out.append((name.lower(), name, d, st.st_mtime, st.st_size,
+                                mtime = st.st_mtime
+                                if not 0 < mtime <= now + 86400:   # 時鐘錯誤造成的未來或遠古時間：標成「日期異常」
+                                    mtime = 0.0
+                                out.append((name.lower(), name, d, mtime, st.st_size,
                                             core.category_of(Path(name)), born))
                         except OSError:
                             continue
             except OSError:
-                continue
-        return out
+                denied += 1
+        return out, {"denied": denied, "truncated": bool(stack)}
+
+    def _lock_for(self, folder: str) -> threading.Lock:
+        with self._guard:
+            return self._scanning.setdefault(folder, threading.Lock())
+
+    def is_scanning(self, folder: str) -> bool:
+        return self._lock_for(folder).locked()
+
+    def _scan(self, folder: str) -> list[tuple]:
+        """掃描一個資料夾。同一個資料夾同時只跑一趟；後到的等前一趟的結果。"""
+        lock = self._lock_for(folder)
+        if not lock.acquire(blocking=False):
+            with lock:
+                pass
+            return self.data.get(folder, (0, []))[1]
+        try:
+            rows, meta = self._walk(folder)
+            self.data[folder], self.meta[folder] = (time.time(), rows), meta
+            return rows
+        finally:
+            lock.release()
 
     def entries(self, folder: str, max_age: float = 20) -> list[tuple]:
-        """取得資料夾檔案清單；超過 max_age 秒就重新掃描，所以點進專案看到的一定是新的。"""
+        """取得資料夾檔案清單。超過 max_age 秒就重新掃描：
+        blocking 時等它掃完；否則先回傳上次的結果，並在背景更新。"""
         cached = self.data.get(folder)
         if cached and time.time() - cached[0] < max_age:
             return cached[1]
-        rows = self._walk(folder)
-        self.data[folder] = (time.time(), rows)
-        return rows
+        if self.blocking or max_age == 0:
+            return self._scan(folder)
+        if not self.is_scanning(folder):
+            threading.Thread(target=self._scan, args=(folder,), daemon=True).start()
+        return cached[1] if cached else []
 
     def refresh_all(self) -> None:
         if not self._lock.acquire(blocking=False):
             return
         self.indexing = True
         try:
+            _folders(fresh=True)
             current = [f for p in projects() for f in folders_of(p)]
             for f in current:
                 self.entries(f, max_age=0)
             for gone in set(self.data) - set(current):
                 self.data.pop(gone, None)
+                self.meta.pop(gone, None)
         finally:
             self.indexing = False
             self._lock.release()
@@ -435,8 +510,15 @@ class Index:
                 if _configured(project):
                     raise FolderOffline()
                 raise PermissionError("不是已加入的專案")
+            if not os.path.isdir(project):
+                raise FolderOffline()
+            watched = folders_of(project)
+            # 先記下「這次拿到的是不是舊的」，再去取清單：背景掃描可能在這一瞬間剛好做完
+            behind = not self.blocking and any(f not in self.data or time.time() - self.data[f][0] >= 20 for f in watched)
             scope = [(project, rel, e) for rel, e in self._scope(project, fresh=True)]
         else:
+            watched = [f for p in projects() for f in folders_of(p)]
+            behind = any(f not in self.data for f in watched)
             scope = [(p, rel, e) for p in projects() for rel, e in self._scope(p, fresh=False)]
 
         subs: dict[str, int] = {}
@@ -487,7 +569,7 @@ class Index:
             return {"name": e[1], "path": os.path.join(e[2], e[1]), "rel": rel, "project": os.path.basename(p),
                     "mtime": e[3], "size": e[4], "kind": e[5], "frequent": False, "new": e[6] >= new_from,
                     "pinned": os.path.join(e[2], e[1]) in pinned,
-                    "ext": os.path.splitext(e[1])[1][1:].upper()[:5]}
+                    "ext": ext_of(e[1])}
 
         rows = []
         plain = not (kind or since or terms or sub)
@@ -516,7 +598,12 @@ class Index:
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
                 "new": sum(g[0][6] >= new_from for g in groups),
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
-                "projects": len(projects()), "missing": missing_folders(), "indexing": self.indexing}
+                "projects": len(projects()), "missing": missing_folders(), "indexing": self.indexing,
+                # 還在讀第一次的清單、或背景正在更新：畫面會自己再問一次
+                "scanning": behind or any(self.is_scanning(f) for f in watched),
+                "denied": sum(self.meta.get(f, {}).get("denied", 0) for f in watched),
+                "truncated": any(self.meta.get(f, {}).get("truncated") for f in watched),
+                "capped": limit >= MAX_LIMIT and len(groups) > limit}
 
 
 def _midnight() -> float:
@@ -525,12 +612,15 @@ def _midnight() -> float:
 
 def open_file(path: str, reveal: bool = False) -> str:
     """開啟檔案或在檔案總管顯示位置。回傳實際做的事：'opened' 或 'revealed'。"""
-    p = Path(path).resolve()
-    if not project_of(p):
+    p = Path(os.path.abspath(str(path)))   # 不解析連結：專案資料夾本身可以是連結
+    owner = project_of(p)
+    if not owner:
         if _configured(str(p)):   # 專案加過，只是資料夾現在讀不到
             raise FolderOffline()
         raise PermissionError("這個檔案不在已加入的專案資料夾裡")
     if not p.exists():
+        if not all(os.path.isdir(f) for f in folders_of(owner) if _inside(str(p), f)):
+            raise FolderOffline()
         raise FileNotFoundError("這個檔案已被移走或刪除")
     program = p.is_file() and p.suffix.lower() in NO_LAUNCH and not reveal
     if program:
@@ -547,9 +637,10 @@ def open_file(path: str, reveal: bool = False) -> str:
         os.startfile(str(p))  # type: ignore[attr-defined]
     else:
         subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(p)])
-    counts = dict(core.load_config().get("opened", {}))
-    counts[str(p)] = counts.get(str(p), 0) + 1
-    core.set_config(opened=dict(sorted(counts.items(), key=lambda kv: -kv[1])[:300]))
+    with core._LOCK:
+        counts = dict(core.load_config().get("opened", {}))
+        counts[str(p)] = counts.get(str(p), 0) + 1
+        core.set_config(opened=dict(sorted(counts.items(), key=lambda kv: -kv[1])[:300]))
     return "opened"
 
 
@@ -592,37 +683,50 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard(True):
             return
         try:
-            if url.path == "/api/projects":
+            if url.path == "/api/ping":
+                self._send(200, {"ok": True})
+            elif url.path == "/api/projects":
                 shown = set(projects())
                 hidden = [{"path": p, "name": os.path.basename(p)} for p in projects(include_hidden=True) if p not in shown]
                 self._send(200, {"projects": self.index.project_list(), "hidden": hidden,
-                                 "missing": missing_folders(), "indexing": self.index.indexing})
+                                 "missing": missing_folders(), "indexing": self.index.indexing,
+                                 "notice": core.config_problem})
             elif url.path == "/api/sources":
                 self._send(200, {"sources": sources()})
             elif url.path == "/api/files":
+                try:
+                    limit = min(max(int(q.get("limit") or 120), 1), MAX_LIMIT)
+                except ValueError:
+                    limit = 120
                 self._send(200, self.index.files(q.get("project", ""), q.get("kind", ""),
-                                                 q.get("sub", ""), q.get("q", ""), q.get("since", ""),
-                                                 min(max(int(q.get("limit") or 120), 1), 2000)))
+                                                 q.get("sub", ""), q.get("q", "")[:200], q.get("since", ""), limit))
             elif url.path == "/api/folders":
                 if q.get("project") not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
                 self._send(200, {"folders": folder_info(q["project"])})
             elif url.path == "/api/tasks":
-                self._send(200, ai_tasks.all_tasks())
+                try:
+                    self._send(200, ai_tasks.all_tasks())
+                except Exception:   # AI 進度讀不到，不該拖垮找檔案的功能
+                    self._send(200, {"tasks": [], "counts": {}, "github_configured": True,
+                                     "error": "暫時讀不到 AI 助手的進度，稍後會自動再試。"})
             else:
                 self._send(404, {"error": "not found"})
         except FolderOffline as e:
             self._send(409, {"error": str(e), "offline": True})
         except (PermissionError, FileNotFoundError) as e:
             self._send(400, {"error": str(e)})
-        except OSError as e:
-            self._send(500, {"error": str(e)})
+        except Exception:   # 任何沒料到的狀況都回一句人話，不讓連線中斷
+            self._send(500, {"error": "暫時讀不到，請再試一次。"})
 
     def do_POST(self) -> None:
         if not self._guard(True):
             return
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 1 << 20)) or b"{}")
+            if not isinstance(body, dict) or any(k in body and not isinstance(body[k], str)
+                                                 for k in ("path", "into", "folder", "project", "url")):
+                raise ValueError("格式不對")
             path = self.path
             if path == "/api/open":
                 try:
@@ -633,11 +737,11 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/pin":
                 if not project_of(body["path"]):
                     raise PermissionError("不在專案資料夾範圍內")
-                self._send(200, {"on": toggle("pinned", body["path"])})
+                self._send(200, {"on": toggle("pinned", body["path"], body.get("on"))})
             elif path == "/api/hide_project":
                 if body["path"] not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
-                self._send(200, {"on": toggle("hidden_projects", body["path"])})
+                self._send(200, {"on": toggle("hidden_projects", body["path"], body.get("on"))})
             elif path == "/api/add_project":
                 as_root = bool(body.get("as_root"))
                 folder = self.picker("加入一整批專案：請選總資料夾（裡面每個子資料夾是一個專案）" if as_root
@@ -678,14 +782,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"error": "not found"})
         except FolderOffline as e:
             self._send(409, {"error": str(e), "offline": True})
-        except (PermissionError, FileNotFoundError, KeyError, ValueError, core.ProtectedFolderError) as e:
+        except (PermissionError, FileNotFoundError, core.ProtectedFolderError) as e:
             self._send(400, {"error": str(e)})
-        except OSError as e:
-            self._send(500, {"error": str(e)})
+        except (KeyError, ValueError, TypeError):
+            self._send(400, {"error": "這個操作的內容不完整，請再試一次。"})
+        except Exception:
+            self._send(500, {"error": "沒有成功，請再試一次。"})
 
 
 def make_server(port: int = 0) -> ThreadingHTTPServer:
-    index = Index()
+    index = Index(blocking=False)   # 先顯示上次的清單，背景再更新
     handler = type("PanelHandler", (Handler,), {"index": index, "token": secrets.token_urlsafe(24)})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     server.daemon_threads = True
@@ -693,19 +799,19 @@ def make_server(port: int = 0) -> ThreadingHTTPServer:
     def keep_fresh():
         while True:
             index.refresh_all()
-            time.sleep(int(core.load_config().get("reindex_minutes", 5)) * 60)
+            time.sleep(max(1, core.config_int("reindex_minutes", 5)) * 60)
     threading.Thread(target=keep_fresh, daemon=True).start()
     return server
 
 
 def panel_url() -> str:
-    return f"http://127.0.0.1:{int(core.load_config().get('panel_port', 8765))}/"
+    return f"http://127.0.0.1:{core.config_int('panel_port', 8765)}/"
 
 
 def start_in_background() -> bool:
     """在背景執行緒啟動伺服器。若連接埠已被佔用（面板已在執行）回傳 False。"""
     try:
-        server = make_server(int(core.load_config().get("panel_port", 8765)))
+        server = make_server(core.config_int("panel_port", 8765))
     except OSError:
         return False
     threading.Thread(target=server.serve_forever, daemon=True).start()

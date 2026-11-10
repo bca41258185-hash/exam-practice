@@ -57,6 +57,9 @@
   .f.on { background: var(--accent); color: var(--accent-ink); } .f.on small { color: #5b4514; }
   .f:active { background: var(--card-hi); }
   .f svg { width: 1.15rem; height: 1.15rem; }
+  .f[data-act="subs"] { max-width: 15rem; } .f[data-act="subs"] > span { overflow: hidden; text-overflow: ellipsis; }
+  .filters.more-x { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); }
+  .big > span { min-width: 0; word-break: break-all; }
   .gap { flex: none; width: .5rem; }
   .round { flex: none; width: 3.3rem; height: 3.3rem; border-radius: .8rem; display: grid; place-items: center; color: var(--dim); background: var(--card); }
   .round:active { background: var(--card-hi); color: var(--accent); }
@@ -161,7 +164,7 @@
       <button class="round" data-act="more" aria-label="更多"><svg><use href="#i-more"/></svg></button>
     </div>
     <div id="pinbar"><span>釘選模式：點任何一張卡片（包含版本清單裡的），把它<b>釘選</b>到最上面；已釘選的會取消。</span><button class="f" data-act="pin-cancel">取消</button></div>
-    <div class="scroll" id="scroll"><div class="grid" id="files"></div></div>
+    <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
   </section>
 
   <section class="col"><div class="label">AI 助手</div><div class="scroll" id="tasks"></div></section>
@@ -189,7 +192,10 @@ async function api(path, body) {
   try {
     r = await fetch(path, { method: body ? "POST" : "GET", headers: {"X-Token": TOKEN, "Content-Type": "application/json"},
       body: body ? JSON.stringify(body) : undefined });
-  } catch (e) {   // 程式已結束（例如寵物被關掉）
+  } catch (e) {   // 連不上：先用最輕的請求確認是整個程式結束了，還是只有這一個請求失敗
+    let alive = false;
+    try { alive = (await fetch("/api/ping", {headers: {"X-Token": TOKEN}})).status < 500; } catch (e2) {}
+    if (alive) throw new Error("暫時讀不到，請再試一次。");
     document.body.classList.add("offline");
     throw new Error("檔案管家已經關閉，請重新雙擊 pet.pyw");
   }
@@ -205,6 +211,7 @@ function toast(msg, err) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", err ? 4000 : 2200);
 }
 function ago(ts) {
+  if (!(ts > 0)) return "日期異常";   // 檔案的修改時間在未來或太久以前（通常是別台電腦的時鐘錯了）
   const s = Date.now() / 1000 - ts;
   if (s < 90) return "剛剛";
   if (s < 3600) return Math.round(s / 60) + " 分鐘前";
@@ -219,6 +226,7 @@ function ago(ts) {
 function bucket(ts) {  // 今天、昨天、本週（週一起）、上週，再往前按月份
   const now = new Date(), midnight = new Date(now).setHours(0, 0, 0, 0) / 1000;
   const monday = midnight - ((now.getDay() + 6) % 7) * 86400;
+  if (!(ts > 0)) return "日期異常（修改時間不合理）";
   if (ts >= midnight) return "今天";
   if (ts >= midnight - 86400) return "昨天";
   if (ts >= monday) return "本週";
@@ -228,7 +236,7 @@ function bucket(ts) {  // 今天、昨天、本週（週一起）、上週，再
 }
 /* 檔名：不顯示副檔名（左邊色塊已標示）；太長時省略中間、保留結尾的版號 */
 function shortName(name, max) {
-  const stem = name.replace(/\.[^.]{1,6}$/, "");
+  const stem = name.replace(/\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,6}$/, "");   // 只去掉真正的副檔名（「圖說 1.5版」保留）
   const w = c => c.charCodeAt(0) > 255 ? 2 : 1;
   let total = 0; for (const c of stem) total += w(c);
   if (total <= max) return esc(stem);
@@ -257,7 +265,7 @@ function renderProjects() {
 }
 async function loadProjects() {
   const d = await api("/api/projects");
-  state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing;
+  state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing; state.notice = d.notice;
   if (state.project && !d.projects.some(p => p.path === state.project)) state.project = "";
   renderProjects();
 }
@@ -270,44 +278,65 @@ function fileCard(f, opts = {}) {
   const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (opts.mark ? `<span class="tag latest">${opts.mark}</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "") +
     "";
   const warn = (f.later || f.oldpin ? `<span class="tag warn">${f.oldpin ? "較舊的版本" : "之後已有新版"}</span>` : "") + (f.check ? `<span class="tag warn">版號待確認</span>` : "");
-  return `<div class="file ${f.pinned ? "pinned" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
+  return `<div class="file ${f.pinned ? "pinned" : ""} ${openedPaths.has(f.path) ? "opened" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
     <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
       <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}</div>${warn ? `<div class="m">${warn}</div>` : ""}</span></button>
     ${n ? `<button class="ver" data-ver="${esc(f.path)}">${f.later ? `共<br>${n + 1} 個版本` : GROUP[f.group](n)}</button>` : ""}</div>`;
 }
 
-let fileSeq = 0;
-async function loadFiles() {
+function renderFilters() {   // 用最近一次的資料加上目前的選擇來畫；點了篩選鈕會先呼叫它，讓按鈕立刻變色
+  const d = state.last || {subs: [], kinds: {}};
+  const f = (attr, val, label, on, color, count) => `<button class="f ${on ? "on" : ""}" data-${attr}="${esc(val)}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}${count ? ` <small>${count}</small>` : ""}</button>`;
+  $("filters").innerHTML = Object.keys(SINCE).map(k => f("since", k, SINCE[k], state.since === k)).join("") + `<span class="gap"></span>` +
+    (state.project && (d.subs.length >= 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon("folder")}<span>${esc(state.sub ? base(state.sub) : "資料夾")}</span></button>${state.sub ? `<button class="f" data-act="clear-sub" aria-label="取消資料夾篩選" style="padding:0 1.45rem">${icon("x")}</button>` : ""}<span class="gap"></span>` : "") +
+    Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
+  fades();
+}
+
+let fileSeq = 0, rescan = 0;
+async function loadFiles(quiet) {
   const seq = ++fileSeq, grid = $("files");
-  const slow = setTimeout(() => grid.classList.add("loading"), 250);
+  clearTimeout(rescan);
+  const slow = setTimeout(() => grid.classList.add("loading"), quiet ? 60000 : 250);
   const qs = new URLSearchParams({project: state.project, kind: state.kind, since: state.since, sub: state.sub, q: state.q, limit: state.limit});
   let d;
   try { d = await api("/api/files?" + qs); }
   catch (e) {
+    if (seq !== fileSeq) return;
     toast(e.message, true);
     if (e.folderOffline && state.project) { state.project = ""; closeSheet(); await refresh(); }   // 回到總覽，那裡會標出「目前讀不到」
+    else if (state.project) {   // 例如另一個視窗把這個專案移除了：確認它還在，不在就回總覽
+      const before = state.project;
+      try { await loadProjects(); } catch (e2) {}
+      if (before && !state.project) { closeSheet(); resetList(); loadFiles(); }
+    }
     return;
   }
   finally { clearTimeout(slow); grid.classList.remove("loading"); }
   if (seq !== fileSeq) return;  // 已有更新的查詢
   state.files = d.files; state.subs = d.subs;
 
-  const f = (attr, val, label, on, color, count) => `<button class="f ${on ? "on" : ""}" data-${attr}="${esc(val)}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}${count ? ` <small>${count}</small>` : ""}</button>`;
-  $("filters").innerHTML = Object.keys(SINCE).map(k => f("since", k, SINCE[k], state.since === k)).join("") + `<span class="gap"></span>` +
-    (state.project && (d.subs.length > 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon("folder")}${esc(state.sub ? base(state.sub) : "資料夾")}</button>${state.sub ? `<button class="f" data-act="clear-sub" aria-label="取消資料夾篩選" style="padding:0 1.45rem">${icon("x")}</button>` : ""}<span class="gap"></span>` : "") +
-    Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
+  state.last = d;
+  renderFilters();
 
   if (!d.projects) {
     grid.innerHTML = d.missing.length
       ? `<div class="empty"><b style="color:var(--text)">目前讀不到專案資料夾</b><br>${d.missing.map(esc).join("<br>")}<br>
           <small>網路磁碟或外接硬碟可能沒連上。設定都還在，接上之後這裡會自動恢復。</small></div>`
-      : `<div class="empty"><b style="color:var(--text)">先告訴我專案放在哪裡</b><br>
+      : `<div class="empty">${state.notice ? `<small style="color:var(--failed)">${esc(state.notice)}</small><br>` : ""}<b style="color:var(--text)">先告訴我專案放在哪裡</b><br>
           <button class="big main" data-add="root">${icon("plus")}<span>加入一整批專案<small style="color:#5b4514">選一個總資料夾（例如 D:\\專案），裡面每個子資料夾＝一個專案</small></span></button>
           <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button><br>
           <small>只會讀取檔案清單，不會搬動、改名或刪除任何檔案。之後可以在右上角「⋯」裡移除。</small></div>`;
     return;
   }
   const kindName = state.kind ? KIND[state.kind][0] : "檔案";
+  // 背景還在讀清單（第一次，或慢速磁碟上的更新）：過一下自己再問一次，不必使用者動手
+  if (d.scanning) rescan = setTimeout(() => { if (seq === fileSeq && ($("scroll").scrollTop < 5 || !d.files.length)) loadFiles(true); }, 1500);
+  const cname = (cur() || {}).name;
+  if (!d.files.length && d.scanning && !(state.kind || state.since || state.sub || state.q)) {
+    grid.innerHTML = `<div class="empty">正在讀取${cname ? "「" + esc(cname) + "」的" : ""}檔案清單…<br><small>資料夾在網路磁碟上時，第一次會比較久。</small></div>`;
+    return;
+  }
   if (!d.files.length) {
     const kn = (/^[A-Za-z]/.test(kindName) ? " " : "") + kindName;
     let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kn}` : `這裡沒有${kn}`;
@@ -315,7 +344,8 @@ async function loadFiles() {
     const undo = (state.kind ? `<button class="big" data-kind="${esc(state.kind)}">看全部類型</button>` : "") +
       (state.sub ? `<button class="big" data-act="clear-sub">看全部資料夾</button>` : "") +
       (state.since ? `<button class="big" data-since="">不限時間</button>` : "");
-    grid.innerHTML = `<div class="empty">${d.indexing ? "正在讀取檔案清單…" : msg + "<br>" + undo}</div>`;
+    const why = d.denied ? `<br><small>有 ${d.denied} 個資料夾讀不到（可能沒有權限），裡面的檔案沒有列出。</small>` : "";
+    grid.innerHTML = `<div class="empty">${msg}${why}<br>${undo}</div>`;
     return;
   }
   let html = "", last = null;
@@ -328,17 +358,21 @@ async function loadFiles() {
     if (sec !== last) { html += `<div class="sec">${sec}</div>`; last = sec; }
     html += fileCard(x, {project: !state.project});
   }
-  if (d.total > d.files.length) html += `<div class="empty" style="padding:1rem"><button class="big" data-act="load-more">再往下顯示（還有 ${d.total - d.files.length} 個更舊的）</button></div>`;
+  if (d.capped) html += `<div class="empty" style="padding:1rem">已經顯示 ${d.files.length} 張，還有 ${d.total - d.files.length} 個更舊的。<br>請用上面的時間、資料夾、類型或搜尋縮小範圍。</div>`;
+  else if (d.total > d.files.length) html += `<div class="empty" style="padding:1rem"><button class="big" data-act="load-more">再往下顯示（還有 ${d.total - d.files.length} 個更舊的）</button></div>`;
+  if (d.denied) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">有 ${d.denied} 個資料夾讀不到（可能沒有權限），裡面的檔案沒有列出。</div>`;
+  if (d.truncated) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">這個專案的檔案太多，只列出一部分。</div>`;
   grid.innerHTML = html;
 }
 function resetList() { state.limit = PAGE; $("scroll").scrollTop = 0; }
 
+const openedPaths = new Set();   // 這次使用期間開過的檔案，重新整理清單後仍然打勾
 async function openFile(path, reveal, card) {
   if (card) { card.classList.add("opening"); const m = card.querySelector(".m"); if (m) { m.dataset.old = m.innerHTML; m.textContent = "開啟中…"; } }
   try {
     const d = await api("/api/open", {path, reveal});
     toast(d.did === "opened" ? "已開啟　" + base(path) : d.did === "program" ? "為了安全，程式類檔案不直接執行，已改在檔案總管顯示它的位置" : "已在檔案總管顯示　" + base(path));
-    if (card && d.did === "opened") card.classList.add("opened");
+    if (d.did === "opened") { openedPaths.add(path); if (card) card.classList.add("opened"); }
   } catch (e) {   // 例如檔案已被移走：立刻取消「開啟中」並重新整理清單
     toast(e.message, true);
     if (card) card.classList.remove("opening");
@@ -380,8 +414,10 @@ function taskSheet(id) {
 }
 
 /* ---------- 彈出面板 ---------- */
-function sheet(html) { $("sheet").innerHTML = html; $("sheet-bg").classList.add("show"); }
-function closeSheet() { $("sheet-bg").classList.remove("show"); }
+let blockUntil = 0;
+const guard = () => { blockUntil = Date.now() + 300; };   // 畫面剛換過：手指的第二下不該落在新出現的東西上
+function sheet(html) { $("sheet").innerHTML = html; $("sheet-bg").classList.add("show"); guard(); }
+function closeSheet() { if ($("sheet-bg").classList.contains("show")) guard(); $("sheet-bg").classList.remove("show"); }
 const head = t => `<h3><span>${t}</span><button class="round" data-act="close">${icon("x")}</button></h3>`;
 const cur = () => state.projects.find(p => p.path === state.project);
 function groupSheet(path) {
@@ -461,7 +497,7 @@ function fileMenu(path) {
   const f = [...state.files, ...state.files.flatMap(x => x.versions || [])].find(x => x.path === path);
   if (!f) return;
   sheet(head(esc(f.name)) + `<div class="list two">
-    <button class="big main" data-pin="${esc(path)}">${f.pinned ? "取消釘選" : "釘選到這個專案的最上面"}</button>
+    <button class="big main" data-pin="${esc(path)}" data-on="${f.pinned ? "" : "1"}">${f.pinned ? "取消釘選" : "釘選到這個專案的最上面"}</button>
     <button class="big" data-reveal="${esc(path)}">${icon("folder")}在檔案總管顯示位置</button></div>`);
 }
 let pressTimer, pressed = false;
@@ -489,7 +525,7 @@ function setScale(delta) {
   try { localStorage.setItem("scale", s); } catch (e) {}
   document.documentElement.style.setProperty("--scale", s);
 }
-function setPinMode(on) { state.pinMode = on; document.body.classList.toggle("pinmode", on); fades(); }
+function setPinMode(on) { if (state.pinMode !== on) guard(); state.pinMode = on; document.body.classList.toggle("pinmode", on); fades(); }
 function setSearch(on) {
   $("bar").classList.toggle("searching", on);
   $("search-btn").innerHTML = icon(on ? "x" : "search");
@@ -501,16 +537,23 @@ const name = p => (state.projects.find(x => x.path === p) || {}).name || base(p)
 
 document.addEventListener("click", async ev => {
   if (pressed) { pressed = false; ev.preventDefault(); return; }   // 剛才是長按，不當成點擊
+  if (Date.now() < blockUntil) return;                              // 畫面剛換過，這一下多半是連點
   const el = ev.target.closest("[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("pin" in d) { const r = await api("/api/pin", {path: d.pin}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
-    else if ("proj" in d) { setSearch(false); setPinMode(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: ""}); resetList(); renderProjects(); await refresh(); }
-    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; resetList(); await loadFiles(); }
-    else if ("since" in d) { state.since = state.since === d.since ? "" : d.since; resetList(); await loadFiles(); }
+    if ("pin" in d) { const r = await api("/api/pin", {path: d.pin, on: d.on === "1"}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
+    else if ("proj" in d) {
+      if (d.proj === state.project && !(state.kind || state.since || state.sub || state.q)) return;   // 已經在這裡了，連點不重做
+      setSearch(false); setPinMode(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: "", last: null, files: []});
+      resetList(); renderProjects(); renderFilters();
+      $("files").innerHTML = `<div class="empty">正在讀取${d.proj ? "「" + esc(name(d.proj)) + "」的" : ""}檔案清單…</div>`;
+      await refresh();
+    }
+    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; resetList(); renderFilters(); await loadFiles(); }
+    else if ("since" in d) { state.since = state.since === d.since ? "" : d.since; resetList(); renderFilters(); await loadFiles(); }
     else if ("sub" in d) { state.sub = d.sub; closeSheet(); resetList(); await loadFiles(); }
-    else if ("open" in d && state.pinMode) { setPinMode(false); closeSheet(); const r = await api("/api/pin", {path: d.open}); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
+    else if ("open" in d && state.pinMode) { setPinMode(false); closeSheet(); const r = await api("/api/pin", {path: d.open, on: !el.closest(".file").classList.contains("pinned")}); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
     else if ("open" in d) openFile(d.open, false, el.closest(".file"));   // 清單保持開啟，方便接著開另一版比較
     else if ("reveal" in d) { closeSheet(); openFile(d.reveal, true); }
     else if ("ver" in d) groupSheet(d.ver);
@@ -525,7 +568,7 @@ document.addEventListener("click", async ev => {
       : `把「${esc(base(d.detachAsk))}」從這個專案拆出？<br><small>它會回到左邊的清單，成為獨立的專案。檔案不受影響。</small>`, d.single ? "移除" : "拆出", `data-unmerge="${esc(d.detachAsk)}"`);
     else if ("sourceAsk" in d) confirmSheet(`不再顯示「${esc(base(d.sourceAsk))}」？<br><small>資料夾和裡面的檔案都不會被動到；之後可以再加回來。</small>`, "移除", `data-source="${esc(d.sourceAsk)}"`);
     else if ("source" in d) { await api("/api/remove_source", {path: d.source}); toast("已移除，檔案不受影響"); state.project = ""; await refresh(); sourcesSheet(); }
-    else if ("unhide" in d) { await api("/api/hide_project", {path: d.unhide}); toast("已恢復顯示"); await refresh(); state.hidden.length ? hiddenSheet() : closeSheet(); }
+    else if ("unhide" in d) { await api("/api/hide_project", {path: d.unhide, on: false}); toast("已恢復顯示"); await refresh(); state.hidden.length ? hiddenSheet() : closeSheet(); }
     else if (d.act === "sources") sourcesSheet();
     else if (d.act === "hidden") hiddenSheet();
     else if (d.act === "more") moreSheet();
@@ -540,7 +583,7 @@ document.addEventListener("click", async ev => {
     else if (d.act === "merge-pick") mergePickSheet();
     else if (d.act === "add-folder") { toast("請在電腦主螢幕跳出的視窗選擇資料夾…"); const r = await api("/api/add_folder", {project: state.project}); if (r.added) { toast("已加入"); await refresh(); foldersSheet(); } else toast("沒有選擇資料夾，所以沒有加入"); }
     else if (d.act === "hide-ask") confirmSheet(`把「${esc(cur().name)}」從清單隱藏？<br><small>檔案不受影響；之後可在「⋯」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`);
-    else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」→「已隱藏的專案」恢復"); refresh(); }
+    else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project, on: true}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」→「已隱藏的專案」恢復"); refresh(); }
     else if (d.act === "smaller") setScale(-.1);
     else if (d.act === "bigger") setScale(.1);
     else if (d.act === "full") { closeSheet(); document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast("此環境無法切換全螢幕", true)); }
@@ -549,15 +592,18 @@ document.addEventListener("click", async ev => {
 let qTimer;
 $("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $("q").value.trim(); resetList(); loadFiles(); }, 200); });
 
-function fades() { document.querySelectorAll(".col > .scroll").forEach(el =>
+function fades() {
+  const fl = $("filters"); fl.classList.toggle("more-x", fl.scrollWidth - fl.scrollLeft - fl.clientWidth > 8);   // 右邊還有鈕：邊緣淡出提示可以滑
+  document.querySelectorAll(".col > .scroll").forEach(el =>
   el.parentElement.classList.toggle("below", el.scrollHeight - el.scrollTop - el.clientHeight > 3.2 * parseFloat(getComputedStyle(document.documentElement).fontSize))); }
 document.querySelectorAll(".col > .scroll").forEach(el => { el.addEventListener("scroll", fades, {passive: true}); new MutationObserver(fades).observe(el, {childList: true, subtree: true}); });
 window.addEventListener("resize", fades);
+$("filters").addEventListener("scroll", fades, {passive: true});
 setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
 loadTasks();
 setInterval(loadTasks, 15000);
-setInterval(() => { if (document.body.classList.contains("offline")) api("/api/projects").catch(() => {}); }, 4000);
+setInterval(() => { if (document.body.classList.contains("offline")) api("/api/ping").catch(() => {}); }, 4000);
 const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
 setInterval(async () => {
   if (idle()) return refresh();          // 使用者正在往下找的時候不重排清單…
