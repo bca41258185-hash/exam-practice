@@ -202,6 +202,17 @@ class IndexTest(Base):
         self.assertEqual(idx.files(proj, since="today")["files"][0]["name"], "新檔0.pdf", "不符合篩選條件就不出現")
         self.assertFalse(panel.toggle("pinned", old))
 
+    def test_pinning_an_older_version_gives_it_its_own_card(self):
+        self.put("甲案/平面圖_v3.dwg", 0)
+        v1 = self.put("甲案/平面圖_v1.dwg", 30)
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        panel.toggle("pinned", v1)
+        rows = idx.files(proj)["files"]
+        self.assertEqual([(r["name"], r["pinned"], r["oldpin"]) for r in rows],
+                         [("平面圖_v1.dwg", True, True), ("平面圖_v3.dwg", False, False)])
+        self.assertEqual(len(rows[1]["versions"]), 1, "原本的版本清單不受影響")
+
     def test_folder_filter_drills_down(self):
         self.put("甲案/01_圖面/平面/a.dwg")
         self.put("甲案/01_圖面/立面/b.dwg")
