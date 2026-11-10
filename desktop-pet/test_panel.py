@@ -138,16 +138,26 @@ class IndexTest(Base):
         idx.data[proj] = (0, idx.data[proj][1])
         self.assertEqual(idx.files(proj)["files"][0]["name"], "b.pdf")
 
-    def test_star_and_hide(self):
-        a = self.put("甲案/重要.pdf", 50)
+    def test_frequent_files_float_up_and_hide(self):
+        often = self.put("甲案/常開的預算.xlsx", 50)
         self.put("甲案/新的.pdf", 0)
-        self.put("乙案/x.pdf", 0)
+        self.put("乙案/x.pdf", 1)
         idx = panel.Index()
         idx.refresh_all()
-        panel.toggle("starred_files", a)
-        self.assertEqual(idx.files(str(self.root / "甲案"))["files"][0]["name"], "重要.pdf")
-        panel.toggle("starred_projects", str(self.root / "甲案"))
-        self.assertEqual(idx.project_list()[0]["name"], "甲案")
+        proj = str(self.root / "甲案")
+        orig = panel.subprocess.Popen
+        panel.subprocess.Popen = lambda args, **k: None
+        try:
+            if os.name != "nt":
+                panel.open_file(often)
+                self.assertEqual(idx.files(proj)["files"][0]["name"], "新的.pdf", "只開過一次還不算常用")
+                panel.open_file(often)
+        finally:
+            panel.subprocess.Popen = orig
+        if os.name != "nt":
+            first = idx.files(proj)["files"][0]
+            self.assertEqual((first["name"], first["frequent"]), ("常開的預算.xlsx", True))
+            self.assertFalse(idx.files(proj, since="today")["files"][0]["frequent"], "有篩選時不插隊")
         panel.toggle("hidden_projects", str(self.root / "乙案"))
         self.assertEqual([p["name"] for p in idx.project_list()], ["甲案"])
 

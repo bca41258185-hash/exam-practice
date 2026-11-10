@@ -149,7 +149,7 @@ def add_project(folder: str, as_root: bool) -> str:
 
 
 def toggle(key: str, value: str) -> bool:
-    """在設定裡的清單切換某個值（釘選／隱藏）。回傳切換後是否存在。"""
+    """在設定裡的清單切換某個值（例如隱藏專案）。回傳切換後是否存在。"""
     cur = list(core.load_config().get(key, []))
     on = value not in cur
     core.set_config(**{key: cur + [value] if on else [x for x in cur if x != value]})
@@ -289,22 +289,21 @@ class Index:
 
     # -------- 查詢
     def project_list(self) -> list[dict]:
-        starred = set(core.load_config().get("starred_projects", []))
         midnight = _midnight()
         out = []
         for p in projects():
             rows = [e for _, e in self._scope(p, fresh=False)]
-            out.append({"path": p, "name": os.path.basename(p) or p, "starred": p in starred,
+            out.append({"path": p, "name": os.path.basename(p) or p,
                         "folders": len(folders_of(p)), "count": len(rows),
                         "today": sum(e[3] >= midnight for e in rows),
                         "week": sum(e[3] >= midnight - 6 * 86400 for e in rows),
                         "last": max((e[3] for e in rows), default=0)})
-        out.sort(key=lambda d: (not d["starred"], -d["last"]))
+        out.sort(key=lambda d: -d["last"])  # 最近有動的專案排最上面
         return out
 
     def files(self, project: str = "", kind: str = "", sub: str = "", q: str = "",
               since: str = "", limit: int = 150) -> dict:
-        starred = set(core.load_config().get("starred_files", []))
+        opened = core.load_config().get("opened", {})
         if project:
             if project not in projects(include_hidden=True):
                 raise PermissionError("不是已加入的專案")
@@ -345,7 +344,7 @@ class Index:
             p, rel, _ = info[id(e)]
             path = os.path.join(e[2], e[1])
             return {"name": e[1], "path": path, "rel": rel, "project": os.path.basename(p), "mtime": e[3],
-                    "size": e[4], "kind": e[5], "starred": path in starred, "new": e[6] >= cut["week"],
+                    "size": e[4], "kind": e[5], "frequent": False, "new": e[6] >= cut["week"],
                     "ext": os.path.splitext(e[1])[1][1:].upper()[:5]}
 
         rows = []
@@ -353,7 +352,11 @@ class Index:
             d = card(head)
             d["versions"] = [card(o) for o in older[:20]]
             rows.append(d)
-        rows.sort(key=lambda d: not d["starred"])  # 釘選的排最前，其餘維持時間順序
+        if not (kind or since or terms or sub):  # 沒有篩選時，開過兩次以上的檔案自動排最前（最多 4 個）
+            often = sorted((d for d in rows if opened.get(d["path"], 0) >= 2), key=lambda d: -opened[d["path"]])[:4]
+            for d in often:
+                d["frequent"] = True
+            rows.sort(key=lambda d: -opened[d["path"]] if d["frequent"] else 0)
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
                 "indexing": self.indexing}
@@ -382,6 +385,9 @@ def open_file(path: str, reveal: bool = False) -> str:
         os.startfile(str(p))  # type: ignore[attr-defined]
     else:
         subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(p)])
+    counts = dict(core.load_config().get("opened", {}))
+    counts[str(p)] = counts.get(str(p), 0) + 1
+    core.set_config(opened=dict(sorted(counts.items(), key=lambda kv: -kv[1])[:300]))
     return "opened"
 
 
@@ -452,15 +458,10 @@ class Handler(BaseHTTPRequestHandler):
             path = self.path
             if path == "/api/open":
                 self._send(200, {"did": open_file(body["path"], bool(body.get("reveal")))})
-            elif path == "/api/star_file":
-                if not project_of(body["path"]):
-                    raise PermissionError("不在專案資料夾範圍內")
-                self._send(200, {"on": toggle("starred_files", body["path"])})
-            elif path in ("/api/star_project", "/api/hide_project"):
+            elif path == "/api/hide_project":
                 if body["path"] not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
-                key = "starred_projects" if path == "/api/star_project" else "hidden_projects"
-                self._send(200, {"on": toggle(key, body["path"])})
+                self._send(200, {"on": toggle("hidden_projects", body["path"])})
             elif path == "/api/unhide_all":
                 core.set_config(hidden_projects=[])
                 self._send(200, {"ok": True})
