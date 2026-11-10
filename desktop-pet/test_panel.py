@@ -281,10 +281,41 @@ class IndexTest(Base):
         try:
             if os.name != "nt":
                 self.assertEqual(panel.open_file(str(self.root / "甲案" / "a.pdf")), "opened")
-            self.assertEqual(panel.open_file(exe), "revealed")
+            self.assertEqual(panel.open_file(exe), "program", "程式類不執行，只顯示位置")
+            self.assertEqual(panel.open_file(exe, reveal=True), "revealed")
+            gone = self.root / "甲案" / "不見了.pdf"
+            with self.assertRaises(FileNotFoundError):
+                panel.open_file(str(gone))
         finally:
             panel.subprocess.Popen = orig
         self.assertTrue(calls)
+
+    def test_sources_can_be_removed_and_overlaps_are_refused(self):
+        self.put("甲案/01_圖面/a.dwg")
+        self.put("乙案/b.pdf")
+        main = str(self.root / "甲案")
+        with self.assertRaises(core.ProtectedFolderError):
+            panel.add_folder(main, str(self.root / "甲案" / "01_圖面"))   # 自己的子資料夾
+        with self.assertRaises(core.ProtectedFolderError):
+            panel.add_project(str(self.root / "乙案"), False)             # 已經是清單上的專案
+        outside = Path(self.tmp.name).resolve() / "NAS" / "甲案渲染"
+        outside.mkdir(parents=True)
+        panel.add_folder(main, str(outside))
+        self.assertEqual([f["single"] for f in panel.folder_info(main)], [False, True])
+        self.assertEqual(panel.unmerge(str(outside)), "removed", "單獨加入的資料夾拿掉後不會變成新專案")
+        self.assertEqual(sorted(panel.projects()), sorted([main, str(self.root / "乙案")]))
+        panel.merge(str(self.root / "乙案"), main)
+        self.assertEqual(panel.unmerge(str(self.root / "乙案")), "split")
+        self.assertEqual(len(panel.projects()), 2)
+        panel.remove_source(str(self.root))
+        self.assertEqual((panel.projects(), panel.sources()), ([], []))
+
+    def test_unreachable_folder_is_reported_not_forgotten(self):
+        gone = str(Path(self.tmp.name).resolve() / "沒連上的NAS")
+        core.set_config(projects=[gone])
+        self.assertEqual(panel.missing_folders(), [gone])
+        self.assertEqual([s["missing"] for s in panel.sources()], [False, True])
+        self.assertEqual(panel.Index().files()["missing"], [gone])
 
     def test_add_project_rejects_protected(self):
         with self.assertRaises(core.ProtectedFolderError):
@@ -340,7 +371,10 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/open_url", {"url": "https://evil.example/"})[0], 400)
         self.assertEqual(self.call("/api/tasks")[0], 200)
         proj = urllib.request.quote(str(self.root / "甲案"))
-        self.assertEqual(self.call("/api/folders?project=" + proj)[1]["folders"], [str(self.root / "甲案")])
+        self.assertEqual(self.call("/api/folders?project=" + proj)[1]["folders"],
+                         [{"path": str(self.root / "甲案"), "main": True, "single": False}])
+        self.assertEqual(self.call("/api/sources")[1]["sources"][0]["batch"], True)
+        self.assertEqual(self.call("/api/remove_source", {"path": "/etc"})[0], 400)
         self.assertEqual(self.call("/api/merge", {"path": "/etc", "into": str(self.root / "甲案")})[0], 400)
         picked = Path(self.tmp.name) / "新案"
         picked.mkdir()

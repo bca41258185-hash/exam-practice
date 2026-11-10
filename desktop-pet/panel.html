@@ -131,6 +131,9 @@
   .toast.show { transform: none; }
   .toast.err { background: var(--failed); color: #fff; }
 
+  #offline { display: none; position: fixed; inset: 0; z-index: 30; background: rgba(10,11,14,.88); place-items: center; text-align: center; font-size: 1.3rem; line-height: 2; }
+  #offline b { color: var(--accent); }
+  .offline #offline { display: grid; }
   @media (max-width: 1000px) {
     body { overflow: auto; height: auto; }
     .app, .app.many { grid-template-columns: 1fr; height: auto; }
@@ -166,23 +169,31 @@
 
 <div class="sheet-bg" id="sheet-bg"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<div id="offline">檔案管家已經關閉。<br>請回到電腦上重新雙擊 <b>pet.pyw</b>，這個畫面會自動恢復。</div>
 
 <script>
 const TOKEN = "__TOKEN__";
 const KIND = {"圖面與模型": ["圖面", "#5aa9e6"], "PDF": ["PDF", "#ef6b60"], "試算表": ["試算表", "#62c483"], "簡報": ["簡報", "#f0924a"],
   "圖片": ["圖片", "#b78be8"], "文件": ["文件", "#7f9cf5"], "影音": ["影音", "#e879b9"], "壓縮檔": ["壓縮檔", "#c9b458"],
   "安裝檔": ["安裝檔", "#8b93a1"], "程式與資料": ["程式", "#4fd1c5"], "其他": ["其他", "#8b93a1"]};
-const SINCE = {"": "最近", today: "今天", week: "本週", lastweek: "上週"};
+const SINCE = {"": "不限時間", today: "今天", week: "本週", lastweek: "上週"};
 const PAGE = 120;
-const state = { project: "", kind: "", since: "", sub: "", q: "", limit: PAGE, projects: [], files: [], subs: [], tasks: [], hidden: 0 };
+const state = { project: "", kind: "", since: "", sub: "", q: "", limit: PAGE, projects: [], files: [], subs: [], tasks: [], hidden: [], missing: [] };
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const icon = n => `<svg><use href="#i-${n}"/></svg>`;
 const base = p => p.split(/[\\/]/).pop();
 
 async function api(path, body) {
-  const r = await fetch(path, { method: body ? "POST" : "GET", headers: {"X-Token": TOKEN, "Content-Type": "application/json"},
-    body: body ? JSON.stringify(body) : undefined });
+  let r;
+  try {
+    r = await fetch(path, { method: body ? "POST" : "GET", headers: {"X-Token": TOKEN, "Content-Type": "application/json"},
+      body: body ? JSON.stringify(body) : undefined });
+  } catch (e) {   // 程式已結束（例如寵物被關掉）
+    document.body.classList.add("offline");
+    throw new Error("檔案管家已經關閉，請重新雙擊 pet.pyw");
+  }
+  if (document.body.classList.contains("offline")) { location.reload(); }
   if (r.status === 403) { location.reload(); throw new Error("重新連線中"); }
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || "發生錯誤");
@@ -241,11 +252,12 @@ function renderProjects() {
   const active = state.projects.filter(p => p.active), rest = state.projects.filter(p => !p.active);
   $("app").classList.toggle("many", state.projects.length > 7);
   $("projects").innerHTML = row({path: "", today: false}, ["", "全部專案"], "all") + active.map(p => row(p, projName(p.name))).join("") +
-    (rest.length ? `<div class="label">兩週以上沒動</div>` + rest.map(p => row(p, projName(p.name))).join("") : "");
+    (rest.length ? `<div class="label">兩週以上沒動</div>` + rest.map(p => row(p, projName(p.name))).join("") : "") +
+    ((state.missing || []).length ? `<div class="label" style="color:var(--failed);letter-spacing:0;line-height:1.5">目前讀不到（可能沒連上）：<br>${state.missing.map(m => esc(base(m))).join("、")}</div>` : "");
 }
 async function loadProjects() {
   const d = await api("/api/projects");
-  state.projects = d.projects; state.hidden = d.hidden;
+  state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing;
   if (state.project && !d.projects.some(p => p.path === state.project)) state.project = "";
   renderProjects();
 }
@@ -255,7 +267,7 @@ const GROUP = { version: n => `另有<br>${n} 個舊版`, series: n => `同系�
 function fileCard(f, opts = {}) {
   const where = opts.project ? [projName(f.project)[1], esc(f.rel.replace(/\\/g, "/"))].filter(Boolean).join("／") : esc(f.rel.replace(/\\/g, "/"));
   const n = f.versions ? f.versions.length + (f.more || 0) : 0;
-  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "") +
+  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (opts.mark ? `<span class="tag latest">${opts.mark}</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "") +
     "";
   const warn = (f.later || f.oldpin ? `<span class="tag warn">${f.oldpin ? "較舊的版本" : "之後已有新版"}</span>` : "") + (f.check ? `<span class="tag warn">版號待確認</span>` : "");
   return `<div class="file ${f.pinned ? "pinned" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
@@ -280,9 +292,14 @@ async function loadFiles() {
     (state.project && (d.subs.length > 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon("folder")}${esc(state.sub ? base(state.sub) : "資料夾")}</button>${state.sub ? `<button class="f" data-act="clear-sub" aria-label="取消資料夾篩選" style="padding:0 1.45rem">${icon("x")}</button>` : ""}<span class="gap"></span>` : "") +
     Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
 
-  if (state.ready && !state.projects.length) {
-    grid.innerHTML = `<div class="empty">先告訴我專案放在哪裡<br>
-      <button class="big main" data-add="root">${icon("plus")}選擇放所有專案的資料夾</button></div>`;
+  if (!d.projects) {
+    grid.innerHTML = d.missing.length
+      ? `<div class="empty"><b style="color:var(--text)">目前讀不到專案資料夾</b><br>${d.missing.map(esc).join("<br>")}<br>
+          <small>網路磁碟或外接硬碟可能沒連上。設定都還在，接上之後這裡會自動恢復。</small></div>`
+      : `<div class="empty"><b style="color:var(--text)">先告訴我專案放在哪裡</b><br>
+          <button class="big main" data-add="root">${icon("plus")}<span>加入一整批專案<small style="color:#5b4514">選一個總資料夾（例如 D:\\專案），裡面每個子資料夾＝一個專案</small></span></button>
+          <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button><br>
+          <small>只會讀取檔案清單，不會搬動、改名或刪除任何檔案。之後可以在右上角「⋯」裡移除。</small></div>`;
     return;
   }
   const kindName = state.kind ? KIND[state.kind][0] : "檔案";
@@ -315,9 +332,13 @@ async function openFile(path, reveal, card) {
   if (card) { card.classList.add("opening"); const m = card.querySelector(".m"); if (m) { m.dataset.old = m.innerHTML; m.textContent = "開啟中…"; } }
   try {
     const d = await api("/api/open", {path, reveal});
-    toast((d.did === "opened" ? "已開啟　" : "已在檔案總管顯示　") + base(path));
-    if (card) card.classList.add("opened");
-  } catch (e) { toast(e.message, true); }
+    toast(d.did === "opened" ? "已開啟　" + base(path) : d.did === "program" ? "為了安全，程式類檔案不直接執行，已改在檔案總管顯示它的位置" : "已在檔案總管顯示　" + base(path));
+    if (card && d.did === "opened") card.classList.add("opened");
+  } catch (e) {   // 例如檔案已被移走：立刻取消「開啟中」並重新整理清單
+    toast(e.message, true);
+    if (card) card.classList.remove("opening");
+    closeSheet(); loadFiles(); return;
+  }
   if (card) setTimeout(() => { card.classList.remove("opening"); const m = card.querySelector(".m"); if (m && m.dataset.old) m.innerHTML = m.dataset.old; }, 3000);
 }
 
@@ -330,18 +351,22 @@ async function loadTasks() {
   let html = live.map(t => {
     const [done, total] = t.progress;
     return `<button class="task s-${t.state}" data-task="${esc(t.id)}"><div class="n">${esc(t.title)}</div>
-      <div class="st">${esc(t.state_text)}${total ? ` <span style="white-space:nowrap">${done}/${total}</span>` : ""}${t.where ? `<em>・${esc(t.where)}</em>` : ""}</div>
+      <div class="st">${esc(t.state_text)}${total ? ` <span style="white-space:nowrap">${done}/${total}</span>` : ""}${t.where ? `<em>・在 ${esc(t.where)}</em>` : ""}</div>
       ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</button>`;
   }).join("");
-  if (!live.length) html = `<div class="empty" style="padding:2rem .5rem;font-size:.95rem">${d.github_configured ? "目前沒有進行中的任務" : "尚未設定<br>寵物上按右鍵<br>「追蹤 GitHub repo」"}</div>`;
-  if (d.error) html += `<div class="empty" style="padding:.5rem;font-size:.8rem;color:var(--failed)">${esc(d.error)}</div>`;
+  const box = t => `<div class="empty" style="padding:1.2rem .5rem;font-size:.92rem;line-height:1.7">${t}</div>`;
+  if (d.error) html += box(`<span style="color:var(--failed)">${esc(d.error)}</span>`);
+  else if (!live.length) html = box(d.github_configured ? "目前沒有進行中的任務" :
+    "還沒設定要看哪裡的 AI 助手。<br>在桌面寵物上按右鍵 →<br>「追蹤 AI 助手的 GitHub 專案」<br><small>（沒看到寵物的話，請先雙擊 pet.pyw）</small>");
   $("tasks").innerHTML = html;
 }
 function taskSheet(id) {
   const t = state.tasks.find(x => x.id === id);
   if (!t) return;
   sheet(head(esc(t.title)) + `<div class="detail list s-${t.state}">
-    <p style="color:var(--s);font-weight:700;font-size:1.05rem">${esc(t.state_text)}・${ago(t.updated)}・${esc(t.where)}</p>
+    <p style="color:var(--s);font-weight:700;font-size:1.05rem">${esc(t.state_text)}・${ago(t.updated)}</p>
+    <p style="color:var(--text)">${esc(t.next || "")}</p>
+    ${t.where ? `<p>所在的 GitHub 專案：${esc(t.where)}${t.branch ? "（工作分支 " + esc(t.branch) + "）" : ""}</p>` : ""}
     ${t.todos.length ? `<ul>${t.todos.map(x => `<li class="${x.status}">${esc(x.text)}</li>`).join("")}</ul>` : ""}
     ${t.prompt ? `<p>你交代的：${esc(t.prompt)}</p>` : ""}${t.reply ? `<p>${esc(t.reply)}</p>` : ""}
     ${t.url ? `<button class="big" data-url="${esc(t.url)}">在 GitHub 開啟</button>` : ""}</div>`);
@@ -354,10 +379,12 @@ const head = t => `<h3><span>${t}</span><button class="round" data-act="close">$
 const cur = () => state.projects.find(p => p.path === state.project);
 function groupSheet(path) {
   const f = state.files.find(x => x.path === path);
-  const title = {version: "所有版本（最新的在最上面）", series: "同系列的檔案（最新的在最上面）", batch: `這一批照片（共 ${f.versions.length + 1 + (f.more || 0)} 張）`}[f.group];
+  const title = {version: "同一份文件的所有版本（最新的在最上面）", series: "同一系列、不同日期的檔案（最新的在最上面）", batch: `同一天、同一個資料夾的照片（共 ${f.versions.length + 1 + (f.more || 0)} 張）`}[f.group];
   const all = [f, ...f.versions].sort((a, b) => b.mtime - a.mtime);
-  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${all.map((v, i) =>
-    fileCard({...v, versions: null, later: 0, check: i === 0 && f.check}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96})).join("")}
+  const note = f.check ? `<p class="wide">「版號待確認」：最上面這份的修改時間最新，但檔名上的版號比別份舊。請確認哪一份才是你要的。</p>` : "";
+  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${note}${all.map((v, i) =>
+    fileCard({...v, versions: null, later: 0, oldpin: false, check: i === 0 && f.check}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96,
+      mark: f.later && v.path === f.path ? SINCE[state.since] + "的版本" : ""})).join("")}
     ${f.more ? `<p class="wide">還有 ${f.more} 個更舊的沒有列出，請用「在檔案總管開啟」查看。</p>` : ""}</div>`);
 }
 function subsSheet() {
@@ -366,20 +393,32 @@ function subsSheet() {
   sheet(head(state.sub ? "目前只看這個資料夾" : "只看哪個資料夾？") + `<div class="list three">
     ${state.sub ? `<div class="wide filters" style="align-items:center;flex-wrap:wrap"><button class="f" data-sub="">全部資料夾</button><span>›</span>${crumbs}</div>` : ""}
     ${state.sub && state.subs.length ? `<p class="wide" style="margin:.3rem">再縮小到裡面的：</p>` : ""}
-    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 個檔案</small></span></button>`).join("")}</div>`);
+    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 份</small></span></button>`).join("")}</div>`);
 }
 function moreSheet() {
   const c = cur();
-  sheet(head(c ? `「${esc(c.name)}」` : "設定") + `<div class="list two">
-    ${c ? `<button class="big" data-reveal="${esc(c.path)}">${icon("folder")}<span>在檔案總管開啟<small>直接看這個專案的資料夾</small></span></button>
+  sheet(head(c ? `「${esc(c.name)}」與設定` : "設定") + `<div class="list two">
+    ${c ? `<button class="big" data-reveal="${esc(c.path)}">${icon("folder")}<span>在檔案總管開啟這個專案<small>直接看它的資料夾</small></span></button>
       <button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
-    <button class="big" data-add="root">${icon("plus")}<span>加入一整批專案<small>選一個總資料夾，裡面每個子資料夾＝一個專案</small></span></button>
-    <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button>
+    <button class="big" data-act="pin-mode"><span>釘選檔案到最上面<small>按了之後點一張卡片；也可以直接長按卡片</small></span></button>
+    <button class="big" data-act="sources">${icon("folder")}<span>已加入的資料夾<small>查看、新增或移除（不會動到檔案）</small></span></button>
     <button class="big" data-act="bigger">字放大</button><button class="big" data-act="smaller">字縮小</button>
-    <button class="big" data-act="full">全螢幕</button>
-    <button class="big wide" data-act="pin-mode"><span>釘選檔案到最上面<small>按了之後點一張卡片；常被問到的舊檔釘一次，之後就不用再找。也可以直接長按卡片。</small></span></button>
-    ${state.hidden ? `<button class="big" data-act="unhide">顯示已隱藏的 ${state.hidden} 個專案</button>` : "<span></span>"}
-    ${c ? `<button class="big quiet wide" data-act="hide-ask">把「${esc(c.name)}」從清單隱藏</button>` : ""}</div>`);
+    <button class="big" data-act="full">${document.fullscreenElement ? "離開全螢幕" : "全螢幕"}</button>
+    ${state.hidden.length ? `<button class="big" data-act="hidden">已隱藏的專案（${state.hidden.length}）<small>　可以恢復</small></button>` : "<span></span>"}
+    ${c ? `<button class="big quiet wide" data-act="hide-ask">把「${esc(c.name)}」從清單隱藏（檔案不受影響，可恢復）</button>` : ""}</div>`);
+}
+async function sourcesSheet() {
+  const d = await api("/api/sources");
+  sheet(head("已加入的資料夾") + `<div class="list">
+    <div class="list two"><button class="big main" data-add="root">${icon("plus")}<span>加入一整批專案<small style="color:#5b4514">選一個總資料夾，裡面每個子資料夾＝一個專案</small></span></button>
+      <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button></div>
+    ${d.sources.map(s => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(s.name)}　<small style="font-weight:400;color:var(--dim)">${s.batch ? "一整批專案" : "一個專案"}${s.missing ? "・<b style='color:var(--failed)'>目前讀不到</b>" : ""}</small></div><div class="m">${esc(s.path)}</div></span></div>
+      <button class="ver" data-source-ask="${esc(s.path)}">移除</button></div>`).join("") || `<p>還沒有加入任何資料夾。</p>`}
+    <p>「移除」只是不再顯示在這裡，資料夾和裡面的檔案都不會被動到；之後可以再加回來。</p></div>`);
+}
+function hiddenSheet() {
+  sheet(head("已隱藏的專案") + `<div class="list two">${state.hidden.map(p =>
+    `<button class="big" data-unhide="${esc(p.path)}"><span>${esc(p.name)}<small>點一下恢復顯示</small></span></button>`).join("")}</div>`);
 }
 async function foldersSheet() {
   const c = cur();
@@ -387,10 +426,10 @@ async function foldersSheet() {
   const others = state.projects.filter(p => p.path !== c.path);
   sheet(head(`「${esc(c.name)}」的資料夾`) + `<div class="list">
     <p>同一個專案的資料若分散在好幾個地方，加進來就會合併顯示。只是設定，不會搬動檔案。</p>
-    ${d.folders.map((x, i) => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(base(x))}</div><div class="m">${esc(x)}</div></span></div>
-      ${i ? `<button class="ver" data-unmerge="${esc(x)}">拆出</button>` : `<span class="ver" style="color:var(--dim)">主資料夾</span>`}</div>`).join("")}
-    <button class="big main" data-act="add-folder">${icon("plus")}加入其他位置的資料夾</button>
-    ${others.length ? `<button class="big" data-act="merge-pick">${icon("plus")}把另一個專案併進來…</button>` : ""}</div>`);
+    <div class="list two"><button class="big main" data-act="add-folder">${icon("plus")}加入其他位置的資料夾</button>
+      ${others.length ? `<button class="big" data-act="merge-pick">${icon("plus")}把清單上另一個專案併進來…</button>` : "<span></span>"}</div>
+    ${d.folders.map(x => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(base(x.path))}</div><div class="m">${esc(x.path)}</div></span></div>
+      ${x.main ? `<span class="ver" style="color:var(--dim)">主資料夾</span>` : `<button class="ver" data-detach-ask="${esc(x.path)}" data-single="${x.single ? 1 : ""}">${x.single ? "移除" : "拆出"}</button>`}</div>`).join("")}</div>`);
 }
 function mergePickSheet() {
   const c = cur();
@@ -402,9 +441,11 @@ function confirmSheet(text, yesLabel, attrs) {
     <button class="big main" ${attrs}>${yesLabel}</button><button class="big" data-act="close">取消</button></div>`);
 }
 async function addProject(asRoot) {
-  closeSheet(); toast("請在主螢幕跳出的視窗選擇資料夾…");
-  try { const d = await api("/api/add_project", {as_root: asRoot}); if (d.added) { toast("已加入"); await refresh(); } }
-  catch (e) { toast(e.message, true); }
+  closeSheet(); toast("請在電腦主螢幕跳出的視窗選擇資料夾…");
+  try {
+    const d = await api("/api/add_project", {as_root: asRoot});
+    if (d.added) { toast("已加入"); await refresh(); } else toast("沒有選擇資料夾，所以沒有加入");
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ---------- 長按檔案卡片：釘選到最上面、顯示位置 ---------- */
@@ -444,20 +485,22 @@ function setPinMode(on) { state.pinMode = on; document.body.classList.toggle("pi
 function setSearch(on) {
   $("bar").classList.toggle("searching", on);
   $("search-btn").innerHTML = icon(on ? "x" : "search");
+  const c = cur();
+  $("q").placeholder = c ? `在「${c.name}」裡找：輸入檔名或資料夾名稱` : "在全部專案裡找：輸入檔名或資料夾名稱";
   if (on) $("q").focus(); else { $("q").value = ""; state.q = ""; }
 }
 const name = p => (state.projects.find(x => x.path === p) || {}).name || base(p);
 
 document.addEventListener("click", async ev => {
   if (pressed) { pressed = false; ev.preventDefault(); return; }   // 剛才是長按，不當成點擊
-  const el = ev.target.closest("[data-pin],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
     if ("pin" in d) { const r = await api("/api/pin", {path: d.pin}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
     else if ("proj" in d) { setSearch(false); setPinMode(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: ""}); resetList(); renderProjects(); await refresh(); }
     else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; resetList(); await loadFiles(); }
-    else if ("since" in d) { state.since = d.since; resetList(); await loadFiles(); }
+    else if ("since" in d) { state.since = state.since === d.since ? "" : d.since; resetList(); await loadFiles(); }
     else if ("sub" in d) { state.sub = d.sub; closeSheet(); resetList(); await loadFiles(); }
     else if ("open" in d && state.pinMode) { setPinMode(false); closeSheet(); const r = await api("/api/pin", {path: d.open}); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
     else if ("open" in d) openFile(d.open, false, el.closest(".file"));   // 清單保持開啟，方便接著開另一版比較
@@ -468,7 +511,15 @@ document.addEventListener("click", async ev => {
     else if ("add" in d) addProject(d.add === "root");
     else if ("mergeAsk" in d) confirmSheet(`把「${esc(name(d.mergeAsk))}」併入「${esc(cur().name)}」？<br><small>只改顯示方式，不會搬動檔案；之後可以再拆出。</small>`, "併入", `data-merge="${esc(d.mergeAsk)}"`);
     else if ("merge" in d) { await api("/api/merge", {path: d.merge, into: state.project}); toast("已併入"); await refresh(); foldersSheet(); }
-    else if ("unmerge" in d) { await api("/api/unmerge", {folder: d.unmerge}); toast("已拆出"); await refresh(); foldersSheet(); }
+    else if ("unmerge" in d) { const r = await api("/api/unmerge", {folder: d.unmerge}); toast(r.did === "removed" ? "已移除，檔案不受影響" : "已拆出，它回到左邊成為獨立的專案"); await refresh(); foldersSheet(); }
+    else if ("detachAsk" in d) confirmSheet(d.single
+      ? `把「${esc(base(d.detachAsk))}」從這個專案移除？<br><small>只是不再顯示，資料夾和檔案都不會被動到。</small>`
+      : `把「${esc(base(d.detachAsk))}」從這個專案拆出？<br><small>它會回到左邊的清單，成為獨立的專案。檔案不受影響。</small>`, d.single ? "移除" : "拆出", `data-unmerge="${esc(d.detachAsk)}"`);
+    else if ("sourceAsk" in d) confirmSheet(`不再顯示「${esc(base(d.sourceAsk))}」？<br><small>資料夾和裡面的檔案都不會被動到；之後可以再加回來。</small>`, "移除", `data-source="${esc(d.sourceAsk)}"`);
+    else if ("source" in d) { await api("/api/remove_source", {path: d.source}); toast("已移除，檔案不受影響"); state.project = ""; await refresh(); sourcesSheet(); }
+    else if ("unhide" in d) { await api("/api/hide_project", {path: d.unhide}); toast("已恢復顯示"); await refresh(); state.hidden.length ? hiddenSheet() : closeSheet(); }
+    else if (d.act === "sources") sourcesSheet();
+    else if (d.act === "hidden") hiddenSheet();
     else if (d.act === "more") moreSheet();
     else if (d.act === "pin-mode") { setPinMode(true); closeSheet(); }
     else if (d.act === "pin-cancel") setPinMode(false);
@@ -479,10 +530,9 @@ document.addEventListener("click", async ev => {
     else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
     else if (d.act === "folders") foldersSheet();
     else if (d.act === "merge-pick") mergePickSheet();
-    else if (d.act === "add-folder") { toast("請在主螢幕跳出的視窗選擇資料夾…"); const r = await api("/api/add_folder", {project: state.project}); if (r.added) { toast("已加入"); await refresh(); foldersSheet(); } }
+    else if (d.act === "add-folder") { toast("請在電腦主螢幕跳出的視窗選擇資料夾…"); const r = await api("/api/add_folder", {project: state.project}); if (r.added) { toast("已加入"); await refresh(); foldersSheet(); } else toast("沒有選擇資料夾，所以沒有加入"); }
     else if (d.act === "hide-ask") confirmSheet(`把「${esc(cur().name)}」從清單隱藏？<br><small>檔案不受影響；之後可在「⋯」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`);
-    else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」恢復"); refresh(); }
-    else if (d.act === "unhide") { await api("/api/unhide_all", {}); closeSheet(); refresh(); }
+    else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」→「已隱藏的專案」恢復"); refresh(); }
     else if (d.act === "smaller") setScale(-.1);
     else if (d.act === "bigger") setScale(.1);
     else if (d.act === "full") { closeSheet(); document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast("此環境無法切換全螢幕", true)); }
@@ -499,6 +549,7 @@ setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
 loadTasks();
 setInterval(loadTasks, 15000);
+setInterval(() => { if (document.body.classList.contains("offline")) api("/api/projects").catch(() => {}); }, 4000);
 const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
 setInterval(() => { if (idle()) refresh(); }, 30000);   // 使用者正在往下找的時候不重排
 window.addEventListener("focus", () => { if (idle()) refresh(); });

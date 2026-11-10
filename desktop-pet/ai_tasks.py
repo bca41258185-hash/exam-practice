@@ -22,7 +22,17 @@ import pet_core as core
 ORDER = {"failed": 0, "waiting": 1, "running": 2, "done": 3, "idle": 4}
 
 
+NEXT_STEP = {
+    "running": "助手還在做，不需要你處理。",
+    "waiting": "輪到你了：打開來看成果，沒問題就同意採用，有問題就回覆請它修改。",
+    "failed": "成果沒通過自動檢查。回到你交代這件事的對話，請助手修正即可。",
+    "done": "這件事已經完成，成果已經收進正式版本。",
+    "idle": "這件事目前停著。需要的話，回到原本的對話請助手繼續。",
+}
+
+
 def _finish(task: dict) -> dict:
+    task["next"] = NEXT_STEP.get(task.get("state"), "")
     todos = task.get("todos") or []
     task["progress"] = [sum(t["status"] == "completed" for t in todos), len(todos)]
     doing = next((t["text"] for t in todos if t["status"] == "in_progress"), "")
@@ -100,7 +110,7 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
         _session_cache[str(path)] = ((st.st_mtime, st.st_size), dict(info))
     last_kind = info.pop("last_kind", "")
     if (now or time.time()) - info["updated"] < 120:
-        info["state"], info["state_text"] = "running", "執行中"
+        info["state"], info["state_text"] = "running", "正在做"
     elif last_kind == "reply":
         info["state"], info["state_text"] = "waiting", "已回覆，等你看"
     else:
@@ -163,19 +173,19 @@ def pr_task(repo: str, pr: dict, checks: list[dict] | None = None, now: float | 
     todos = [{"text": m.group(2).strip()[:80], "status": "completed" if m.group(1) != " " else "pending"}
              for m in _CHECKBOX.finditer(body)]
     if pr.get("merged_at"):
-        state, text = "done", "已合併"
+        state, text = "done", "已完成並採用"
     elif pr.get("state") != "open":
-        state, text = "idle", "已關閉"
+        state, text = "idle", "已關閉，沒有採用"
     else:
         concl = [c.get("conclusion") for c in checks or []]
         if any(c.get("status") != "completed" for c in checks or []):
-            state, text = "running", "自動檢查執行中"
+            state, text = "running", "自動檢查中"
         elif any(c in ("failure", "timed_out") for c in concl):
-            state, text = "failed", "自動檢查失敗"
+            state, text = "failed", "檢查沒通過，要請助手修正"
         elif now - updated < 300:
-            state, text = "running", "剛更新，仍在進行"
+            state, text = "running", "剛更新，還在做"
         else:
-            state, text = "waiting", "草稿完成，等你審閱" if pr.get("draft") else "等你審閱／合併"
+            state, text = "waiting", "做完了，等你看過" if pr.get("draft") else "等你同意採用"
     return _finish({"id": f"{repo}#{pr.get('number')}", "source": "GitHub", "title": pr.get("title", "")[:80],
                     "state": state, "state_text": text, "updated": updated, "url": pr.get("html_url", ""),
                     "where": repo.split("/")[-1], "branch": (pr.get("head") or {}).get("ref", ""),
@@ -189,7 +199,7 @@ def branch_task(repo: str, name: str, commit: dict, now: float | None = None) ->
     age = (now or time.time()) - updated
     if age > 2 * 86400:
         return None
-    state, text = ("running", "撰寫中（尚未開 PR）") if age < 900 else ("idle", "已停止（尚未開 PR）")
+    state, text = ("running", "正在做（還沒送出成果）") if age < 900 else ("idle", "已停止（還沒送出成果）")
     msg = (c.get("message") or "").strip()
     return _finish({"id": f"{repo}@{name}", "source": "GitHub", "title": msg.splitlines()[0][:80] if msg else name,
                     "state": state, "state_text": text, "updated": updated, "url": commit.get("html_url", ""),
@@ -219,6 +229,31 @@ def _fetch_repo(repo: str, token: str, prefixes: tuple[str, ...]) -> list[dict]:
     return tasks
 
 
+def explain_http(repo: str, code: int, has_token: bool) -> str:
+    if code == 404:
+        return (f"找不到「{repo}」這個 GitHub 專案，或它是不公開的。請確認名稱有沒有打錯；"
+                + ("若名稱正確，請確認權杖有這個專案的讀取權限。" if has_token else "若是不公開的專案，請在寵物上按右鍵 →「設定 GitHub 權杖」。"))
+    if code == 401:
+        return "GitHub 權杖無效或已過期。請在寵物上按右鍵 →「設定 GitHub 權杖」重新貼上。"
+    if code in (403, 429):
+        return ("GitHub 暫時限制了查詢次數，稍後會自動恢復。" + ("" if has_token else "設定 GitHub 權杖可以避免這個限制。"))
+    return f"GitHub 暫時有狀況（代碼 {code}），會自動再試。"
+
+
+def check_repo(repo: str) -> tuple[bool, str]:
+    """加入追蹤時立刻連線確認，回傳 (是否連得上, 給使用者看的一句話)。"""
+    token = core.load_config().get("github_token", "")
+    prefixes = tuple(core.load_config().get("ai_branch_prefixes") or ["claude/"])
+    try:
+        n = sum(t["state"] != "idle" for t in _fetch_repo(repo, token, prefixes))
+    except urllib.error.HTTPError as e:
+        return False, explain_http(repo, e.code, bool(token))
+    except (urllib.error.URLError, ValueError, KeyError, TypeError, OSError):
+        return False, "目前連不上 GitHub，稍後會自動再試。"
+    _gh_cache["at"] = 0.0  # 讓面板與寵物馬上重新整理
+    return True, f"連得上「{repo}」，目前有 {n} 件進行中的任務。" if n else f"連得上「{repo}」，目前沒有進行中的任務。"
+
+
 def github_tasks() -> tuple[list[dict], str]:
     cfg = core.load_config()
     repos = [r for r in cfg.get("github_repos", []) if isinstance(r, str) and r.count("/") == 1]
@@ -235,10 +270,9 @@ def github_tasks() -> tuple[list[dict], str]:
         try:
             tasks += _fetch_repo(repo, token, prefixes)
         except urllib.error.HTTPError as e:
-            hint = "；私有 repo 或額度用完時，請在設定填入 github_token" if e.code in (401, 403, 404, 429) else ""
-            error = f"{repo}：GitHub 回應 {e.code}{hint}"
-        except (urllib.error.URLError, ValueError, KeyError, TypeError, OSError) as e:
-            error = f"{repo}：連不上 GitHub（{getattr(e, 'reason', e)}）"
+            error = explain_http(repo, e.code, bool(token))
+        except (urllib.error.URLError, ValueError, KeyError, TypeError, OSError):
+            error = "目前連不上 GitHub（可能是網路問題），顯示的是上次的結果。會自動再試。"
     if error and not tasks and _gh_cache["key"] == key:
         tasks = _gh_cache["tasks"]  # 暫時連不上就沿用上次結果
     _gh_cache.update(at=time.time(), key=key, tasks=tasks, error=error)

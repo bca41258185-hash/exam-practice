@@ -6,7 +6,7 @@
   冒汗      有助手出錯（自動檢查失敗）
   頭上的標籤寫出各狀態的任務數量（執行／等你／出錯）。
 
-操作：點一下看任務清單｜雙擊開啟副螢幕觸控面板｜拖曳移動｜右鍵選單
+操作：點一下看任務清單｜雙擊開啟副螢幕觸控面板｜拖曳移動｜右鍵設定
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ai_tasks  # noqa: E402
@@ -75,6 +75,7 @@ class Pet:
         self.moved = False
         self.modal = 0
         self.results: queue.Queue = queue.Queue()
+        self.notes: queue.Queue = queue.Queue()
         self.bubble: tk.Toplevel | None = None
         self.bubble_job = None
         self.popup: tk.Toplevel | None = None
@@ -94,7 +95,7 @@ class Pet:
             threading.Thread(target=self._poll_loop, daemon=True).start()
         self._tick()
         self._drain()
-        root.after(1200, lambda: self.say("我會幫你盯著 AI 助手的進度。\n點我看清單，雙擊開觸控面板。"))
+        root.after(1200, lambda: self.say("我會幫你盯著 AI 助手的進度。\n點我看清單，雙擊開觸控面板，\n按右鍵可以設定。", seconds=9))
 
     # ------------------------------------------------------------ 資料
     def _poll_loop(self) -> None:
@@ -109,6 +110,10 @@ class Pet:
         try:
             while True:
                 self.update_tasks(self.results.get_nowait())
+        except queue.Empty:
+            pass
+        try:
+            self.say(self.notes.get_nowait(), seconds=20)
         except queue.Empty:
             pass
         self.root.after(500, self._drain)
@@ -139,11 +144,13 @@ class Pet:
         c.delete("all")
         fur, line, pink = "#f4b860", "#5b3a1e", "#f28fa0"
         # 頭上的狀態標籤：寫出文字，不必記顏色
-        shown = [(s, self.counts.get(s, 0)) for s in ("running", "waiting", "failed") if self.counts.get(s)]
+        shown = [(COLORS[s], f"{LABELS[s]} {self.counts[s]}") for s in ("running", "waiting", "failed") if self.counts.get(s)]
+        if self.error:  # 連不上或設定有問題：不要讓人以為「沒事」
+            shown = shown[:2] + [("#d7dbe2", "連線?")]
         x = W / 2 - len(shown) * 24 + 1
-        for s, n in shown:
-            c.create_rectangle(x, 4, x + 46, 26, fill=COLORS[s], outline="white", width=2)
-            c.create_text(x + 23, 15, text=f"{LABELS[s]} {n}", font=(FONT, 9, "bold"), fill="#1c1c1c")
+        for color, text in shown:
+            c.create_rectangle(x, 4, x + 46, 26, fill=color, outline="white", width=2)
+            c.create_text(x + 23, 15, text=text, font=(FONT, 9, "bold"), fill="#1c1c1c")
             x += 48
 
         bob = {"sleep": (0, 0, 1, 1, 1, 1, 0, 0)[f // 4 % 8], "waiting": (0, 2, 4, 2)[f // 2 % 4],
@@ -290,9 +297,10 @@ class Pet:
         box.pack()
         rows = [t for t in self.tasks if t["state"] != "idle"][:6] or self.tasks[:3]
         if not rows:
-            hint = ("目前沒有 AI 任務。" if core.load_config().get("github_repos")
-                    else "還沒設定要追蹤的 GitHub repo。\n右鍵 →「追蹤 GitHub repo…」")
-            tk.Label(box, text=hint, font=(FONT, 10), bg="#1a1d23", fg="#9aa0ab", justify="left").pack(anchor="w")
+            hint = ("目前沒有進行中的 AI 任務。" if core.load_config().get("github_repos")
+                    else "還沒設定要看哪裡的 AI 助手。\n在我身上按右鍵 →\n「追蹤 AI 助手的 GitHub 專案…」")
+            if not self.error:
+                tk.Label(box, text=hint, font=(FONT, 10), bg="#1a1d23", fg="#9aa0ab", justify="left").pack(anchor="w")
         for t in rows:
             done, total = t["progress"]
             row = tk.Frame(box, bg="#1a1d23", cursor="hand2" if t.get("url") else "")
@@ -300,11 +308,12 @@ class Pet:
             tk.Label(row, text="●", font=(FONT, 12), bg="#1a1d23", fg=COLORS[t["state"]]).pack(side="left", anchor="n")
             text = tk.Frame(row, bg="#1a1d23")
             text.pack(side="left", padx=(4, 0))
-            title = t["title"][:22] + (f"（{t['where'][:8]}）" if t.get("where") else "")
-            tk.Label(text, text=title, font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
+            tk.Label(text, text=t["title"][:26], font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
             detail = t["state_text"] + (f"・{done}/{total}" if total else "")
             if t.get("doing") and t["state"] == "running":
                 detail += f"\n正在：{t['doing'][:24]}"
+            if t.get("where"):
+                detail += f"\n在 {t['where']}"
             tk.Label(text, text=detail, font=(FONT, 9), bg="#1a1d23", fg=COLORS[t["state"]], justify="left").pack(anchor="w")
             if t.get("url"):
                 for w in (row, text, *row.winfo_children(), *text.winfo_children()):
@@ -342,15 +351,16 @@ class Pet:
         m = self.menu = tk.Menu(self.root, tearoff=0, font=(FONT, 10))
         m.add_command(label="開啟觸控面板（副螢幕）", command=self.open_panel)
         m.add_separator()
-        m.add_command(label="加入專案總資料夾…", command=lambda: self.add_project(True))
-        m.add_command(label="加入單一專案資料夾…", command=lambda: self.add_project(False))
+        m.add_command(label="加入一整批專案…（選總資料夾）", command=lambda: self.add_project(True))
+        m.add_command(label="加入一個專案…", command=lambda: self.add_project(False))
         m.add_separator()
-        m.add_command(label="追蹤 GitHub repo…", command=self.add_repo)
-        m.add_command(label="設定 GitHub 權杖…", command=self.set_token)
+        m.add_command(label="追蹤 AI 助手的 GitHub 專案…", command=self.add_repo)
+        m.add_command(label="管理追蹤的 GitHub 專案…", command=self.manage_repos)
+        m.add_command(label="設定 GitHub 權杖…（不公開的專案才需要）", command=self.set_token)
         m.add_separator()
         m.add_checkbutton(label="到處走走", variable=self.walk_var,
                           command=lambda: core.set_config(walk=self.walk_var.get()))
-        m.add_command(label="離開", command=self.root.destroy)
+        m.add_command(label="結束檔案管家（面板也會停止）", command=self.root.destroy)
 
     def _dialog(self, fn, *args, **kw):
         self.modal += 1
@@ -367,7 +377,7 @@ class Pet:
         self.say("觸控面板開好了。\n拖到副螢幕後按右上角的全螢幕。")
 
     def add_project(self, as_root: bool) -> None:
-        title = "選擇「專案總資料夾」（裡面每個子資料夾是一個專案）" if as_root else "選擇一個專案資料夾"
+        title = "加入一整批專案：請選總資料夾（裡面每個子資料夾是一個專案）" if as_root else "加入一個專案：請選那個專案的資料夾"
         folder = self._dialog(filedialog.askdirectory, title=title)
         if not folder:
             return
@@ -375,28 +385,121 @@ class Pet:
             added = panel.add_project(folder, as_root)
         except core.ProtectedFolderError as e:
             return self._dialog(messagebox.showwarning, "檔案管家", str(e))
-        self.say(f"已加入「{Path(added).name}」，\n觸控面板幾秒後就會出現。")
+        self.say(f"已加入「{Path(added).name}」。\n已經開著的觸控面板會在半分鐘內更新。", seconds=9)
+
+    def ask_text(self, title: str, message: str, secret: bool = False) -> str | None:
+        """中文按鈕的輸入視窗。按「取消」或關閉回傳 None。"""
+        self.modal += 1
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.attributes("-topmost", True)
+        win.resizable(False, False)
+        tk.Label(win, text=message, font=(FONT, 10), justify="left", wraplength=460, padx=16, pady=12).pack(anchor="w")
+        entry = tk.Entry(win, font=(FONT, 11), width=52, show="*" if secret else "")
+        entry.pack(padx=16)
+        result: list[str | None] = [None]
+        bar = tk.Frame(win)
+        bar.pack(fill="x", padx=16, pady=12)
+
+        def ok(*_):
+            result[0] = entry.get()
+            win.destroy()
+        tk.Button(bar, text="取消", font=(FONT, 10), width=8, command=win.destroy).pack(side="right")
+        tk.Button(bar, text="確定", font=(FONT, 10), width=8, command=ok).pack(side="right", padx=8)
+        entry.bind("<Return>", ok)
+        win.bind("<Escape>", lambda e: win.destroy())
+        self._last_dialog = win  # 測試用
+        entry.focus_set()
+        if not getattr(self, "headless", False):
+            win.grab_set()
+            self.root.wait_window(win)
+        self.modal -= 1
+        return result[0]
 
     def add_repo(self, repo: str | None = None) -> None:
-        repo = repo or self._dialog(simpledialog.askstring, "追蹤 GitHub repo",
-                                    "輸入 AI 助手工作的 repo（格式：擁有者/名稱）\n也可以直接貼 GitHub 網址：")
+        repo = repo or self.ask_text(
+            "追蹤 AI 助手的 GitHub 專案",
+            "AI 助手寫程式時，成果會放在 GitHub 網站上的某個「專案」（英文叫 repo）裡。\n"
+            "請把那個專案的網址貼在下面，我就能告訴你它做到哪了。\n\n"
+            "怎麼找：打開 AI 助手給你的成果連結，網址開頭像這樣：\n"
+            "https://github.com/你的帳號/專案名稱\n（貼整個網址，或只打「你的帳號/專案名稱」都可以）")
         if not repo:
             return
         m = re.search(r"(?:github\.com/)?([\w.-]+)/([\w.-]+?)(?:\.git|/.*)?$", repo.strip())
         if not m:
-            return self._dialog(messagebox.showwarning, "檔案管家", "格式不對，應該像 owner/repo。")
+            return self._dialog(messagebox.showwarning, "檔案管家",
+                                "看不出是哪個專案。\n請貼上像 https://github.com/你的帳號/專案名稱 這樣的網址。")
         name = f"{m.group(1)}/{m.group(2)}"
         cur = core.load_config().get("github_repos", [])
         if name not in cur:
             core.set_config(github_repos=cur + [name])
-        self.say(f"開始追蹤 {name}。\n私有 repo 還需要設定權杖。")
+        self.say(f"已加入「{name}」，正在連線確認…", seconds=20)
+
+        def check():
+            ok, text = ai_tasks.check_repo(name)   # 在背景連線；結果交回主執行緒顯示
+            self.notes.put(text if ok else text + "\n（可在右鍵「管理追蹤的 GitHub 專案」移除）")
+        threading.Thread(target=check, daemon=True).start()
+
+    def manage_repos(self) -> None:
+        self.modal += 1
+        win = tk.Toplevel(self.root)
+        win.title("管理追蹤的 GitHub 專案")
+        win.attributes("-topmost", True)
+        win.resizable(False, False)
+        body = tk.Frame(win, padx=16, pady=12)
+        body.pack()
+
+        def closed(e):
+            if e.widget is win:
+                self.modal -= 1
+        win.bind("<Destroy>", closed)
+
+        def redraw():
+            for child in body.winfo_children():
+                child.destroy()
+            cfg = core.load_config()
+            repos = cfg.get("github_repos", [])
+            tk.Label(body, text="目前追蹤這些 GitHub 專案：" if repos else "目前沒有追蹤任何 GitHub 專案。",
+                     font=(FONT, 10)).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+            for i, repo in enumerate(repos, 1):
+                tk.Label(body, text=repo, font=(FONT, 10, "bold")).grid(row=i, column=0, sticky="w", padx=(0, 20))
+                tk.Button(body, text="停止追蹤", font=(FONT, 9), command=lambda r=repo: remove(r)).grid(row=i, column=1, pady=2)
+            row = len(repos) + 1
+            tk.Label(body, text="GitHub 權杖：" + ("已設定" if cfg.get("github_token") else "未設定（公開的專案不需要）"),
+                     font=(FONT, 10)).grid(row=row, column=0, sticky="w", pady=(10, 0))
+            if cfg.get("github_token"):
+                tk.Button(body, text="清除權杖", font=(FONT, 9), command=clear_token).grid(row=row, column=1, pady=(10, 0))
+            tk.Label(body, text="停止追蹤只是不再顯示，不會影響 GitHub 上的任何東西。", font=(FONT, 9),
+                     fg="#666").grid(row=row + 1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+            tk.Button(body, text="關閉", font=(FONT, 10), width=8, command=win.destroy).grid(row=row + 2, column=1, pady=(10, 0))
+
+        def remove(repo):
+            core.set_config(github_repos=[r for r in core.load_config().get("github_repos", []) if r != repo])
+            redraw()
+
+        def clear_token():
+            core.set_config(github_token="")
+            redraw()
+        redraw()
+        self._last_dialog = win
 
     def set_token(self) -> None:
-        token = self._dialog(simpledialog.askstring, "GitHub 權杖",
-                             "貼上只有「讀取」權限的 fine-grained token。\n（存在本機 ~/.desktop_pet/config.json，留空可清除）", show="*")
-        if token is not None:
-            core.set_config(github_token=token.strip())
-            self.say("權杖已更新。" if token.strip() else "權杖已清除。")
+        token = self.ask_text(
+            "設定 GitHub 權杖",
+            "只有「不公開」的 GitHub 專案才需要這一步；公開的專案可以直接按取消。\n"
+            "權杖是一串讓我「只能讀取」你專案進度的通行碼。取得方式：\n\n"
+            "1. 登入 github.com，點右上角頭像 → Settings\n"
+            "2. 左側最下面 Developer settings → Personal access tokens → Fine-grained tokens\n"
+            "3. 按 Generate new token；Repository access 選你要追蹤的專案\n"
+            "4. Permissions 裡把 Contents 和 Pull requests 設成 Read-only\n"
+            "5. 按最下面的 Generate token，把產生的那串字複製貼到下面\n\n"
+            "這串字只會存在這台電腦裡（未加密），請不要給別人。\n"
+            "要清除已存的權杖，請到「管理追蹤的 GitHub 專案」。", secret=True)
+        if token is None or not token.strip():
+            return  # 留空或取消都不會動到已存的權杖
+        core.set_config(github_token=token.strip())
+        ai_tasks._gh_cache["at"] = 0.0
+        self.say("權杖已存好，稍後就會更新進度。")
 
 
 if __name__ == "__main__":

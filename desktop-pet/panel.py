@@ -74,6 +74,46 @@ def _folders() -> list[str]:
     return out
 
 
+def _clean(p) -> str:
+    """設定裡的路徑：正規化但不要求它現在存在（網路磁碟可能暫時沒連上）。"""
+    try:
+        return str(Path(p).expanduser().resolve())
+    except OSError:
+        return str(p)
+
+
+def sources() -> list[dict]:
+    """使用者加入過的資料夾：整批（裡面每個子資料夾是一個專案）或單一專案。"""
+    cfg = core.load_config()
+    out = [{"path": _clean(p), "batch": True} for p in cfg.get("project_roots", [])]
+    out += [{"path": _clean(p), "batch": False} for p in cfg.get("projects", [])]
+    for s in out:
+        s["missing"] = not os.path.isdir(s["path"])
+        s["name"] = os.path.basename(s["path"]) or s["path"]
+    return out
+
+
+def missing_folders() -> list[str]:
+    return [s["path"] for s in sources() if s["missing"]]
+
+
+def remove_source(path: str) -> None:
+    """不再顯示某個加入過的資料夾。只改設定，不動檔案。"""
+    cfg = core.load_config()
+    keep = lambda items: [p for p in items if _clean(p) != path]  # noqa: E731
+    merged = {f: into for f, into in cfg.get("merged", {}).items()
+              if not (f == path or into == path or f.startswith(path + os.sep) or into.startswith(path + os.sep))}
+    core.set_config(project_roots=keep(cfg.get("project_roots", [])), projects=keep(cfg.get("projects", [])), merged=merged)
+
+
+def _overlap(folder: str) -> str | None:
+    """若這個資料夾與已加入的專案重疊（在裡面，或把它包在裡面），回傳那個專案的名稱。"""
+    for f in _folders():
+        if folder == f or folder.startswith(f + os.sep) or f.startswith(folder + os.sep):
+            return os.path.basename(project_of(f) or f)
+    return None
+
+
 def _merged(folders: list[str]) -> dict[str, str]:
     """{資料夾: 它併入的專案}。一個專案的資料常分散在兩三個地方（本機、NAS、雲端硬碟）。"""
     raw = core.load_config().get("merged", {})
@@ -120,21 +160,28 @@ def merge(folder: str, into: str) -> None:
     core.set_config(merged=merged)
 
 
-def unmerge(folder: str) -> None:
-    merged = dict(core.load_config().get("merged", {}))
+def unmerge(folder: str) -> str:
+    """把併入的資料夾拿掉。單獨加入的資料夾直接移除（'removed'）；
+    原本就是清單上的專案則恢復成獨立專案（'split'）。都只改設定。"""
+    cfg = core.load_config()
+    merged = dict(cfg.get("merged", {}))
     merged.pop(folder, None)
-    core.set_config(merged=merged)
+    singles = [p for p in cfg.get("projects", []) if _clean(p) != folder]
+    removed = len(singles) != len(cfg.get("projects", []))
+    core.set_config(merged=merged, projects=singles)
+    return "removed" if removed else "split"
+
+
+def folder_info(project: str) -> list[dict]:
+    singles = {_clean(p) for p in core.load_config().get("projects", [])}
+    return [{"path": f, "main": i == 0, "single": f in singles} for i, f in enumerate(folders_of(project))]
 
 
 def add_folder(project: str, folder: str) -> str:
     """把任意位置的資料夾加進既有專案。"""
     if project not in projects(include_hidden=True):
         raise PermissionError("不是已加入的專案")
-    p = add_project(folder, False)
-    if p == project or p in folders_of(project):
-        return p
-    if p not in projects(include_hidden=True):
-        raise PermissionError("這個資料夾已經屬於另一個專案，請先拆出")
+    p = add_project(folder, False)   # 與任何已加入的專案重疊時會被擋下並說明
     merge(p, project)
     return p
 
@@ -143,8 +190,12 @@ def add_project(folder: str, as_root: bool) -> str:
     p = str(core.check_folder_allowed(Path(folder)))
     key = "project_roots" if as_root else "projects"
     cur = core.load_config().get(key, [])
-    if p not in cur:
-        core.set_config(**{key: cur + [p]})
+    if p in [_clean(x) for x in cur]:
+        return p
+    hit = _overlap(p)
+    if hit and not (as_root and p in [_clean(x) for x in core.load_config().get("project_roots", [])]):
+        raise core.ProtectedFolderError(f"這個資料夾和已加入的「{hit}」重疊，不需要再加一次。")
+    core.set_config(**{key: cur + [p]})
     return p
 
 
@@ -368,10 +419,6 @@ class Index:
             if sub:
                 scope = [x for x in scope if x[1] == sub or x[1].startswith(sub + os.sep)]
             skip = len(sub) + 1 if sub else 0
-            for _, rel, _e in scope:
-                key = rel[skip:].split(os.sep)[0]
-                if key:
-                    subs[os.path.join(sub, key) if sub else key] = subs.get(os.path.join(sub, key) if sub else key, 0) + 1
         terms = q.lower().split()
         if terms:
             scope = [x for x in scope if all(t in x[2][0] or t in x[1].lower() for t in terms)]
@@ -379,6 +426,12 @@ class Index:
         # 先收合再篩選：畫面上的數字一律是「卡片數」，與看到的一致
         info = {id(x[2]): x for x in scope}
         groups = collapse_versions([x[2] for x in scope])
+        if project:  # 子資料夾旁的數字也用卡片數，與類型鈕、清單一致
+            for g in groups:
+                key = info[id(g[0])][1][skip:].split(os.sep)[0]
+                if key:
+                    name = os.path.join(sub, key) if sub else key
+                    subs[name] = subs.get(name, 0) + 1
         midnight = _midnight()
         monday = midnight - time.localtime().tm_wday * 86400
         ranges = {"today": (midnight, float("inf")), "week": (monday, float("inf")),
@@ -436,7 +489,7 @@ class Index:
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
                 "new": sum(g[0][6] >= new_from for g in groups),
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
-                "indexing": self.indexing}
+                "projects": len(projects()), "missing": missing_folders(), "indexing": self.indexing}
 
 
 def _midnight() -> float:
@@ -446,9 +499,12 @@ def _midnight() -> float:
 def open_file(path: str, reveal: bool = False) -> str:
     """開啟檔案或在檔案總管顯示位置。回傳實際做的事：'opened' 或 'revealed'。"""
     p = Path(path).resolve()
-    if not p.exists() or not project_of(p):
-        raise PermissionError("檔案不存在，或不在專案資料夾範圍內")
-    if p.is_file() and p.suffix.lower() in NO_LAUNCH:
+    if not project_of(p):
+        raise PermissionError("這個檔案不在已加入的專案資料夾裡")
+    if not p.exists():
+        raise FileNotFoundError("這個檔案已被移走或刪除")
+    program = p.is_file() and p.suffix.lower() in NO_LAUNCH and not reveal
+    if program:
         reveal = True
     if reveal:
         if sys.platform == "win32":
@@ -457,7 +513,7 @@ def open_file(path: str, reveal: bool = False) -> str:
             subprocess.Popen(["open", "-R", str(p)])
         else:
             subprocess.Popen(["xdg-open", str(p if p.is_dir() else p.parent)])
-        return "revealed"
+        return "program" if program else "revealed"
     if sys.platform == "win32":
         os.startfile(str(p))  # type: ignore[attr-defined]
     else:
@@ -508,9 +564,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if url.path == "/api/projects":
-                hidden = len(projects(include_hidden=True)) - len(projects())
+                shown = set(projects())
+                hidden = [{"path": p, "name": os.path.basename(p)} for p in projects(include_hidden=True) if p not in shown]
                 self._send(200, {"projects": self.index.project_list(), "hidden": hidden,
-                                 "indexing": self.index.indexing})
+                                 "missing": missing_folders(), "indexing": self.index.indexing})
+            elif url.path == "/api/sources":
+                self._send(200, {"sources": sources()})
             elif url.path == "/api/files":
                 self._send(200, self.index.files(q.get("project", ""), q.get("kind", ""),
                                                  q.get("sub", ""), q.get("q", ""), q.get("since", ""),
@@ -518,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/folders":
                 if q.get("project") not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
-                self._send(200, {"folders": folders_of(q["project"])})
+                self._send(200, {"folders": folder_info(q["project"])})
             elif url.path == "/api/tasks":
                 self._send(200, ai_tasks.all_tasks())
             else:
@@ -544,13 +603,10 @@ class Handler(BaseHTTPRequestHandler):
                 if body["path"] not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
                 self._send(200, {"on": toggle("hidden_projects", body["path"])})
-            elif path == "/api/unhide_all":
-                core.set_config(hidden_projects=[])
-                self._send(200, {"ok": True})
             elif path == "/api/add_project":
                 as_root = bool(body.get("as_root"))
-                folder = self.picker("選擇「專案總資料夾」（裡面每個子資料夾是一個專案）" if as_root
-                                     else "選擇一個專案資料夾")
+                folder = self.picker("加入一整批專案：請選總資料夾（裡面每個子資料夾是一個專案）" if as_root
+                                     else "加入一個專案：請選那個專案的資料夾")
                 if folder:
                     add_project(folder, as_root)
                     self.index.refresh_all()
@@ -560,7 +616,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.index.refresh_all()
                 self._send(200, {"ok": True})
             elif path == "/api/unmerge":
-                unmerge(body["folder"])
+                did = unmerge(body["folder"])
+                self.index.refresh_all()
+                self._send(200, {"did": did})
+            elif path == "/api/remove_source":
+                if body["path"] not in [s["path"] for s in sources()]:
+                    raise PermissionError("不是加入過的資料夾")
+                remove_source(body["path"])
                 self.index.refresh_all()
                 self._send(200, {"ok": True})
             elif path == "/api/add_folder":
