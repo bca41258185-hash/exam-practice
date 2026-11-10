@@ -196,7 +196,7 @@ async function api(path, body) {
   if (document.body.classList.contains("offline")) { location.reload(); }
   if (r.status === 403) { location.reload(); throw new Error("重新連線中"); }
   const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "發生錯誤");
+  if (!r.ok) { const err = new Error(data.error || "發生錯誤"); err.folderOffline = !!data.offline; throw err; }
   return data;
 }
 let toastTimer;
@@ -282,7 +282,12 @@ async function loadFiles() {
   const slow = setTimeout(() => grid.classList.add("loading"), 250);
   const qs = new URLSearchParams({project: state.project, kind: state.kind, since: state.since, sub: state.sub, q: state.q, limit: state.limit});
   let d;
-  try { d = await api("/api/files?" + qs); } catch (e) { toast(e.message, true); return; }
+  try { d = await api("/api/files?" + qs); }
+  catch (e) {
+    toast(e.message, true);
+    if (e.folderOffline && state.project) { state.project = ""; closeSheet(); await refresh(); }   // 回到總覽，那裡會標出「目前讀不到」
+    return;
+  }
   finally { clearTimeout(slow); grid.classList.remove("loading"); }
   if (seq !== fileSeq) return;  // 已有更新的查詢
   state.files = d.files; state.subs = d.subs;
@@ -337,7 +342,9 @@ async function openFile(path, reveal, card) {
   } catch (e) {   // 例如檔案已被移走：立刻取消「開啟中」並重新整理清單
     toast(e.message, true);
     if (card) card.classList.remove("opening");
-    closeSheet(); loadFiles(); return;
+    closeSheet();
+    if (e.folderOffline) state.project = "";
+    refresh(); return;
   }
   if (card) setTimeout(() => { card.classList.remove("opening"); const m = card.querySelector(".m"); if (m && m.dataset.old) m.innerHTML = m.dataset.old; }, 3000);
 }
@@ -552,7 +559,13 @@ loadTasks();
 setInterval(loadTasks, 15000);
 setInterval(() => { if (document.body.classList.contains("offline")) api("/api/projects").catch(() => {}); }, 4000);
 const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
-setInterval(() => { if (idle()) refresh(); }, 30000);   // 使用者正在往下找的時候不重排
+setInterval(async () => {
+  if (idle()) return refresh();          // 使用者正在往下找的時候不重排清單…
+  try {                                  // …但仍然確認資料夾還讀得到：選中的專案不見了就回到總覽
+    const before = state.project; await loadProjects();
+    if (before && !state.project && !$("sheet-bg").classList.contains("show")) { resetList(); loadFiles(); }
+  } catch (e) {}
+}, 30000);
 window.addEventListener("focus", () => { if (idle()) refresh(); });
 </script>
 </body>

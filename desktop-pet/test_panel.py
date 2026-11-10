@@ -321,6 +321,22 @@ class IndexTest(Base):
         panel.remove_source(str(self.root))
         self.assertEqual((panel.projects(), panel.sources()), ([], []))
 
+    def test_folder_going_offline_mid_use_is_explained(self):
+        f = self.put("甲案/a.pdf")
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        idx.files(proj)
+        os.rename(self.root, str(self.root) + "_斷線")   # 用到一半，整個磁碟讀不到
+        try:
+            with self.assertRaises(panel.FolderOffline):
+                panel.open_file(f)
+            with self.assertRaises(panel.FolderOffline):
+                idx.files(proj)
+            self.assertEqual(idx.files()["missing"], [str(self.root)])
+        finally:
+            os.rename(str(self.root) + "_斷線", self.root)
+        self.assertEqual(len(idx.files(proj)["files"]), 1, "接回來後自動恢復")
+
     def test_unreachable_folder_is_reported_not_forgotten(self):
         gone = str(Path(self.tmp.name).resolve() / "沒連上的NAS")
         core.set_config(projects=[gone])
@@ -386,6 +402,14 @@ class ServerTest(Base):
                          [{"path": str(self.root / "甲案"), "main": True, "single": False, "missing": False}])
         self.assertEqual(self.call("/api/sources")[1]["sources"][0]["batch"], True)
         self.assertEqual(self.call("/api/remove_source", {"path": "/etc"})[0], 400)
+        os.rename(self.root, str(self.root) + "_斷線")
+        try:
+            code, data = self.call("/api/open", {"path": str(self.root / "甲案" / "a.pdf")})
+            self.assertEqual((code, data["offline"]), (409, True))
+            self.assertIn("設定都還在", data["error"])
+            self.assertEqual(self.call("/api/files?project=" + proj)[0], 409)
+        finally:
+            os.rename(str(self.root) + "_斷線", self.root)
         self.assertEqual(self.call("/api/merge", {"path": "/etc", "into": str(self.root / "甲案")})[0], 400)
         picked = Path(self.tmp.name) / "新案"
         picked.mkdir()

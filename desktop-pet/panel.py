@@ -74,6 +74,18 @@ def _folders() -> list[str]:
     return out
 
 
+class FolderOffline(Exception):
+    """加入過的資料夾目前讀不到（網路磁碟斷線、外接硬碟沒接）。設定還在，不是使用者做錯了什麼。"""
+
+    def __init__(self) -> None:
+        super().__init__("目前讀不到這個資料夾（網路磁碟或外接硬碟可能沒連上）。設定都還在，接上後會自動恢復。")
+
+
+def _configured(path: str) -> bool:
+    """這個路徑是否位於使用者加入過的資料夾之下（不論現在讀不讀得到）。"""
+    return any(path == s["path"] or path.startswith(s["path"] + os.sep) for s in sources())
+
+
 def _clean(p) -> str:
     """設定裡的路徑：正規化但不要求它現在存在（網路磁碟可能暫時沒連上）。"""
     try:
@@ -420,6 +432,8 @@ class Index:
         opened, pinned = cfg.get("opened", {}), set(cfg.get("pinned", []))
         if project:
             if project not in projects(include_hidden=True):
+                if _configured(project):
+                    raise FolderOffline()
                 raise PermissionError("不是已加入的專案")
             scope = [(project, rel, e) for rel, e in self._scope(project, fresh=True)]
         else:
@@ -513,6 +527,8 @@ def open_file(path: str, reveal: bool = False) -> str:
     """開啟檔案或在檔案總管顯示位置。回傳實際做的事：'opened' 或 'revealed'。"""
     p = Path(path).resolve()
     if not project_of(p):
+        if _configured(str(p)):   # 專案加過，只是資料夾現在讀不到
+            raise FolderOffline()
         raise PermissionError("這個檔案不在已加入的專案資料夾裡")
     if not p.exists():
         raise FileNotFoundError("這個檔案已被移走或刪除")
@@ -595,6 +611,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, ai_tasks.all_tasks())
             else:
                 self._send(404, {"error": "not found"})
+        except FolderOffline as e:
+            self._send(409, {"error": str(e), "offline": True})
         except (PermissionError, FileNotFoundError) as e:
             self._send(400, {"error": str(e)})
         except OSError as e:
@@ -658,6 +676,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             else:
                 self._send(404, {"error": "not found"})
+        except FolderOffline as e:
+            self._send(409, {"error": str(e), "offline": True})
         except (PermissionError, FileNotFoundError, KeyError, ValueError, core.ProtectedFolderError) as e:
             self._send(400, {"error": str(e)})
         except OSError as e:
