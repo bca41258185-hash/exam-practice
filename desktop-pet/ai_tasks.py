@@ -29,15 +29,18 @@ NEXT_STEP = {
     "done": "這件事已經完成，成果已經收進正式版本。",
     "idle": "這件事目前停著。需要的話，回到原本的對話請助手繼續。",
 }
-NEXT_STEP_GITHUB = {
-    "waiting": "輪到你了：按下面的「在 GitHub 開啟」看成果。沒問題的話，在那個頁面最下方按綠色的按鈕"
-               "（Ready for review，接著 Merge pull request）就是同意採用；有問題就回到原本的對話請助手修改。",
+_SEE = "輪到你了：按下面的「在 GitHub 開啟」看成果。沒問題的話，在那個頁面最下方"
+_ELSE = "有問題就回到原本的對話請助手修改。"
+NEXT_STEP_GITHUB = {   # 依 PR 是否仍是草稿，頁面上會看到的按鈕不同
+    "waiting_draft": _SEE + "先按「Ready for review」，再按綠色的「Merge pull request」，就是同意採用；" + _ELSE,
+    "waiting": _SEE + "按綠色的「Merge pull request」，就是同意採用；" + _ELSE,
 }
 
 
 def _finish(task: dict) -> dict:
     by_source = NEXT_STEP_GITHUB if task.get("source") == "GitHub" else {}
-    task["next"] = by_source.get(task.get("state")) or NEXT_STEP.get(task.get("state"), "")
+    key = task.get("state", "") + ("_draft" if task.pop("draft", False) and task.get("state") == "waiting" else "")
+    task["next"] = by_source.get(key) or by_source.get(task.get("state")) or NEXT_STEP.get(task.get("state"), "")
     todos = task.get("todos") or []
     task["progress"] = [sum(t["status"] == "completed" for t in todos), len(todos)]
     doing = next((t["text"] for t in todos if t["status"] == "in_progress"), "")
@@ -194,6 +197,7 @@ def pr_task(repo: str, pr: dict, checks: list[dict] | None = None, now: float | 
     return _finish({"id": f"{repo}#{pr.get('number')}", "source": "GitHub", "title": pr.get("title", "")[:80],
                     "state": state, "state_text": text, "updated": updated, "url": pr.get("html_url", ""),
                     "where": repo.split("/")[-1], "branch": (pr.get("head") or {}).get("ref", ""),
+                    "draft": bool(pr.get("draft")),
                     "prompt": "", "reply": _CHECKBOX.sub("", body).strip()[:400], "todos": todos})
 
 

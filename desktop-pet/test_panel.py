@@ -311,6 +311,8 @@ class IndexTest(Base):
             panel.add_project(str(outside / "子"), False) if (outside / "子").mkdir() is None else None
         with self.assertRaisesRegex(core.ProtectedFolderError, "請先到"):
             panel.add_project(str(outside.parent), True)
+        with self.assertRaisesRegex(core.ProtectedFolderError, "已經有加過的「%s」" % self.root.name):
+            panel.add_project(str(self.root.parent), True)   # 名稱要用清單上那一列（總資料夾），不是裡面的專案
         self.assertEqual(panel.unmerge(str(outside)), "removed", "單獨加入的資料夾拿掉後不會變成新專案")
         self.assertEqual(sorted(panel.projects()), sorted([main, str(self.root / "乙案")]))
         panel.merge(str(self.root / "乙案"), main)
@@ -429,7 +431,11 @@ class TasksTest(unittest.TestCase):
               "body": "說明\n- [x] 後端\n- [X] 測試\n- [ ] 簡報\n"}
         t = ai_tasks.pr_task("o/r", pr, [], now)
         self.assertEqual((t["state"], t["progress"], t["doing"]), ("waiting", [2, 3], "簡報"))
-        self.assertIn("在 GitHub 開啟", t["next"])
+        self.assertIn("Ready for review", t["next"])
+        ready = ai_tasks.pr_task("o/r", dict(pr, draft=False), [], now)
+        self.assertIn("Merge pull request", ready["next"])
+        self.assertNotIn("Ready for review", ready["next"], "不是草稿時頁面上沒有這顆按鈕")
+        self.assertNotIn("draft", ready)
         self.assertEqual(ai_tasks.pr_task("o/r", pr, [{"status": "in_progress"}], now)["state"], "running")
         self.assertEqual(ai_tasks.pr_task("o/r", pr, [{"status": "completed", "conclusion": "failure"}], now)["state"], "failed")
         self.assertEqual(ai_tasks.pr_task("o/r", dict(pr, updated_at=iso(60)), [], now)["state"], "running")

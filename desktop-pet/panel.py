@@ -108,13 +108,13 @@ def remove_source(path: str) -> None:
 
 def _overlap(folder: str) -> str | None:
     """若這個資料夾與已加入的資料夾重疊，回傳給使用者看的說明；沒有重疊回傳 None。"""
-    for f in _folders():
-        name = os.path.basename(f)
-        if folder == f or folder.startswith(f + os.sep):
-            return f"這個資料夾已經包含在「{name}」裡，不需要再加一次。"
-        if f.startswith(folder + os.sep):
-            return (f"這個資料夾裡面已經有加過的「{name}」。"
+    for src in sources():   # 它把加過的某一列包在裡面：名稱用「已加入的資料夾」清單上那一列的
+        if src["path"].startswith(folder + os.sep):
+            return (f"這個資料夾裡面已經有加過的「{src['name']}」。"
                     "請先到「⋯」→「已加入的資料夾」把它移除，再加這一層。")
+    for f in _folders():    # 它在某個已加入的專案裡面（或就是它）
+        if folder == f or folder.startswith(f + os.sep):
+            return f"這個資料夾已經包含在「{os.path.basename(f)}」裡，不需要再加一次。"
     return None
 
 
