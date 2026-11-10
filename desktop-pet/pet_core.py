@@ -89,6 +89,14 @@ def save_config(cfg: dict) -> None:
     _write_json(data_dir() / "config.json", cfg)
 
 
+def set_config(**changes) -> dict:
+    """重新讀檔後只改指定欄位再存回，避免寵物與面板互相蓋掉對方的設定。"""
+    cfg = load_config()
+    cfg.update(changes)
+    save_config(cfg)
+    return cfg
+
+
 def default_watch_folder() -> Path:
     d = Path.home() / "Downloads"
     return d if d.is_dir() else Path.home()

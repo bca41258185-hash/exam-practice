@@ -199,7 +199,7 @@ class Pet:
 
     def _build_menu(self) -> None:
         m = self.menu = tk.Menu(self.root, tearoff=0, font=(FONT, 10))
-        m.add_command(label="整理監看資料夾", command=lambda: self.organize(self.watch_folder))
+        m.add_command(label="整理監看資料夾", command=lambda: self.organize(self.watch_folder))  # 索引 0，見 _refresh_menu
         m.add_command(label="整理其他資料夾…", command=lambda: self._pick(self.organize))
         m.add_separator()
         m.add_command(label="找出重複檔案…", command=lambda: self._pick(self.duplicates))
@@ -211,6 +211,9 @@ class Pet:
         m.add_command(label="更換監看資料夾…", command=self.change_watch)
         m.add_checkbutton(label="到處走走", variable=self.walk_var, command=self._save_walk)
         m.add_separator()
+        m.add_command(label="開啟觸控面板（副螢幕）", command=self.open_panel)
+        m.add_command(label="新增面板搜尋資料夾…", command=lambda: self._pick(self.add_search_root))
+        m.add_separator()
         m.add_command(label="離開", command=self.root.destroy)
 
     def _refresh_menu(self) -> None:
@@ -220,8 +223,7 @@ class Pet:
                               label=f"還原：{last['label']}（{len(last['moves'])} 個）" if last else "還原上一次搬移")
 
     def _save_walk(self) -> None:
-        self.cfg["walk"] = self.walk_var.get()
-        core.save_config(self.cfg)
+        self.cfg = core.set_config(walk=self.walk_var.get())
 
     # ------------------------------------------------------------ 共用
     @property
@@ -416,11 +418,26 @@ class Pet:
                 folder = core.check_folder_allowed(folder)
             except core.ProtectedFolderError as e:
                 return self._ask("showwarning", str(e))
-            self.cfg["watch_folder"] = str(folder)
-            core.save_config(self.cfg)
+            self.cfg = core.set_config(watch_folder=str(folder))
             self.last_notified = -1
             self.say(f"好，我會幫你顧著「{folder.name}」。")
         self._pick(chosen)
+
+    def open_panel(self) -> None:
+        here = Path(__file__).resolve().parent
+        subprocess.Popen([sys.executable, str(here / "panel.pyw")], cwd=str(here))
+        self.say("觸控面板開在瀏覽器視窗了，\n把它拖到副螢幕後按「全螢幕」。")
+
+    def add_search_root(self, folder: Path) -> None:
+        try:
+            folder = core.check_folder_allowed(folder)
+        except core.ProtectedFolderError as e:
+            return self._ask("showwarning", str(e))
+        import panel
+        current = [str(r) for r in panel.roots()]
+        if str(folder) not in current:
+            self.cfg = core.set_config(search_roots=current + [str(folder)])
+        self.say(f"面板之後也會搜尋「{folder.name}」。\n（下次重建索引時生效，最多 10 分鐘）")
 
     def _watch(self) -> None:
         """定時看一下監看資料夾，散落檔案太多就提醒（同一數量不重複嘮叨）。"""
