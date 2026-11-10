@@ -581,7 +581,16 @@ document.addEventListener("click", async ev => {
       : `把「${esc(base(d.detachAsk))}」從這個專案拆出？<br><small>它會回到左邊的清單，成為獨立的專案。檔案不受影響。</small>`, d.single ? "移除" : "拆出", `data-unmerge="${esc(d.detachAsk)}"`);
     else if ("sourceAsk" in d) confirmSheet(`不再顯示「${esc(base(d.sourceAsk))}」？<br><small>資料夾和裡面的檔案都不會被動到；之後可以再加回來。</small>`, "移除", `data-source="${esc(d.sourceAsk)}"`);
     else if ("source" in d) { await api("/api/remove_source", {path: d.source}); toast("已移除，檔案不受影響"); state.project = ""; await refresh(); sourcesSheet(); }
-    else if ("unhide" in d) { await api("/api/hide_project", {path: d.unhide, on: false}); toast("已恢復顯示"); await refresh(); state.hidden.length ? hiddenSheet() : closeSheet(); }
+    else if ("unhide" in d) {
+      // 恢復後那一格留在原位、變成「已恢復 ✓」，不讓下一個專案補到手指底下：
+      // 連續點不同的專案每一下都算數，連點同一格也不會多恢復一個。
+      const path = d.unhide;
+      el.removeAttribute("data-unhide"); el.style.opacity = ".45";
+      const small = el.querySelector("small"); if (small) small.textContent = "已恢復 ✓";
+      await api("/api/hide_project", {path, on: false});
+      toast("已恢復顯示"); await refresh();
+      if (!state.hidden.length) setTimeout(() => { if (!document.querySelector("#sheet [data-unhide]")) closeSheet(); }, 700);
+    }
     else if (d.act === "sources") sourcesSheet();
     else if (d.act === "hidden") hiddenSheet();
     else if (d.act === "more") moreSheet();
