@@ -171,29 +171,57 @@ def pick_folder(title: str) -> str:
 
 
 # ---------------------------------------------------------------- 版本收合
-_VERSION = re.compile(r"""[\s_\-.,]*(?:
-      \(\d+\)                                             # (1) (2)
+# 明確的版本標記：任何類型的檔案都適用
+_STRONG = re.compile(r"""[\s_\-.,]*(?:
+      \([1-9]\)                                            # (1)…(9)：複製或重複下載
     | (?<![a-z])v(?:er)?\.?\d+(?:\.\d+)*(?![a-z\d])        # v2 ver.3 v1.2
-    | (?<![a-z])rev\.?[a-z\d]{0,2}(?![a-z\d])              # rev revA rev2
-    | (?<![a-z\d])r\d{1,2}(?![a-z\d])                      # R1
-    | (?<!\d)(?:19|20)\d{6}(?!\d)                          # 20261101
-    | (?<!\d)1\d{6}(?!\d)                                  # 民國 1151101
-    | (?<!\d)\d{6}(?!\d)                                   # 261101
-    | (?<=[\s_\-.])(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)   # _1101
+    | (?<![a-z])rev\.?(?:\d{1,2}|[a-z])?(?![a-z\d])        # rev rev2 revA（不會誤吃 Revit）
     | (?<![a-z])(?:final|copy|backup|bak|old|new|latest|draft)(?![a-z])
     | 最終版?|最新版?|定稿版?|修正版?|修改版?|修訂版?|更新版?|新版|舊版|備份|副本|複本|草稿|初稿|確認版?
     | 第?[一二三四五六七八九十\d]+版
     )""", re.I | re.X)
+_DIGITS = re.compile(r"[\s_\-.,]*(?<!\d)(\d{4}|\d{6,8})(?!\d)")
+# 只差日期的檔案：圖面、PDF、簡報、試算表視為同一系列；文件（如各次會議紀錄）與照片是各自獨立的東西，不收合
+DATE_SERIES_KINDS = {"圖面與模型", "PDF", "簡報", "試算表"}
 
 
-def version_key(name: str) -> str:
-    """去掉檔名中的版本、日期、「最終版」等標記。'平面圖_v3_1101修正.dwg' → '平面圖.dwg'"""
+def _strip_dates(stem: str, mtime: float | None) -> str:
+    """去掉看起來是日期的數字。有修改時間時，日期要與它相近才算（避免把圖號 0101、0102 當成日期）。"""
+    def repl(m: re.Match) -> str:
+        d = m.group(1)
+        if len(d) == 4 and (m.start(1) == 0 or stem[m.start(1) - 1] not in " _-."):
+            return m.group(0)
+        if len(d) == 8 and d[:2] not in ("19", "20"):
+            return m.group(0)
+        if len(d) == 7 and d[0] != "1":
+            return m.group(0)
+        month, day = int(d[-4:-2]), int(d[-2:])
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            return m.group(0)
+        if mtime is not None:
+            t = time.localtime(mtime)
+            gap = abs((month - t.tm_mon) * 30.4 + day - t.tm_mday)
+            if min(gap, 365 - gap) > 45:
+                return m.group(0)
+        return ""
+    return _DIGITS.sub(repl, stem)
+
+
+def version_key(name: str, kind: str | None = None, mtime: float | None = None) -> str:
+    """去掉檔名中的版本標記（與適用時的日期）。'平面圖_v3_1101修正.dwg' → '平面圖.dwg'"""
     stem, ext = os.path.splitext(name)
-    prev = None
+    original, prev = stem, None
     while prev != stem:
-        prev, stem = stem, _VERSION.sub("", stem)
+        prev = stem
+        stem = _STRONG.sub("", stem)
+        if kind is None or kind in DATE_SERIES_KINDS:
+            stem = _strip_dates(stem, mtime)
     stem = stem.strip(" _-.,()（）")
-    return ((stem or os.path.splitext(name)[0]) + ext).lower()
+    return ((stem or original) + ext).lower()
+
+
+def has_version_marker(name: str) -> bool:
+    return bool(_STRONG.search(os.path.splitext(name)[0]))
 
 
 def _group_dir(d: str) -> str:
@@ -203,15 +231,29 @@ def _group_dir(d: str) -> str:
     return d
 
 
-def collapse_versions(entries: list[tuple]) -> list[tuple[tuple, list[tuple]]]:
-    """回傳 [(最新版, [較舊版本…])]，依最新版的修改時間由新到舊。"""
+def collapse_versions(entries: list[tuple]) -> list[tuple[tuple, list[tuple], str]]:
+    """回傳 [(代表檔, [同組其他檔…], 類型)]，依代表檔的修改時間由新到舊。
+    類型：version 有明確版本標記｜series 只差日期的同系列｜batch 同資料夾同一天的一批照片｜'' 單獨一個"""
     groups: dict[tuple, list[tuple]] = {}
     for e in entries:
-        groups.setdefault((_group_dir(e[2]), version_key(e[1])), []).append(e)
-    out = []
+        groups.setdefault((_group_dir(e[2]), version_key(e[1], e[5], e[3])), []).append(e)
+    out, photos = [], {}
     for g in groups.values():
         g.sort(key=lambda e: -e[3])
-        out.append((g[0], g[1:]))
+        if len(g) > 1:
+            in_old = any(os.path.basename(e[2]).lower() in OLD_DIRS for e in g)
+            strong = in_old or any(has_version_marker(e[1]) for e in g)
+            out.append((g[0], g[1:], "version" if strong else "series"))
+        elif g[0][5] == "圖片":
+            photos.setdefault((g[0][2], time.localtime(g[0][3])[:3]), []).append(g[0])
+        else:
+            out.append((g[0], [], ""))
+    for batch in photos.values():
+        batch.sort(key=lambda e: -e[3])
+        if len(batch) >= 4:
+            out.append((batch[0], batch[1:], "batch"))
+        else:
+            out += [(e, [], "") for e in batch]
     out.sort(key=lambda g: -g[0][3])
     return out
 
@@ -289,35 +331,32 @@ class Index:
 
     # -------- 查詢
     def project_list(self) -> list[dict]:
+        """順序固定：近兩週有動的在上、其餘在下，各自依名稱排序，讓每個專案的位置不會天天變。"""
         midnight = _midnight()
         out = []
         for p in projects():
             rows = [e for _, e in self._scope(p, fresh=False)]
-            out.append({"path": p, "name": os.path.basename(p) or p,
-                        "folders": len(folders_of(p)), "count": len(rows),
-                        "today": sum(e[3] >= midnight for e in rows),
-                        "week": sum(e[3] >= midnight - 6 * 86400 for e in rows),
-                        "last": max((e[3] for e in rows), default=0)})
-        out.sort(key=lambda d: -d["last"])  # 最近有動的專案排最上面
+            last = max((e[3] for e in rows), default=0)
+            out.append({"path": p, "name": os.path.basename(p) or p, "folders": len(folders_of(p)),
+                        "count": len(rows), "today": any(e[3] >= midnight for e in rows),
+                        "active": last >= midnight - 14 * 86400, "last": last})
+        out.sort(key=lambda d: (not d["active"], d["name"].lower()))
         return out
 
     def files(self, project: str = "", kind: str = "", sub: str = "", q: str = "",
-              since: str = "", limit: int = 150) -> dict:
+              since: str = "", limit: int = 120) -> dict:
         opened = core.load_config().get("opened", {})
         if project:
             if project not in projects(include_hidden=True):
                 raise PermissionError("不是已加入的專案")
             scope = [(project, rel, e) for rel, e in self._scope(project, fresh=True)]
-            extra = {os.path.basename(f) for f in folders_of(project)[1:]}
         else:
             scope = [(p, rel, e) for p in projects() for rel, e in self._scope(p, fresh=False)]
-            extra = None
 
         subs: dict[str, int] = {}
-        if extra is not None:
+        if project:  # 第一層子資料夾（併入的其他資料夾各算一個）
             for _, rel, _e in scope:
-                parts = rel.split(os.sep)
-                key = os.sep.join(parts[:2 if parts[0] in extra else 1])
+                key = rel.split(os.sep)[0]
                 subs[key] = subs.get(key, 0) + 1
             if sub:
                 scope = [x for x in scope if x[1] == sub or x[1].startswith(sub + os.sep)]
@@ -325,32 +364,34 @@ class Index:
         if terms:
             scope = [x for x in scope if all(t in x[2][0] or t in x[1].lower() for t in terms)]
 
-        midnight = _midnight()
-        cut = {"today": midnight, "week": midnight - 6 * 86400}
-        times = {k: sum(x[2][3] >= v for x in scope) for k, v in cut.items()}
-        kinds: dict[str, int] = {}
-        for x in scope:
-            if since not in cut or x[2][3] >= cut[since]:
-                kinds[x[2][5]] = kinds.get(x[2][5], 0) + 1
-        if kind:
-            scope = [x for x in scope if x[2][5] == kind]
-
+        # 先收合再篩選：畫面上的數字一律是「卡片數」，與看到的一致
         info = {id(x[2]): x for x in scope}
         groups = collapse_versions([x[2] for x in scope])
-        if since in cut:  # 先收合再篩時間，報告時仍看得到「這是第幾版」
-            groups = [g for g in groups if g[0][3] >= cut[since]]
+        midnight = _midnight()
+        monday = midnight - time.localtime().tm_wday * 86400
+        ranges = {"today": (midnight, float("inf")), "week": (monday, float("inf")),
+                  "lastweek": (monday - 7 * 86400, monday)}
+        times = {k: sum(lo <= g[0][3] < hi for g in groups) for k, (lo, hi) in ranges.items()}
+        if since in ranges:
+            lo, hi = ranges[since]
+            groups = [g for g in groups if lo <= g[0][3] < hi]
+        kinds: dict[str, int] = {}
+        for g in groups:
+            kinds[g[0][5]] = kinds.get(g[0][5], 0) + 1
+        if kind:
+            groups = [g for g in groups if g[0][5] == kind]
+        new_from = ranges.get(since, (monday - 7 * 86400, 0))[0]
 
         def card(e: tuple) -> dict:
             p, rel, _ = info[id(e)]
-            path = os.path.join(e[2], e[1])
-            return {"name": e[1], "path": path, "rel": rel, "project": os.path.basename(p), "mtime": e[3],
-                    "size": e[4], "kind": e[5], "frequent": False, "new": e[6] >= cut["week"],
+            return {"name": e[1], "path": os.path.join(e[2], e[1]), "rel": rel, "project": os.path.basename(p),
+                    "mtime": e[3], "size": e[4], "kind": e[5], "frequent": False, "new": e[6] >= new_from,
                     "ext": os.path.splitext(e[1])[1][1:].upper()[:5]}
 
         rows = []
-        for head, older in groups[:limit]:
+        for head, others, gtype in groups[:limit]:
             d = card(head)
-            d["versions"] = [card(o) for o in older[:20]]
+            d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60))
             rows.append(d)
         if not (kind or since or terms or sub):  # 沒有篩選時，開過兩次以上的檔案自動排最前（最多 4 個）
             often = sorted((d for d in rows if opened.get(d["path"], 0) >= 2), key=lambda d: -opened[d["path"]])[:4]
@@ -358,6 +399,7 @@ class Index:
                 d["frequent"] = True
             rows.sort(key=lambda d: -opened[d["path"]] if d["frequent"] else 0)
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
+                "new": sum(g[0][6] >= new_from for g in groups),
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
                 "indexing": self.indexing}
 
@@ -436,7 +478,8 @@ class Handler(BaseHTTPRequestHandler):
                                  "indexing": self.index.indexing})
             elif url.path == "/api/files":
                 self._send(200, self.index.files(q.get("project", ""), q.get("kind", ""),
-                                                 q.get("sub", ""), q.get("q", ""), q.get("since", "")))
+                                                 q.get("sub", ""), q.get("q", ""), q.get("since", ""),
+                                                 min(max(int(q.get("limit") or 120), 1), 2000)))
             elif url.path == "/api/folders":
                 if q.get("project") not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")

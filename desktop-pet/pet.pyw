@@ -4,7 +4,7 @@
   敲筆電    有助手正在執行（腳下是目前任務的進度條）
   舉牌「!」 有助手做完一輪，等你看
   冒汗      有助手出錯（自動檢查失敗）
-  頭上的彩色圓點是各狀態的任務數量。
+  頭上的標籤寫出各狀態的任務數量（執行／等你／出錯）。
 
 操作：點一下看任務清單｜雙擊開啟副螢幕觸控面板｜拖曳移動｜右鍵選單
 """
@@ -30,6 +30,7 @@ W, H = 150, 168
 KEY = "#ff00fe"  # Windows 上用來挖空背景的顏色
 FONT = {"win32": "Microsoft JhengHei UI", "darwin": "PingFang TC"}.get(sys.platform, "TkDefaultFont")
 COLORS = {"running": "#5aa9e6", "waiting": "#f4b860", "failed": "#ef6b60", "done": "#62c483", "idle": "#8b93a1"}
+LABELS = {"running": "執行", "waiting": "等你", "failed": "出錯"}
 POLL_SECONDS = 15
 
 
@@ -137,13 +138,13 @@ class Pet:
         c, f, mood = self.canvas, self.frame, self.mood
         c.delete("all")
         fur, line, pink = "#f4b860", "#5b3a1e", "#f28fa0"
-        # 頭上的狀態圓點
+        # 頭上的狀態標籤：寫出文字，不必記顏色
         shown = [(s, self.counts.get(s, 0)) for s in ("running", "waiting", "failed") if self.counts.get(s)]
-        x = W / 2 - len(shown) * 15 + 2
+        x = W / 2 - len(shown) * 24 + 1
         for s, n in shown:
-            c.create_oval(x, 2, x + 26, 28, fill=COLORS[s], outline="white", width=2)
-            c.create_text(x + 13, 15, text=str(n), font=(FONT, 11, "bold"), fill="#1c1c1c")
-            x += 30
+            c.create_rectangle(x, 4, x + 46, 26, fill=COLORS[s], outline="white", width=2)
+            c.create_text(x + 23, 15, text=f"{LABELS[s]} {n}", font=(FONT, 9, "bold"), fill="#1c1c1c")
+            x += 48
 
         bob = {"sleep": (0, 0, 1, 1, 1, 1, 0, 0)[f // 4 % 8], "waiting": (0, 2, 4, 2)[f // 2 % 4],
                "failed": f % 2, "happy": (0, 3, 5, 3)[f // 2 % 4]}.get(mood, (0, 1, 2, 1)[f // 3 % 4])
@@ -208,8 +209,9 @@ class Pet:
             c.create_oval(ox + 102, y + 88, ox + 120, y + 104, fill=fur, outline=line, width=2)
             c.create_oval(ox + 30, y + 96, ox + 48, y + 110, fill=fur, outline=line, width=2)
 
-        # 腳下的進度條：第一個有待辦清單、且還沒結束的任務
-        top = next((t for t in self.tasks if t["progress"][1] and t["state"] in ("running", "waiting", "failed")), None)
+        # 腳下的進度條：優先代表「正在執行」的任務；沒有的話才是等你或出錯的那一件
+        withbar = [t for t in self.tasks if t["progress"][1] and t["state"] in ("running", "waiting", "failed")]
+        top = next((t for t in withbar if t["state"] == "running"), withbar[0] if withbar else None)
         if top:
             done, total = top["progress"]
             c.create_rectangle(14, H - 12, W - 14, H - 3, fill="#2d323c", outline="white")
@@ -298,7 +300,8 @@ class Pet:
             tk.Label(row, text="●", font=(FONT, 12), bg="#1a1d23", fg=COLORS[t["state"]]).pack(side="left", anchor="n")
             text = tk.Frame(row, bg="#1a1d23")
             text.pack(side="left", padx=(4, 0))
-            tk.Label(text, text=t["title"][:26], font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
+            title = t["title"][:22] + (f"（{t['where'][:8]}）" if t.get("where") else "")
+            tk.Label(text, text=title, font=(FONT, 10, "bold"), bg="#1a1d23", fg="#ecebe6").pack(anchor="w")
             detail = t["state_text"] + (f"・{done}/{total}" if total else "")
             if t.get("doing") and t["state"] == "running":
                 detail += f"\n正在：{t['doing'][:24]}"

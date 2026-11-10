@@ -21,50 +21,65 @@
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
   svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .app { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 17rem; gap: .5rem; height: 100vh; padding: .5rem; }
+  .app.many { grid-template-columns: 25rem minmax(0, 1fr) 17rem; }
   .col { background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .scroll { overflow-y: auto; flex: 1; min-height: 0; padding: .5rem; scrollbar-width: none; overscroll-behavior: contain; }
-  .scroll::-webkit-scrollbar { display: none; }
+  /* 看得見的細捲軸：讓人知道下面還有多少 */
+  .scroll { overflow-y: auto; flex: 1; min-height: 0; padding: .5rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
   .label { font-size: .8rem; font-weight: 700; letter-spacing: .14em; color: var(--dim); padding: .7rem 1rem .1rem; }
 
-  /* 專案：只有名稱 */
-  .proj { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 4rem; padding: 0 .9rem; margin-bottom: .35rem;
-    border-radius: .8rem; background: var(--card); font-size: 1.12rem; font-weight: 700; }
-  .proj span { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+  /* 專案 */
+  #projects { display: grid; gap: .35rem; align-content: start; }
+  .many #projects { grid-template-columns: 1fr 1fr; }
+  #projects .label { grid-column: 1 / -1; padding: .5rem .5rem 0; }
+  .proj { display: flex; align-items: center; gap: .5rem; min-height: 4rem; padding: .3rem .8rem; border-radius: .8rem; background: var(--card); font-size: 1.1rem; font-weight: 700; min-width: 0; }
+  .proj.all { grid-column: 1 / -1; }
+  .proj span { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; word-break: break-all; }
+  .proj small { display: block; font-size: .72rem; font-weight: 400; color: var(--dim); line-height: 1.3; white-space: nowrap; overflow: hidden; }
   .proj:active { background: var(--card-hi); }
   .proj.sel { background: var(--accent); color: var(--accent-ink); }
-  .proj b { flex: none; min-width: 1.7rem; height: 1.7rem; padding: 0 .4rem; border-radius: 1rem; display: grid; place-items: center; font-size: .85rem; background: rgba(244,184,96,.2); color: var(--accent); }
-  .proj.sel b { background: rgba(0,0,0,.18); color: var(--accent-ink); }
+  .proj.sel small { color: #5b4514; }
+  .proj b { color: var(--accent); } .proj.sel b { color: var(--accent-ink); }
 
   /* 中間：一排篩選 + 大卡片 */
   .bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .5rem 0; }
-  .filters { display: flex; gap: .45rem; overflow-x: auto; flex: 1; scrollbar-width: none; padding: .1rem; }
+  .filters { display: flex; gap: .4rem; overflow-x: auto; flex: 1; scrollbar-width: none; padding: .1rem; }
   .filters::-webkit-scrollbar { display: none; }
-  .f { flex: none; height: 3.3rem; padding: 0 1.25rem; border-radius: .8rem; background: var(--card); font-size: 1.08rem; font-weight: 700; display: flex; align-items: center; gap: .5rem; white-space: nowrap; }
+  .f { flex: none; height: 3.3rem; padding: 0 1rem; border-radius: .8rem; background: var(--card); font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: .45rem; white-space: nowrap; }
   .f i { width: .7rem; height: .7rem; border-radius: 50%; background: var(--k); }
-  .f.on { background: var(--accent); color: var(--accent-ink); }
+  .f small { font-size: .8rem; font-weight: 400; color: var(--dim); }
+  .f.on { background: var(--accent); color: var(--accent-ink); } .f.on small { color: #5b4514; }
   .f:active { background: var(--card-hi); }
-  .gap { flex: none; width: .6rem; }
+  .f svg { width: 1.15rem; height: 1.15rem; }
+  .gap { flex: none; width: .5rem; }
   .round { flex: none; width: 3.3rem; height: 3.3rem; border-radius: .8rem; display: grid; place-items: center; color: var(--dim); background: var(--card); }
   .round:active { background: var(--card-hi); color: var(--accent); }
   #q { display: none; flex: 1; height: 3.3rem; border-radius: .8rem; border: 2px solid var(--accent); background: var(--card); color: var(--text); font: inherit; font-size: 1.1rem; padding: 0 1rem; outline: 0; user-select: text; min-width: 0; }
   .searching #q { display: block; } .searching .filters { display: none; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: .5rem; align-content: start; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: .5rem; align-content: start; transition: opacity .15s; }
+  .grid.loading { opacity: .45; }
   .sec { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; color: var(--dim); letter-spacing: .14em; padding: .3rem .4rem 0; }
-  .sec:first-child { padding-top: 0; }
+  .sum { grid-column: 1 / -1; font-size: 1.05rem; padding: .2rem .4rem .1rem; line-height: 1.5; user-select: text; }
+  .sum b { color: var(--accent); }
   .file { display: flex; align-items: stretch; background: var(--card); border-radius: .9rem; min-height: 5.4rem; overflow: hidden; }
   .file .open { flex: 1; min-width: 0; display: flex; align-items: center; gap: .9rem; padding: .5rem .8rem; }
   .file .open:active { background: var(--card-hi); }
-  .ext { flex: none; width: 3.9rem; height: 3.9rem; border-radius: .8rem; display: grid; place-items: center; font-size: .9rem; font-weight: 800; background: var(--k); color: #14161a; }
+  .file.opening { outline: 2px solid var(--accent); pointer-events: none; }
+  .file.opened .ext::after { content: "✓"; position: absolute; right: -.35rem; top: -.35rem; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--done); color: #0d2616; display: grid; place-items: center; font-size: .8rem; }
+  .ext { position: relative; flex: none; width: 3.9rem; height: 3.9rem; border-radius: .8rem; display: grid; place-items: center; font-size: .9rem; font-weight: 800; background: var(--k); color: #14161a; }
   .file .t { min-width: 0; }
   .file .n { font-size: 1.15rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
   .file .m { font-size: .82rem; color: var(--dim); margin-top: .2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ver { flex: none; align-self: stretch; display: grid; place-items: center; padding: 0 .9rem; font-size: .82rem; font-weight: 700; color: var(--accent); border-left: 1px solid var(--line); text-align: center; line-height: 1.3; }
+  .tag { display: inline-block; font-size: .7rem; font-weight: 700; border-radius: .3rem; padding: 0 .35rem; margin-right: .4rem; background: var(--done); color: #0d2616; }
+  .tag.latest { background: var(--accent); color: var(--accent-ink); }
+  .ver { flex: none; align-self: stretch; display: grid; place-items: center; padding: 0 .8rem; font-size: .82rem; font-weight: 700; color: var(--accent); border-left: 1px solid var(--line); text-align: center; line-height: 1.3; }
   .ver:active { background: var(--card-hi); }
-  .empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 3rem 1rem; line-height: 2; font-size: 1.05rem; }
-  .big { display: flex; align-items: center; gap: .7rem; min-height: 3.6rem; padding: 0 1.3rem; border-radius: .8rem; background: var(--card-hi); font-weight: 700; font-size: 1.05rem; width: 100%; }
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 2.5rem 1rem; line-height: 2; font-size: 1.05rem; }
+  .big { display: flex; align-items: center; gap: .7rem; min-height: 3.8rem; padding: .4rem 1.2rem; border-radius: .8rem; background: var(--card-hi); font-weight: 700; font-size: 1.05rem; width: 100%; }
+  .big small { display: block; font-size: .78rem; font-weight: 400; color: var(--dim); }
   .big:active { background: var(--line); }
   .big.main { background: var(--accent); color: var(--accent-ink); }
+  .big.quiet { background: none; border: 1px solid var(--line); color: var(--dim); }
   .empty .big { display: inline-flex; width: auto; margin: .3rem; }
 
   /* AI 助手：一行一件 */
@@ -72,6 +87,7 @@
   .task:active { background: var(--card-hi); }
   .task .n { font-weight: 700; font-size: 1rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .task .st { font-size: .85rem; color: var(--s); font-weight: 700; margin-top: .25rem; }
+  .task .st em { font-style: normal; font-weight: 400; color: var(--dim); }
   .prog { height: .35rem; border-radius: .2rem; background: var(--line); margin-top: .45rem; overflow: hidden; }
   .prog b { display: block; height: 100%; background: var(--s); }
   .s-running { --s: var(--running); } .s-waiting { --s: var(--waiting); } .s-failed { --s: var(--failed); } .s-done { --s: var(--done); } .s-idle { --s: var(--idle); }
@@ -85,19 +101,22 @@
   /* 彈出面板、提示 */
   .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 10; }
   .sheet-bg.show { display: grid; }
-  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 1.1rem; padding: 1rem; width: min(48rem, 92vw); max-height: 92vh; display: flex; flex-direction: column; }
+  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 1.1rem; padding: 1rem; width: min(52rem, 92vw); max-height: 94vh; display: flex; flex-direction: column; }
   .sheet h3 { margin: 0 0 .7rem .3rem; font-size: 1.15rem; display: flex; align-items: center; gap: .5rem; }
   .sheet h3 span { flex: 1; }
-  .sheet .list { overflow-y: auto; display: grid; gap: .45rem; scrollbar-width: none; }
+  .sheet .list { overflow-y: auto; display: grid; gap: .45rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; align-content: start; }
   .sheet .two { grid-template-columns: 1fr 1fr; }
-  .sheet p { color: var(--dim); font-size: .92rem; margin: 0 .3rem .7rem; line-height: 1.6; }
-  .toast { position: fixed; left: 50%; bottom: 1rem; transform: translate(-50%, 6rem); background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: .8rem 1.5rem; border-radius: 2rem; transition: transform .2s; z-index: 20; max-width: 80vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1.05rem; }
-  .toast.show { transform: translate(-50%, 0); }
+  .sheet .three { grid-template-columns: 1fr 1fr 1fr; }
+  .sheet .wide { grid-column: 1 / -1; }
+  .sheet p { color: var(--dim); font-size: .92rem; margin: 0 .3rem .5rem; line-height: 1.6; }
+  .sheet .file .n { -webkit-line-clamp: 3; }
+  .toast { position: fixed; right: 1rem; bottom: 1rem; transform: translateY(6rem); background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: .8rem 1.3rem; border-radius: .9rem; transition: transform .2s; z-index: 20; max-width: 16rem; font-size: 1rem; line-height: 1.4; word-break: break-all; }
+  .toast.show { transform: none; }
   .toast.err { background: var(--failed); color: #fff; }
 
   @media (max-width: 1000px) {
     body { overflow: auto; height: auto; }
-    .app { grid-template-columns: 1fr; height: auto; }
+    .app, .app.many { grid-template-columns: 1fr; height: auto; }
     .col { max-height: 80vh; }
   }
 </style>
@@ -111,14 +130,14 @@
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
 </svg>
 
-<div class="app">
+<div class="app" id="app">
   <section class="col"><div class="label">專案</div><div class="scroll" id="projects"></div></section>
 
   <section class="col">
     <div class="bar" id="bar">
       <div class="filters" id="filters"></div>
       <input id="q" placeholder="輸入檔名或資料夾名稱" autocomplete="off" spellcheck="false" enterkeyhint="search">
-      <button class="round" data-act="search" aria-label="搜尋"><svg><use href="#i-search"/></svg></button>
+      <button class="round" data-act="search" id="search-btn" aria-label="搜尋"><svg><use href="#i-search"/></svg></button>
       <button class="round" data-act="more" aria-label="更多"><svg><use href="#i-more"/></svg></button>
     </div>
     <div class="scroll" id="scroll"><div class="grid" id="files"></div></div>
@@ -135,7 +154,9 @@ const TOKEN = "__TOKEN__";
 const KIND = {"圖面與模型": ["圖面", "#5aa9e6"], "PDF": ["PDF", "#ef6b60"], "試算表": ["試算表", "#62c483"], "簡報": ["簡報", "#f0924a"],
   "圖片": ["圖片", "#b78be8"], "文件": ["文件", "#7f9cf5"], "影音": ["影音", "#e879b9"], "壓縮檔": ["壓縮檔", "#c9b458"],
   "安裝檔": ["安裝檔", "#8b93a1"], "程式與資料": ["程式", "#4fd1c5"], "其他": ["其他", "#8b93a1"]};
-const state = { project: "", kind: "", since: "", q: "", projects: [], files: [], tasks: [], hidden: 0 };
+const SINCE = {"": "最近", today: "今天", week: "本週", lastweek: "上週"};
+const PAGE = 120;
+const state = { project: "", kind: "", since: "", sub: "", q: "", limit: PAGE, projects: [], files: [], subs: [], tasks: [], hidden: 0 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const icon = n => `<svg><use href="#i-${n}"/></svg>`;
@@ -152,80 +173,127 @@ async function api(path, body) {
 let toastTimer;
 function toast(msg, err) {
   const t = $("toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", err ? 4000 : 1800);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", err ? 4000 : 2200);
 }
 function ago(ts) {
   const s = Date.now() / 1000 - ts;
   if (s < 90) return "剛剛";
   if (s < 3600) return Math.round(s / 60) + " 分鐘前";
   if (s < 86400) return Math.round(s / 3600) + " 小時前";
-  if (s < 86400 * 30) return Math.round(s / 86400) + " 天前";
+  if (s < 86400 * 14) return Math.round(s / 86400) + " 天前";
   const d = new Date(ts * 1000); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
-function bucket(ts) {
-  const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
-  return ts >= midnight ? "今天" : ts >= midnight - 86400 ? "昨天" : ts >= midnight - 6 * 86400 ? "本週" : "更早";
+function bucket(ts) {  // 今天、昨天、本週（週一起）、上週，再往前按月份
+  const now = new Date(), midnight = new Date(now).setHours(0, 0, 0, 0) / 1000;
+  const monday = midnight - ((now.getDay() + 6) % 7) * 86400;
+  if (ts >= midnight) return "今天";
+  if (ts >= midnight - 86400) return "昨天";
+  if (ts >= monday) return "本週";
+  if (ts >= monday - 7 * 86400) return "上週";
+  const d = new Date(ts * 1000);
+  return (d.getFullYear() === now.getFullYear() ? "" : d.getFullYear() + " 年 ") + (d.getMonth() + 1) + " 月";
+}
+/* 檔名：不顯示副檔名（左邊色塊已標示）；太長時省略中間、保留結尾的版號 */
+function shortName(name, max) {
+  const stem = name.replace(/\.[^.]{1,6}$/, "");
+  const w = c => c.charCodeAt(0) > 255 ? 2 : 1;
+  let total = 0; for (const c of stem) total += w(c);
+  if (total <= max) return esc(stem);
+  const tailMax = Math.floor(max * .4), headMax = max - tailMax - 2;
+  let head = "", tail = "", n = 0;
+  for (const c of stem) { if (n + w(c) > headMax) break; head += c; n += w(c); }
+  n = 0; for (const c of [...stem].reverse()) { if (n + w(c) > tailMax) break; tail = c + tail; n += w(c); }
+  return esc(head) + "…" + esc(tail);
+}
+/* 專案名稱開頭的案號（如 2025-003_）縮成小字，讓名稱主體優先 */
+function projName(name) {
+  const m = name.match(/^([0-9A-Za-z][0-9A-Za-z.\-]*\d)[_\-\s]+(.+)$/);
+  return m ? [esc(m[1]), esc(m[2])] : ["", esc(name)];
 }
 
 /* ---------- 專案 ---------- */
+function renderProjects() {
+  // 案號與「今天有動」放在名稱上方的小字，不佔名稱的寬度
+  const row = (p, [code, name], cls) => { const top = [code, p.today ? "<b>今天有動</b>" : ""].filter(Boolean).join("　");
+    return `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${top ? `<small>${top}</small>` : ""}${name}</span></button>`; };
+  const active = state.projects.filter(p => p.active), rest = state.projects.filter(p => !p.active);
+  $("app").classList.toggle("many", state.projects.length > 7);
+  $("projects").innerHTML = row({path: "", today: false}, ["", "全部專案"], "all") + active.map(p => row(p, projName(p.name))).join("") +
+    (rest.length ? `<div class="label">兩週以上沒動</div>` + rest.map(p => row(p, projName(p.name))).join("") : "");
+}
 async function loadProjects() {
   const d = await api("/api/projects");
   state.projects = d.projects; state.hidden = d.hidden;
   if (state.project && !d.projects.some(p => p.path === state.project)) state.project = "";
-  const row = (path, name, today) => `<button class="proj ${path === state.project ? "sel" : ""}" data-proj="${esc(path)}">
-    <span>${esc(name)}</span>${today ? `<b>${today}</b>` : ""}</button>`;
-  $("projects").innerHTML = row("", "全部", d.projects.reduce((a, p) => a + p.today, 0)) +
-    d.projects.map(p => row(p.path, p.name, p.today)).join("");
+  renderProjects();
 }
 
 /* ---------- 檔案 ---------- */
-function fileCard(f, showProject) {
-  const where = showProject ? f.project : f.rel.replace(/\\/g, "/");
-  const n = f.versions ? f.versions.length : 0;
+const GROUP = { version: n => `另有<br>${n} 個舊版`, series: n => `同系列<br>另有 ${n} 份`, batch: n => `同一批<br>共 ${n + 1} 張` };
+function fileCard(f, opts = {}) {
+  const where = opts.project ? [f.project, f.rel.replace(/\\/g, "/")].filter(Boolean).join(" / ") : f.rel.replace(/\\/g, "/");
+  const n = f.versions ? f.versions.length + (f.more || 0) : 0;
+  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "");
   return `<div class="file" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
-    <button class="open" data-open="${esc(f.path)}"><span class="ext">${esc(f.ext || "檔案")}</span>
-      <span class="t"><div class="n">${esc(f.name)}</div><div class="m">${ago(f.mtime)}${where ? "・" + esc(where) : ""}</div></span></button>
-    ${n ? `<button class="ver" data-ver="${esc(f.path)}">另有<br>${n} 個舊版</button>` : ""}</div>`;
+    <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
+      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + esc(where) : ""}</div></span></button>
+    ${n ? `<button class="ver" data-ver="${esc(f.path)}">${GROUP[f.group](n)}</button>` : ""}</div>`;
 }
 
 let fileSeq = 0;
 async function loadFiles() {
-  const seq = ++fileSeq;
-  const qs = new URLSearchParams({project: state.project, kind: state.kind, since: state.since, q: state.q});
+  const seq = ++fileSeq, grid = $("files");
+  const slow = setTimeout(() => grid.classList.add("loading"), 250);
+  const qs = new URLSearchParams({project: state.project, kind: state.kind, since: state.since, sub: state.sub, q: state.q, limit: state.limit});
   let d;
   try { d = await api("/api/files?" + qs); } catch (e) { toast(e.message, true); return; }
+  finally { clearTimeout(slow); grid.classList.remove("loading"); }
   if (seq !== fileSeq) return;  // 已有更新的查詢
-  state.files = d.files;
+  state.files = d.files; state.subs = d.subs;
 
-  const f = (attr, val, label, on, color) => `<button class="f ${on ? "on" : ""}" data-${attr}="${val}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}</button>`;
-  $("filters").innerHTML = f("since", "", "最近", !state.since) + f("since", "today", "今天", state.since === "today") + f("since", "week", "本週", state.since === "week") +
-    `<span class="gap"></span>` + Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1])).join("");
+  const f = (attr, val, label, on, color, count) => `<button class="f ${on ? "on" : ""}" data-${attr}="${esc(val)}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}${count ? ` <small>${count}</small>` : ""}</button>`;
+  $("filters").innerHTML = Object.keys(SINCE).map(k => f("since", k, SINCE[k], state.since === k)).join("") + `<span class="gap"></span>` +
+    (state.project && (d.subs.length > 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon(state.sub ? "x" : "folder")}${esc(state.sub || "資料夾")}</button><span class="gap"></span>` : "") +
+    Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
 
   if (!state.projects.length) {
-    $("files").innerHTML = `<div class="empty">先告訴我專案放在哪裡<br>
+    grid.innerHTML = `<div class="empty">先告訴我專案放在哪裡<br>
       <button class="big main" data-add="root">${icon("plus")}選擇放所有專案的資料夾</button></div>`;
     return;
   }
+  const kindName = state.kind ? KIND[state.kind][0] : "檔案";
   if (!d.files.length) {
-    const none = state.q ? "找不到符合的檔案" : state.since === "today" ? "今天沒有動過的檔案" : state.since === "week" ? "這一週沒有動過的檔案" : "沒有符合的檔案";
-    $("files").innerHTML = `<div class="empty">${d.indexing ? "正在讀取檔案清單…" : none}</div>`;
+    let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kindName}` : `這裡沒有${kindName}`;
+    if (state.sub) msg += `（資料夾：${esc(state.sub)}）`;
+    const undo = (state.kind ? `<button class="big" data-kind="${esc(state.kind)}">看全部類型</button>` : "") +
+      (state.sub ? `<button class="big" data-act="clear-sub">看全部資料夾</button>` : "") +
+      (state.since ? `<button class="big" data-since="">不限時間</button>` : "");
+    grid.innerHTML = `<div class="empty">${d.indexing ? "正在讀取檔案清單…" : msg + "<br>" + undo}</div>`;
     return;
   }
   let html = "", last = null;
+  if (state.since) {  // 報告用的一句話摘要，可以直接唸
+    const parts = Object.keys(KIND).filter(k => d.kinds[k]).map(k => `${KIND[k][0]} ${d.kinds[k]}`).join("・");
+    html += `<div class="sum">${SINCE[state.since]}動了 <b>${d.total}</b> 份${state.kind ? KIND[state.kind][0] : "：" + parts}${d.new ? `　其中新增 <b>${d.new}</b> 份` : ""}</div>`;
+  }
   for (const x of d.files) {
     const sec = x.frequent ? "常用" : bucket(x.mtime);
     if (sec !== last) { html += `<div class="sec">${sec}</div>`; last = sec; }
-    html += fileCard(x, !state.project);
+    html += fileCard(x, {project: !state.project});
   }
-  if (d.total > d.files.length) html += `<div class="empty">還有 ${d.total - d.files.length} 個更舊的檔案，點上方類型可縮小範圍</div>`;
-  $("files").innerHTML = html;
+  if (d.total > d.files.length) html += `<div class="empty" style="padding:1rem"><button class="big" data-act="load-more">再往下顯示（還有 ${d.total - d.files.length} 個更舊的）</button></div>`;
+  grid.innerHTML = html;
 }
+function resetList() { state.limit = PAGE; $("scroll").scrollTop = 0; }
 
-async function openFile(path, reveal) {
+async function openFile(path, reveal, card) {
+  if (card) { card.classList.add("opening"); const m = card.querySelector(".m"); if (m) { m.dataset.old = m.innerHTML; m.textContent = "開啟中…"; } }
   try {
     const d = await api("/api/open", {path, reveal});
     toast((d.did === "opened" ? "已開啟　" : "已在檔案總管顯示　") + base(path));
+    if (card) card.classList.add("opened");
   } catch (e) { toast(e.message, true); }
+  if (card) setTimeout(() => { card.classList.remove("opening"); const m = card.querySelector(".m"); if (m && m.dataset.old) m.innerHTML = m.dataset.old; }, 3000);
 }
 
 /* ---------- AI 助手 ---------- */
@@ -237,7 +305,7 @@ async function loadTasks() {
   let html = live.map(t => {
     const [done, total] = t.progress;
     return `<button class="task s-${t.state}" data-task="${esc(t.id)}"><div class="n">${esc(t.title)}</div>
-      <div class="st">${esc(t.state_text)}${total ? `　${done}/${total}` : ""}</div>
+      <div class="st">${esc(t.state_text)}${total ? `　${done}/${total}` : ""}${t.where ? `<em>・${esc(t.where)}</em>` : ""}</div>
       ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</button>`;
   }).join("");
   if (!live.length) html = `<div class="empty" style="padding:2rem .5rem;font-size:.95rem">${d.github_configured ? "目前沒有進行中的任務" : "尚未設定<br>寵物上按右鍵<br>「追蹤 GitHub repo」"}</div>`;
@@ -258,29 +326,49 @@ function taskSheet(id) {
 function sheet(html) { $("sheet").innerHTML = html; $("sheet-bg").classList.add("show"); }
 function closeSheet() { $("sheet-bg").classList.remove("show"); }
 const head = t => `<h3><span>${t}</span><button class="round" data-act="close">${icon("x")}</button></h3>`;
+const cur = () => state.projects.find(p => p.path === state.project);
+function groupSheet(path) {
+  const f = state.files.find(x => x.path === path);
+  const title = {version: "所有版本（最新的在最上面）", series: "同系列的檔案（最新的在最上面）", batch: `這一批照片（共 ${f.versions.length + 1 + (f.more || 0)} 張）`}[f.group];
+  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${[f, ...f.versions].map((v, i) =>
+    fileCard({...v, versions: null}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96})).join("")}
+    ${f.more ? `<p class="wide">還有 ${f.more} 個更舊的沒有列出，請用「在檔案總管開啟」查看。</p>` : ""}</div>`);
+}
+function subsSheet() {
+  sheet(head("只看哪個資料夾？") + `<div class="list three">${state.subs.map(s =>
+    `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(s.name)}<small>${s.count} 個檔案</small></span></button>`).join("")}</div>`);
+}
 function moreSheet() {
-  const cur = state.projects.find(p => p.path === state.project);
-  sheet(head(cur ? `「${esc(cur.name)}」` : "設定") + `<div class="list two">
-    ${cur ? `<button class="big" data-reveal="${esc(cur.path)}">${icon("folder")}在檔案總管開啟</button>
-      <button class="big" data-act="folders">${icon("plus")}這個專案還有其他資料夾</button>
-      <button class="big" data-act="hide-proj">${icon("x")}不要顯示這個專案</button>` : ""}
-    <button class="big" data-add="root">${icon("plus")}加入專案總資料夾</button>
-    <button class="big" data-add="single">${icon("plus")}加入單一專案</button>
-    ${state.hidden ? `<button class="big" data-act="unhide">顯示已隱藏的 ${state.hidden} 個專案</button>` : ""}
+  const c = cur();
+  sheet(head(c ? `「${esc(c.name)}」` : "設定") + `<div class="list two">
+    ${c ? `<button class="big" data-reveal="${esc(c.path)}">${icon("folder")}<span>在檔案總管開啟<small>直接看這個專案的資料夾</small></span></button>
+      <button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
+    <button class="big" data-add="root">${icon("plus")}<span>加入一整批專案<small>選一個總資料夾，裡面每個子資料夾＝一個專案</small></span></button>
+    <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button>
     <button class="big" data-act="bigger">字放大</button><button class="big" data-act="smaller">字縮小</button>
-    <button class="big" data-act="full">全螢幕</button></div>`);
+    <button class="big" data-act="full">全螢幕</button>
+    ${state.hidden ? `<button class="big" data-act="unhide">顯示已隱藏的 ${state.hidden} 個專案</button>` : "<span></span>"}
+    ${c ? `<button class="big quiet wide" data-act="hide-ask">把「${esc(c.name)}」從清單隱藏</button>` : ""}</div>`);
 }
 async function foldersSheet() {
-  const cur = state.projects.find(p => p.path === state.project);
-  const d = await api("/api/folders?project=" + encodeURIComponent(cur.path));
-  const others = state.projects.filter(p => p.path !== cur.path);
-  sheet(head(`「${esc(cur.name)}」的資料夾`) + `<p>同一個專案的資料若分散在好幾個地方，加進來就會合併顯示。只是設定，不會搬動檔案。</p>
-    <div class="list">${d.folders.map((x, i) => `<div class="file" style="--k:#f4b860;min-height:4.4rem"><button class="open" data-reveal="${esc(x)}">
-      <span class="t"><div class="n">${esc(base(x))}</div><div class="m">${esc(x)}</div></span></button>
-      ${i ? `<button class="ver" data-unmerge="${esc(x)}">拆出</button>` : ""}</div>`).join("")}
+  const c = cur();
+  const d = await api("/api/folders?project=" + encodeURIComponent(c.path));
+  const others = state.projects.filter(p => p.path !== c.path);
+  sheet(head(`「${esc(c.name)}」的資料夾`) + `<div class="list">
+    <p>同一個專案的資料若分散在好幾個地方，加進來就會合併顯示。只是設定，不會搬動檔案。</p>
+    ${d.folders.map((x, i) => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(base(x))}</div><div class="m">${esc(x)}</div></span></div>
+      ${i ? `<button class="ver" data-unmerge="${esc(x)}">拆出</button>` : `<span class="ver" style="color:var(--dim)">主資料夾</span>`}</div>`).join("")}
     <button class="big main" data-act="add-folder">${icon("plus")}加入其他位置的資料夾</button>
-    ${others.length ? `<p style="margin:.6rem .3rem .2rem">或把另一個專案併進來：</p><div class="filters" style="flex-wrap:wrap">${others.map(p =>
-      `<button class="f" data-merge="${esc(p.path)}">${esc(p.name)}</button>`).join("")}</div>` : ""}</div>`);
+    ${others.length ? `<button class="big" data-act="merge-pick">${icon("plus")}把另一個專案併進來…</button>` : ""}</div>`);
+}
+function mergePickSheet() {
+  const c = cur();
+  sheet(head(`要把哪個專案併入「${esc(c.name)}」？`) + `<div class="list three">${state.projects.filter(p => p.path !== c.path).map(p =>
+    `<button class="big" data-merge-ask="${esc(p.path)}"><span>${esc(p.name)}</span></button>`).join("")}</div>`);
+}
+function confirmSheet(text, yesLabel, attrs) {
+  sheet(head("請確認") + `<div class="list two"><p class="wide" style="font-size:1.05rem;color:var(--text)">${text}</p>
+    <button class="big main" ${attrs}>${yesLabel}</button><button class="big" data-act="close">取消</button></div>`);
 }
 async function addProject(asRoot) {
   closeSheet(); toast("請在主螢幕跳出的視窗選擇資料夾…");
@@ -289,7 +377,7 @@ async function addProject(asRoot) {
 }
 
 /* ---------- 事件 ---------- */
-async function refresh() { await loadProjects(); await loadFiles(); }
+async function refresh() { await loadFiles(); await loadProjects(); }
 function setScale(delta) {
   let s = 1;
   try { s = parseFloat(localStorage.getItem("scale") || "1"); } catch (e) {}
@@ -297,32 +385,41 @@ function setScale(delta) {
   try { localStorage.setItem("scale", s); } catch (e) {}
   document.documentElement.style.setProperty("--scale", s);
 }
-function endSearch() { $("bar").classList.remove("searching"); $("q").value = ""; state.q = ""; }
+function setSearch(on) {
+  $("bar").classList.toggle("searching", on);
+  $("search-btn").innerHTML = icon(on ? "x" : "search");
+  if (on) $("q").focus(); else { $("q").value = ""; state.q = ""; }
+}
+const name = p => (state.projects.find(x => x.path === p) || {}).name || base(p);
 
 document.addEventListener("click", async ev => {
-  const el = ev.target.closest("[data-proj],[data-kind],[data-since],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-unmerge]");
+  const el = ev.target.closest("[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("proj" in d) { endSearch(); Object.assign(state, {project: d.proj, kind: "", since: ""}); await refresh(); $("scroll").scrollTop = 0; }
-    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; await loadFiles(); $("scroll").scrollTop = 0; }
-    else if ("since" in d) { state.since = d.since; await loadFiles(); $("scroll").scrollTop = 0; }
-    else if ("open" in d) { closeSheet(); openFile(d.open, false); }
+    if ("proj" in d) { setSearch(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: ""}); resetList(); renderProjects(); await refresh(); }
+    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; resetList(); await loadFiles(); }
+    else if ("since" in d) { state.since = d.since; resetList(); await loadFiles(); }
+    else if ("sub" in d) { state.sub = d.sub; closeSheet(); resetList(); await loadFiles(); }
+    else if ("open" in d) openFile(d.open, false, el.closest(".file"));   // 清單保持開啟，方便接著開另一版比較
     else if ("reveal" in d) { closeSheet(); openFile(d.reveal, true); }
-    else if ("ver" in d) {
-      const f = state.files.find(x => x.path === d.ver);
-      sheet(head("所有版本（最新的在最上面）") + `<div class="list">${[f, ...f.versions].map(v => fileCard({...v, versions: []}, false)).join("")}</div>`);
-    }
+    else if ("ver" in d) groupSheet(d.ver);
     else if ("task" in d) taskSheet(d.task);
     else if ("url" in d) { await api("/api/open_url", {url: d.url}); toast("已在瀏覽器開啟"); }
     else if ("add" in d) addProject(d.add === "root");
-    else if ("merge" in d) { await api("/api/merge", {path: d.merge, into: state.project}); toast("已合併"); await refresh(); foldersSheet(); }
+    else if ("mergeAsk" in d) confirmSheet(`把「${esc(name(d.mergeAsk))}」併入「${esc(cur().name)}」？<br><small>只改顯示方式，不會搬動檔案；之後可以再拆出。</small>`, "併入", `data-merge="${esc(d.mergeAsk)}"`);
+    else if ("merge" in d) { await api("/api/merge", {path: d.merge, into: state.project}); toast("已併入"); await refresh(); foldersSheet(); }
     else if ("unmerge" in d) { await api("/api/unmerge", {folder: d.unmerge}); toast("已拆出"); await refresh(); foldersSheet(); }
     else if (d.act === "more") moreSheet();
     else if (d.act === "close") closeSheet();
-    else if (d.act === "search") { if ($("bar").classList.toggle("searching")) $("q").focus(); else { endSearch(); loadFiles(); } }
+    else if (d.act === "search") { const on = !$("bar").classList.contains("searching"); setSearch(on); if (!on) { resetList(); loadFiles(); } }
+    else if (d.act === "subs") { if (state.sub) { state.sub = ""; resetList(); await loadFiles(); } else subsSheet(); }
+    else if (d.act === "clear-sub") { state.sub = ""; resetList(); await loadFiles(); }
+    else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
     else if (d.act === "folders") foldersSheet();
+    else if (d.act === "merge-pick") mergePickSheet();
     else if (d.act === "add-folder") { toast("請在主螢幕跳出的視窗選擇資料夾…"); const r = await api("/api/add_folder", {project: state.project}); if (r.added) { toast("已加入"); await refresh(); foldersSheet(); } }
+    else if (d.act === "hide-ask") confirmSheet(`把「${esc(cur().name)}」從清單隱藏？<br><small>檔案不受影響；之後可在「⋯」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`);
     else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」恢復"); refresh(); }
     else if (d.act === "unhide") { await api("/api/unhide_all", {}); closeSheet(); refresh(); }
     else if (d.act === "smaller") setScale(-.1);
@@ -331,14 +428,15 @@ document.addEventListener("click", async ev => {
   } catch (e) { toast(e.message, true); }
 });
 let qTimer;
-$("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $("q").value.trim(); loadFiles(); }, 200); });
+$("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $("q").value.trim(); resetList(); loadFiles(); }, 200); });
 
 setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
 loadTasks();
 setInterval(loadTasks, 15000);
-setInterval(() => { if (!$("sheet-bg").classList.contains("show") && !state.q) refresh(); }, 30000);
-window.addEventListener("focus", () => { if (!$("sheet-bg").classList.contains("show")) refresh(); });
+const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
+setInterval(() => { if (idle()) refresh(); }, 30000);   // 使用者正在往下找的時候不重排
+window.addEventListener("focus", () => { if (idle()) refresh(); });
 </script>
 </body>
 </html>

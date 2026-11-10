@@ -40,13 +40,40 @@ class VersionTest(unittest.TestCase):
     def test_strips_version_markers(self):
         same = ["平面圖.dwg", "平面圖_v2.dwg", "平面圖 v3 修正.dwg", "平面圖_20261101.dwg", "平面圖-1105.dwg",
                 "平面圖(1).dwg", "平面圖_final.dwg", "平面圖_最終版.dwg", "平面圖_1151101.dwg", "平面圖 第二版.dwg",
-                "平面圖_rev2.DWG", "平面圖 - 複本.dwg", "平面圖_R1.dwg"]
+                "平面圖_rev2.DWG", "平面圖 - 複本.dwg", "平面圖_revB.dwg"]
         self.assertEqual({panel.version_key(n) for n in same}, {"平面圖.dwg"})
 
     def test_keeps_meaningful_differences(self):
         distinct = ["A1.dwg", "A2.dwg", "A1-01.dwg", "A1-02.dwg", "1F平面圖.dwg", "2F平面圖.dwg",
-                    "B1結構.dwg", "平面圖.pdf", "立面圖.dwg", "review.docx", "newton.pdf", "river.jpg", "v.dwg"]
+                    "B1結構.dwg", "平面圖.pdf", "立面圖.dwg", "review.docx", "newton.pdf", "river.jpg", "v.dwg",
+                    "R1屋突平面圖.dwg", "R2屋突平面圖.dwg", "Revit模型.rvt", "模型.rvt", "照片 (12).jpg", "照片 (13).jpg"]
         self.assertEqual(len({panel.version_key(n) for n in distinct}), len(distinct))
+
+    def test_dates_only_count_when_plausible_and_kind_allows(self):
+        nov8 = time.mktime((2026, 11, 8, 12, 0, 0, 0, 0, -1))
+        key = panel.version_key
+        self.assertEqual(key("立面圖_1108.dwg", "圖面與模型", nov8), "立面圖.dwg")
+        self.assertEqual(key("詳圖_0101.dwg", "圖面與模型", nov8), "詳圖_0101.dwg", "與修改時間差太遠的是圖號，不是日期")
+        self.assertEqual(key("業主會議紀錄_1107.docx", "文件", nov8), "業主會議紀錄_1107.docx", "各次會議是不同文件")
+        self.assertEqual(key("IMG_20261108_143001.jpg", "圖片", nov8), "img_20261108_143001.jpg")
+        self.assertEqual(key("會議紀錄_v2.docx", "文件", nov8), "會議紀錄.docx", "明確的版本標記仍然收合")
+
+    def test_group_types(self):
+        now = time.time()
+        def e(name, d, age, kind):
+            return (name.lower(), name, d, now - age * 86400, 1, kind, 0)
+        rows = [e("平面圖_v2.dwg", "/p/圖", 0, "圖面與模型"), e("平面圖_v1.dwg", "/p/圖", 3, "圖面與模型"),
+                e("送審圖說_%s.pdf" % time.strftime("%Y%m%d"), "/p/送審", 0, "PDF"),
+                e("送審圖說_%s.pdf" % time.strftime("%Y%m%d", time.localtime(now - 9 * 86400)), "/p/送審", 9, "PDF"),
+                e("單獨.xlsx", "/p", 1, "試算表")]
+        rows += [e("IMG_%04d.jpg" % i, "/p/照片", 2 + i / 10000, "圖片") for i in range(6)]
+        rows += [e("日景.png", "/p/渲染", 4, "圖片"), e("夜景.png", "/p/渲染", 4, "圖片")]
+        got = {g[0][1]: (len(g[1]), g[2]) for g in panel.collapse_versions(rows)}
+        self.assertEqual(got["平面圖_v2.dwg"], (1, "version"))
+        self.assertEqual(got["送審圖說_%s.pdf" % time.strftime("%Y%m%d")], (1, "series"))
+        self.assertEqual(got["單獨.xlsx"], (0, ""))
+        self.assertEqual(got["IMG_0000.jpg"], (5, "batch"), "同資料夾同一天 4 張以上的照片合成一批")
+        self.assertEqual((got["日景.png"], got["夜景.png"]), ((0, ""), (0, "")))
 
     def test_name_that_is_only_a_marker_is_kept(self):
         self.assertEqual(panel.version_key("20261101.pdf"), "20261101.pdf")
@@ -68,15 +95,16 @@ class IndexTest(Base):
         idx.refresh_all()
 
         plist = idx.project_list()
-        self.assertEqual([p["name"] for p in plist], ["信義住宅", "大安辦公室"], "最近有動的專案排前面")
-        self.assertEqual((plist[0]["count"], plist[0]["today"]), (6, 1))
+        self.assertEqual([(p["name"], p["active"]) for p in plist], [("信義住宅", True), ("大安辦公室", False)])
+        self.assertEqual((plist[0]["count"], plist[0]["today"]), (6, True))
 
         proj = str(self.root / "信義住宅")
         res = idx.files(proj)
         self.assertEqual(res["files"][0]["path"], new)
         self.assertEqual([v["name"] for v in res["files"][0]["versions"]], ["平面圖_v2.dwg", "平面圖_v1.dwg"])
         self.assertEqual(res["total"], 4)
-        self.assertEqual(res["kinds"], {"圖面與模型": 5, "試算表": 1})
+        self.assertEqual(res["kinds"], {"圖面與模型": 3, "試算表": 1}, "數字是卡片數，與畫面一致")
+        self.assertEqual(res["files"][0]["group"], "version")
         self.assertEqual([s["name"] for s in res["subs"]], ["01_圖面", "02_法規", "03_報價"])
         self.assertEqual(res["files"][0]["rel"], "01_圖面")
 
@@ -105,7 +133,7 @@ class IndexTest(Base):
         res = idx.files(main)
         self.assertEqual({f["name"] for f in res["files"]}, {"平面圖.dwg", "地籍圖.pdf", "日景.png"})
         self.assertEqual([s["name"] for s in res["subs"]],
-                         ["信義住宅_業主提供/測量", "信義案渲染", "圖面"])
+                         ["信義住宅_業主提供", "信義案渲染", "圖面"])
         self.assertEqual([f["name"] for f in idx.files(main, sub="信義住宅_業主提供/測量")["files"]], ["地籍圖.pdf"])
         self.assertEqual([f["name"] for f in idx.files(main, sub="信義案渲染")["files"]], ["日景.png"])
         self.assertEqual([f["name"] for f in idx.files(main, q="業主 地籍")["files"]], ["地籍圖.pdf"])
@@ -115,18 +143,34 @@ class IndexTest(Base):
         self.assertEqual(panel.projects(), [main, extra])
 
     def test_since_filter_for_reporting(self):
-        self.put("甲案/今天改的.dwg", 0)
-        self.put("甲案/三天前.pdf", 3)
-        self.put("甲案/今天改的_v1.dwg", 20)
-        self.put("甲案/上個月.pdf", 40)
+        now = time.time()
+        monday = panel._midnight() - time.localtime().tm_wday * 86400
+        def at(rel, ts):
+            p = self.put(rel)
+            os.utime(p, (ts, ts))
+        at("甲案/今天改的.dwg", now)
+        at("甲案/今天改的_v1.dwg", monday - 20 * 86400)
+        at("甲案/上週四.pdf", monday - 3 * 86400)
+        at("甲案/上個月.pdf", monday - 30 * 86400)
         idx = panel.Index()
         proj = str(self.root / "甲案")
         res = idx.files(proj)
-        self.assertEqual(res["times"], {"today": 1, "week": 2})
-        self.assertEqual([f["name"] for f in idx.files(proj, since="today")["files"]], ["今天改的.dwg"])
-        self.assertEqual(len(idx.files(proj, since="week")["files"]), 2)
-        self.assertEqual(len(idx.files(proj, since="today")["files"][0]["versions"]), 1, "報告時仍看得到舊版")
-        self.assertEqual(idx.files(proj, since="week")["kinds"], {"圖面與模型": 1, "PDF": 1})
+        self.assertEqual(res["times"], {"today": 1, "week": 1, "lastweek": 1}, "本週從週一起算，上週是前一個週一到週日")
+        today = idx.files(proj, since="today")
+        self.assertEqual([f["name"] for f in today["files"]], ["今天改的.dwg"])
+        self.assertEqual(len(today["files"][0]["versions"]), 1, "報告時仍看得到舊版")
+        last = idx.files(proj, since="lastweek")
+        self.assertEqual(([f["name"] for f in last["files"]], last["kinds"]), (["上週四.pdf"], {"PDF": 1}))
+        self.assertEqual(idx.files(proj, limit=1)["total"], 3)
+
+    def test_stable_project_order(self):
+        self.put("乙案/a.pdf", 0)
+        self.put("甲案/a.pdf", 5)
+        self.put("丙案_舊/a.pdf", 60)
+        idx = panel.Index()
+        idx.refresh_all()
+        names = [p["name"] for p in idx.project_list()]
+        self.assertEqual(names, sorted(names[:2]) + ["丙案_舊"], "進行中的依名稱固定排序，不因誰剛被修改而換位")
 
     def test_new_file_shows_up_without_waiting(self):
         self.put("甲案/a.pdf", 1)
