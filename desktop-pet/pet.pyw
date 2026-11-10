@@ -286,10 +286,15 @@ class Pet:
         win.update_idletasks()
         bw, bh = win.winfo_reqwidth(), win.winfo_reqheight()
         x = max(4, min(self.root.winfo_x() + W // 2 - bw // 2, self.root.winfo_screenwidth() - bw - 4))
-        y = self.root.winfo_y() - bh - 4
-        if y < 0:  # 上面放不下就放下面；再放不下就貼齊螢幕邊緣，不要超出去
-            y = min(self.root.winfo_y() + H + 4, self.root.winfo_screenheight() - bh - 4)
-        win.geometry(f"+{x}+{max(0, y)}")
+        sw, sh, px, py = self.root.winfo_screenwidth(), self.root.winfo_screenheight(), self.root.winfo_x(), self.root.winfo_y()
+        y = py - bh - 4
+        if y < 0:  # 上面放不下 → 放下面；上下都放不下 → 放到旁邊，不可以蓋住小貓（不然就點不到牠來收起清單）
+            if py + H + 4 + bh <= sh:
+                y = py + H + 4
+            else:
+                y = max(0, min(py, sh - bh - 4))
+                x = px - bw - 6 if px - bw - 6 >= 0 else min(px + W + 6, max(0, sw - bw))
+        win.geometry(f"+{x}+{y}")
 
     def _hide_bubble(self) -> None:
         if self.bubble_job:
@@ -347,6 +352,13 @@ class Pet:
         if self.error:
             tk.Label(box, text=self.error, font=(FONT, 9), bg="#1a1d23", fg=COLORS["failed"], wraplength=280,
                      justify="left").pack(anchor="w", pady=(4, 0))
+
+        def close_on_blank(widget):   # 點清單上沒有連結的地方（空白、說明文字）也能收起清單
+            if not widget.bind("<Button-1>"):
+                widget.bind("<Button-1>", lambda e: self.toggle_popup())
+            for child in widget.winfo_children():
+                close_on_blank(child)
+        close_on_blank(p)
         self._place(p)
 
     # ------------------------------------------------------------ 滑鼠與選單

@@ -359,18 +359,35 @@ class RobustnessTest(Base):
         idx = panel.Index(blocking=False)
         proj = str(self.root / "甲案")
         first = idx.files(proj)
-        self.assertEqual((first["files"], first["scanning"]), ([], True), "第一次還沒讀完：不卡住，回報正在讀取")
+        self.assertEqual((len(first["files"]), first["scanning"]), (1, False), "本機磁碟很快：稍等一下就直接給最新的，不必先給空的")
+        empty = panel.Index(blocking=False)
+        self.put("乙案空/子/.keep")
+        panel._folders(fresh=True)
+        res = empty.files(str(self.root / "乙案空"))
+        self.assertEqual((res["files"], res["scanning"]), ([], False), "空專案掃過就是空的，不是「還在讀取」")
+        idx.data[proj] = (0, idx.data[proj][1])
+        self.put("甲案/剛存的.pdf")
+        self.assertEqual(idx.files(proj)["files"][0]["name"], "剛存的.pdf", "剛存的檔一點就看得到")
+        os.unlink(self.root / "甲案" / "剛存的.pdf")
+        idx.data[proj] = (0, idx.data[proj][1])
+        self.assertEqual(len(idx.files(proj)["files"]), 1)
+        # 新加入、還沒掃過的專案：列清單時就排進背景掃描，而且不歸到「很久沒動」
+        self.put("丙案_新加入/x.pdf", 400)
+        panel._folders(fresh=True)
+        row = next(p for p in idx.project_list() if p["name"] == "丙案_新加入")
+        self.assertTrue(row["pending"] and row["active"])
         for _ in range(100):
-            if not idx.files(proj)["scanning"]:
+            if str(self.root / "丙案_新加入") in idx.data:
                 break
             time.sleep(0.02)
-        self.assertEqual(len(idx.files(proj)["files"]), 1)
+        row = next(p for p in idx.project_list() if p["name"] == "丙案_新加入")
+        self.assertEqual((row["pending"], row["active"], row["count"]), (False, False, 1))
 
         self.put("甲案/b.pdf")
         real_walk, calls = panel.Index._walk, []
         def slow_walk(top):
             calls.append(top)
-            time.sleep(0.3)
+            time.sleep(1.0)
             return real_walk(top)
         panel.Index._walk = staticmethod(slow_walk)
         try:
@@ -378,9 +395,9 @@ class RobustnessTest(Base):
             t0 = time.time()
             for _ in range(5):                         # 連點五下
                 res = idx.files(proj)
-            self.assertLess(time.time() - t0, 0.25, "不等掃描，立刻回上次的清單")
+            self.assertLess(time.time() - t0, 0.7, "最多稍等一下就回上次的清單；之後的連點不再等")
             self.assertEqual((len(res["files"]), res["scanning"]), (1, True))
-            time.sleep(0.6)
+            time.sleep(1.0)
             self.assertEqual(len(calls), 1, "同一個資料夾同時只掃一趟")
             self.assertEqual(len(idx.files(proj)["files"]), 2)
         finally:

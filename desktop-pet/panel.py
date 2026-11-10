@@ -395,6 +395,7 @@ class Index:
         self._lock = threading.Lock()            # refresh_all 同時只跑一個
         self._scanning: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
+        self._served = threading.local()         # 這次查詢有沒有拿到「還沒更新完」的清單
 
     @staticmethod
     def _walk(top: str) -> tuple[list[tuple], dict]:
@@ -446,7 +447,7 @@ class Index:
         finally:
             lock.release()
 
-    def entries(self, folder: str, max_age: float = 20) -> list[tuple]:
+    def entries(self, folder: str, max_age: float = 20, wait: float = 0.4) -> list[tuple]:
         """取得資料夾檔案清單。超過 max_age 秒就重新掃描：
         blocking 時等它掃完；否則先回傳上次的結果，並在背景更新。"""
         cached = self.data.get(folder)
@@ -455,8 +456,14 @@ class Index:
         if self.blocking or max_age == 0:
             return self._scan(folder)
         if not self.is_scanning(folder):
-            threading.Thread(target=self._scan, args=(folder,), daemon=True).start()
-        return cached[1] if cached else []
+            worker = threading.Thread(target=self._scan, args=(folder,), daemon=True)
+            worker.start()
+            if wait:
+                worker.join(wait)   # 本機磁碟幾十毫秒就掃完：稍等一下就能直接給最新的，不必先給舊的再跳動
+        fresh = self.data.get(folder)
+        if fresh is None or fresh is cached or self.is_scanning(folder):
+            self._served.stale = True   # 等不到（慢速磁碟）：先給上次的，背景繼續
+        return fresh[1] if fresh else []
 
     def refresh_all(self) -> None:
         if not self._lock.acquire(blocking=False):
@@ -473,6 +480,13 @@ class Index:
         finally:
             self.indexing = False
             self._lock.release()
+
+    def _kick(self, folders: list[str]) -> None:
+        """還沒掃過的資料夾（例如剛從寵物選單加入的）排進背景掃描，不必等定時更新。"""
+        if not self.blocking:
+            for f in folders:
+                if f not in self.data:
+                    self.entries(f, wait=0)
 
     def _scope(self, project: str, fresh: bool) -> list[tuple[str, tuple]]:
         """專案內所有檔案：[(顯示用相對路徑, entry)]。主資料夾以外的檔案，路徑以該資料夾名稱開頭。"""
@@ -493,11 +507,14 @@ class Index:
         midnight = _midnight()
         out = []
         for p in projects():
+            folders = folders_of(p)
+            self._kick(folders)
+            pending = any(f not in self.data for f in folders)   # 還沒讀過：先當作進行中，不要歸到「很久沒動」
             rows = [e for _, e in self._scope(p, fresh=False)]
             last = max((e[3] for e in rows), default=0)
-            out.append({"path": p, "name": os.path.basename(p) or p, "folders": len(folders_of(p)),
-                        "count": len(rows), "today": any(e[3] >= midnight for e in rows),
-                        "active": last >= midnight - 14 * 86400, "last": last})
+            out.append({"path": p, "name": os.path.basename(p) or p, "folders": len(folders),
+                        "count": len(rows), "today": any(e[3] >= midnight for e in rows), "pending": pending,
+                        "active": pending or last >= midnight - 14 * 86400, "last": last})
         out.sort(key=lambda d: (not d["active"], d["name"].lower()))
         return out
 
@@ -513,11 +530,12 @@ class Index:
             if not os.path.isdir(project):
                 raise FolderOffline()
             watched = folders_of(project)
-            # 先記下「這次拿到的是不是舊的」，再去取清單：背景掃描可能在這一瞬間剛好做完
-            behind = not self.blocking and any(f not in self.data or time.time() - self.data[f][0] >= 20 for f in watched)
+            self._served.stale = False
             scope = [(project, rel, e) for rel, e in self._scope(project, fresh=True)]
+            behind = self._served.stale   # 有任何一個資料夾給的是還沒更新完的清單
         else:
             watched = [f for p in projects() for f in folders_of(p)]
+            self._kick(watched)
             behind = any(f not in self.data for f in watched)
             scope = [(p, rel, e) for p in projects() for rel, e in self._scope(p, fresh=False)]
 
@@ -600,7 +618,7 @@ class Index:
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
                 "projects": len(projects()), "missing": missing_folders(), "indexing": self.indexing,
                 # 還在讀第一次的清單、或背景正在更新：畫面會自己再問一次
-                "scanning": behind or any(self.is_scanning(f) for f in watched),
+                "scanning": behind,
                 "denied": sum(self.meta.get(f, {}).get("denied", 0) for f in watched),
                 "truncated": any(self.meta.get(f, {}).get("truncated") for f in watched),
                 "capped": limit >= MAX_LIMIT and len(groups) > limit}

@@ -60,7 +60,11 @@
   .f[data-act="subs"] { max-width: 15rem; } .f[data-act="subs"] > span { overflow: hidden; text-overflow: ellipsis; }
   .filters.more-x { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); }
   .big > span { min-width: 0; word-break: break-all; }
+  .big > span.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .gap { flex: none; width: .5rem; }
+  #busy { display: none; flex: none; font-size: .8rem; color: var(--dim); white-space: nowrap; }
+  .updating #busy { display: block; animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .35; } }
   .round { flex: none; width: 3.3rem; height: 3.3rem; border-radius: .8rem; display: grid; place-items: center; color: var(--dim); background: var(--card); }
   .round:active { background: var(--card-hi); color: var(--accent); }
   #q { display: none; flex: 1; height: 3.3rem; border-radius: .8rem; border: 2px solid var(--accent); background: var(--card); color: var(--text); font: inherit; font-size: 1.1rem; padding: 0 1rem; outline: 0; user-select: text; min-width: 0; }
@@ -160,6 +164,7 @@
     <div class="bar" id="bar">
       <div class="filters" id="filters"></div>
       <input id="q" placeholder="輸入檔名或資料夾名稱" autocomplete="off" spellcheck="false" enterkeyhint="search">
+      <span id="busy">更新中…</span>
       <button class="round" data-act="search" id="search-btn" aria-label="搜尋"><svg><use href="#i-search"/></svg></button>
       <button class="round" data-act="more" aria-label="更多"><svg><use href="#i-more"/></svg></button>
     </div>
@@ -263,9 +268,12 @@ function renderProjects() {
     (rest.length ? `<div class="label">兩週以上沒動</div>` + rest.map(p => row(p, projName(p.name))).join("") : "") +
     ((state.missing || []).length ? `<div class="label" style="color:var(--failed);letter-spacing:0;line-height:1.5">目前讀不到（可能沒連上）：<br>${state.missing.map(m => esc(base(m))).join("、")}</div>` : "");
 }
+let pendingTimer = 0;
 async function loadProjects() {
   const d = await api("/api/projects");
   state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing; state.notice = d.notice;
+  clearTimeout(pendingTimer);
+  if (d.projects.some(p => p.pending)) pendingTimer = setTimeout(() => { if (idle()) refresh(); else loadProjects().catch(() => {}); }, 2000);
   if (state.project && !d.projects.some(p => p.path === state.project)) state.project = "";
   renderProjects();
 }
@@ -331,6 +339,7 @@ async function loadFiles(quiet) {
   }
   const kindName = state.kind ? KIND[state.kind][0] : "檔案";
   // 背景還在讀清單（第一次，或慢速磁碟上的更新）：過一下自己再問一次，不必使用者動手
+  $("bar").classList.toggle("updating", !!d.scanning && d.files.length > 0);   // 畫面上是上次的清單，背景還在更新
   if (d.scanning) rescan = setTimeout(() => { if (seq === fileSeq && ($("scroll").scrollTop < 5 || !d.files.length)) loadFiles(true); }, 1500);
   const cname = (cur() || {}).name;
   if (!d.files.length && d.scanning && !(state.kind || state.since || state.sub || state.q)) {
@@ -414,8 +423,8 @@ function taskSheet(id) {
 }
 
 /* ---------- 彈出面板 ---------- */
-let blockUntil = 0;
-const guard = () => { blockUntil = Date.now() + 300; };   // 畫面剛換過：手指的第二下不該落在新出現的東西上
+let changedAt = 0, lastTap = {x: -999, y: -999};
+const guard = () => { changedAt = Date.now(); };   // 畫面剛換過（面板開關、模式切換）
 function sheet(html) { $("sheet").innerHTML = html; $("sheet-bg").classList.add("show"); guard(); }
 function closeSheet() { if ($("sheet-bg").classList.contains("show")) guard(); $("sheet-bg").classList.remove("show"); }
 const head = t => `<h3><span>${t}</span><button class="round" data-act="close">${icon("x")}</button></h3>`;
@@ -478,7 +487,7 @@ async function foldersSheet() {
 function mergePickSheet() {
   const c = cur();
   sheet(head(`要把哪個專案併入「${esc(c.name)}」？`) + `<div class="list three">${state.projects.filter(p => p.path !== c.path).map(p =>
-    `<button class="big" data-merge-ask="${esc(p.path)}"><span>${esc(p.name)}</span></button>`).join("")}</div>`);
+    `<button class="big" data-merge-ask="${esc(p.path)}"><span class="clamp">${esc(p.name)}</span></button>`).join("")}</div>`);
 }
 function confirmSheet(text, yesLabel, attrs) {
   sheet(head("請確認") + `<div class="list two"><p class="wide" style="font-size:1.05rem;color:var(--text)">${text}</p>
@@ -537,7 +546,11 @@ const name = p => (state.projects.find(x => x.path === p) || {}).name || base(p)
 
 document.addEventListener("click", async ev => {
   if (pressed) { pressed = false; ev.preventDefault(); return; }   // 剛才是長按，不當成點擊
-  if (Date.now() < blockUntil) return;                              // 畫面剛換過，這一下多半是連點
+  // 連點防護：畫面在半秒內換過，而這一下又點在幾乎同一個位置 → 是同一次連點的第二下，不該落到新出現的東西上。
+  // 點在別的位置則照常處理（手快的人打開面板後立刻點裡面的按鈕不會被吃掉）。
+  const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
+  if (Date.now() - changedAt < 550 && sameSpot) return;
+  lastTap = {x: ev.clientX, y: ev.clientY};
   const el = ev.target.closest("[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
