@@ -478,7 +478,9 @@ class Index:
             d = card(head)
             d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60),
                      later=later.get(id(head), 0), oldpin=id(head) in old_ids,
-                     check=gtype == "version" and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
+                     # 版號與時間矛盾的提醒只放在「真正最新」的那張卡上（時間篩選下的舊版卡不重複提醒）
+                     check=gtype == "version" and not later.get(id(head), 0)
+                     and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
             rows.append(d)
         if plain:  # 沒有篩選時，釘選之後接「常用」（開過兩次以上，最多 4 個），其餘依時間
             often = sorted((d for d in rows if not d["pinned"] and opened.get(d["path"], 0) >= 2),

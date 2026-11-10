@@ -272,7 +272,7 @@ function fileCard(f, opts = {}) {
   const warn = (f.later || f.oldpin ? `<span class="tag warn">${f.oldpin ? "較舊的版本" : "之後已有新版"}</span>` : "") + (f.check ? `<span class="tag warn">版號待確認</span>` : "");
   return `<div class="file ${f.pinned ? "pinned" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
     <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
-      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${warn}${ago(f.mtime)}${where && !warn ? "・" + where : ""}</div>${warn && where ? `<div class="m">${where}</div>` : ""}</span></button>
+      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}</div>${warn ? `<div class="m">${warn}</div>` : ""}</span></button>
     ${n ? `<button class="ver" data-ver="${esc(f.path)}">${f.later ? `共<br>${n + 1} 個版本` : GROUP[f.group](n)}</button>` : ""}</div>`;
 }
 

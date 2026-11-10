@@ -177,6 +177,7 @@ class IndexTest(Base):
         self.assertEqual(idx.files(proj)["times"], {"today": 1, "week": 1, "lastweek": 1})
         f = idx.files(proj, since="lastweek")["files"][0]
         self.assertEqual((f["name"], f["later"]), ("南向立面圖_v2.dwg", 1), "代表檔是上週那一版，並註明之後有更新")
+        self.assertFalse(f["check"], "舊版卡片不該被標成版號待確認")
         self.assertEqual({v["name"] for v in f["versions"]}, {"南向立面圖_v3.dwg", "南向立面圖_v1.dwg"})
         self.assertEqual(idx.files(proj, since="today")["files"][0]["later"], 0)
 
