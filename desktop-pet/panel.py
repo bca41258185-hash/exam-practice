@@ -354,7 +354,8 @@ class Index:
 
     def files(self, project: str = "", kind: str = "", sub: str = "", q: str = "",
               since: str = "", limit: int = 120) -> dict:
-        opened = core.load_config().get("opened", {})
+        cfg = core.load_config()
+        opened, pinned = cfg.get("opened", {}), set(cfg.get("pinned", []))
         if project:
             if project not in projects(include_hidden=True):
                 raise PermissionError("不是已加入的專案")
@@ -407,20 +408,26 @@ class Index:
             p, rel, _ = info[id(e)]
             return {"name": e[1], "path": os.path.join(e[2], e[1]), "rel": rel, "project": os.path.basename(p),
                     "mtime": e[3], "size": e[4], "kind": e[5], "frequent": False, "new": e[6] >= new_from,
+                    "pinned": os.path.join(e[2], e[1]) in pinned,
                     "ext": os.path.splitext(e[1])[1][1:].upper()[:5]}
 
         rows = []
+        plain = not (kind or since or terms or sub)
+        if plain:  # 釘選的檔案固定在最上面，即使它很舊、排在第一頁之外
+            groups = [g for g in groups if os.path.join(g[0][2], g[0][1]) in pinned] + \
+                     [g for g in groups if os.path.join(g[0][2], g[0][1]) not in pinned]
         for head, others, gtype in groups[:limit]:
             d = card(head)
             d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60),
                      later=later.get(id(head), 0),
                      check=gtype == "version" and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
             rows.append(d)
-        if not (kind or since or terms or sub):  # 沒有篩選時，開過兩次以上的檔案自動排最前（最多 4 個）
-            often = sorted((d for d in rows if opened.get(d["path"], 0) >= 2), key=lambda d: -opened[d["path"]])[:4]
+        if plain:  # 沒有篩選時：釘選 → 常用（開過兩次以上，最多 4 個）→ 其餘依時間
+            often = sorted((d for d in rows if not d["pinned"] and opened.get(d["path"], 0) >= 2),
+                           key=lambda d: -opened[d["path"]])[:4]
             for d in often:
                 d["frequent"] = True
-            rows.sort(key=lambda d: -opened[d["path"]] if d["frequent"] else 0)
+            rows.sort(key=lambda d: (0, 0) if d["pinned"] else (1, -opened[d["path"]]) if d["frequent"] else (2, 0))
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
                 "new": sum(g[0][6] >= new_from for g in groups),
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),
@@ -524,6 +531,10 @@ class Handler(BaseHTTPRequestHandler):
             path = self.path
             if path == "/api/open":
                 self._send(200, {"did": open_file(body["path"], bool(body.get("reveal")))})
+            elif path == "/api/pin":
+                if not project_of(body["path"]):
+                    raise PermissionError("不在專案資料夾範圍內")
+                self._send(200, {"on": toggle("pinned", body["path"])})
             elif path == "/api/hide_project":
                 if body["path"] not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")

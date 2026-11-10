@@ -189,6 +189,18 @@ class IndexTest(Base):
         got = {f["name"]: f["check"] for f in idx.files(str(self.root / "甲案"))["files"]}
         self.assertEqual(got, {"報告_v6.pdf": True, "同時_v7.pdf": False}, "版號與修改時間矛盾要提醒；時間相同則版號大的為新")
 
+    def test_pinned_file_stays_on_top_even_when_old(self):
+        old = self.put("甲案/結構計算書.pdf", 200)
+        for i in range(5):
+            self.put("甲案/新檔%d.pdf" % i, i)
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        self.assertTrue(panel.toggle("pinned", old))
+        first = idx.files(proj, limit=3)["files"][0]
+        self.assertEqual((first["name"], first["pinned"]), ("結構計算書.pdf", True), "釘選的舊檔不受分頁上限影響")
+        self.assertEqual(idx.files(proj, kind="PDF")["files"][0]["name"], "新檔0.pdf", "有篩選時照時間排")
+        self.assertFalse(panel.toggle("pinned", old))
+
     def test_folder_filter_drills_down(self):
         self.put("甲案/01_圖面/平面/a.dwg")
         self.put("甲案/01_圖面/立面/b.dwg")
