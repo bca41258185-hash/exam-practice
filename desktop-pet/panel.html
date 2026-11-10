@@ -21,10 +21,15 @@
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
   svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .app { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 17rem; gap: .5rem; height: 100vh; padding: .5rem; }
-  .app.many { grid-template-columns: 25rem minmax(0, 1fr) 17rem; }
+  .app.many { grid-template-columns: 22rem minmax(0, 1fr) 17rem; }
+  .app.many .grid { grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
   .col { background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   /* 看得見的細捲軸：讓人知道下面還有多少 */
   .scroll { overflow-y: auto; flex: 1; min-height: 0; padding: .5rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
+  .col { position: relative; }
+  .col.below::after { content: "▼ 往下還有"; position: absolute; left: 0; right: 0; bottom: 0; height: 2.4rem; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: .3rem; font-size: .72rem; color: var(--text); letter-spacing: .1em; pointer-events: none;
+    background: linear-gradient(rgba(26,29,35,0), var(--panel) 55%); border-radius: 0 0 1rem 1rem; }
   .label { font-size: .8rem; font-weight: 700; letter-spacing: .14em; color: var(--dim); padding: .7rem 1rem .1rem; }
 
   /* 專案 */
@@ -33,8 +38,10 @@
   #projects .label { grid-column: 1 / -1; padding: .5rem .5rem 0; }
   .proj { display: flex; align-items: center; gap: .5rem; min-height: 4rem; padding: .3rem .8rem; border-radius: .8rem; background: var(--card); font-size: 1.1rem; font-weight: 700; min-width: 0; }
   .proj.all { grid-column: 1 / -1; }
-  .proj span { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; word-break: break-all; }
-  .proj small { display: block; font-size: .72rem; font-weight: 400; color: var(--dim); line-height: 1.3; white-space: nowrap; overflow: hidden; }
+  .proj > span { flex: 1; min-width: 0; }
+  .proj em { font-style: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; word-break: break-all; }
+  .many .proj { font-size: 1rem; }
+  .proj small { display: block; font-size: .72rem; font-weight: 400; color: var(--dim); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .proj:active { background: var(--card-hi); }
   .proj.sel { background: var(--accent); color: var(--accent-ink); }
   .proj.sel small { color: #5b4514; }
@@ -72,6 +79,7 @@
   .file .m { font-size: .82rem; color: var(--dim); margin-top: .2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tag { display: inline-block; font-size: .7rem; font-weight: 700; border-radius: .3rem; padding: 0 .35rem; margin-right: .4rem; background: var(--done); color: #0d2616; }
   .tag.latest { background: var(--accent); color: var(--accent-ink); }
+  .tag.warn { background: none; border: 1px solid var(--accent); color: var(--accent); }
   .ver { flex: none; align-self: stretch; display: grid; place-items: center; padding: 0 .8rem; font-size: .82rem; font-weight: 700; color: var(--accent); border-left: 1px solid var(--line); text-align: center; line-height: 1.3; }
   .ver:active { background: var(--card-hi); }
   .empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 2.5rem 1rem; line-height: 2; font-size: 1.05rem; }
@@ -180,8 +188,12 @@ function ago(ts) {
   if (s < 90) return "剛剛";
   if (s < 3600) return Math.round(s / 60) + " 分鐘前";
   if (s < 86400) return Math.round(s / 3600) + " 小時前";
-  if (s < 86400 * 14) return Math.round(s / 86400) + " 天前";
-  const d = new Date(ts * 1000); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  const days = Math.round(s / 86400);
+  if (days < 14) return days + " 天前";
+  const d = new Date(ts * 1000), md = `${d.getMonth() + 1}/${d.getDate()}`;
+  if (days < 60) return `${md}（${Math.round(days / 7)} 週前）`;
+  if (days < 335) return `${md}（${Math.round(days / 30)} 個月前）`;
+  return `${d.getFullYear()}/${md}`;
 }
 function bucket(ts) {  // 今天、昨天、本週（週一起）、上週，再往前按月份
   const now = new Date(), midnight = new Date(now).setHours(0, 0, 0, 0) / 1000;
@@ -215,7 +227,7 @@ function projName(name) {
 function renderProjects() {
   // 案號與「今天有動」放在名稱上方的小字，不佔名稱的寬度
   const row = (p, [code, name], cls) => { const top = [code, p.today ? "<b>今天有動</b>" : ""].filter(Boolean).join("　");
-    return `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${top ? `<small>${top}</small>` : ""}${name}</span></button>`; };
+    return `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${top ? `<small>${top}</small>` : ""}<em>${name}</em></span></button>`; };
   const active = state.projects.filter(p => p.active), rest = state.projects.filter(p => !p.active);
   $("app").classList.toggle("many", state.projects.length > 7);
   $("projects").innerHTML = row({path: "", today: false}, ["", "全部專案"], "all") + active.map(p => row(p, projName(p.name))).join("") +
@@ -231,12 +243,13 @@ async function loadProjects() {
 /* ---------- 檔案 ---------- */
 const GROUP = { version: n => `另有<br>${n} 個舊版`, series: n => `同系列<br>另有 ${n} 份`, batch: n => `同一批<br>共 ${n + 1} 張` };
 function fileCard(f, opts = {}) {
-  const where = opts.project ? [f.project, f.rel.replace(/\\/g, "/")].filter(Boolean).join(" / ") : f.rel.replace(/\\/g, "/");
+  const where = opts.project ? [projName(f.project)[1], esc(f.rel.replace(/\\/g, "/"))].filter(Boolean).join("／") : esc(f.rel.replace(/\\/g, "/"));
   const n = f.versions ? f.versions.length + (f.more || 0) : 0;
-  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "");
+  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "") +
+    (f.later ? `<span class="tag warn">之後又更新 ${f.later} 次</span>` : "") + (f.check ? `<span class="tag warn">檔名版號較舊，請確認</span>` : "");
   return `<div class="file" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
     <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
-      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + esc(where) : ""}</div></span></button>
+      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}</div></span></button>
     ${n ? `<button class="ver" data-ver="${esc(f.path)}">${GROUP[f.group](n)}</button>` : ""}</div>`;
 }
 
@@ -253,17 +266,18 @@ async function loadFiles() {
 
   const f = (attr, val, label, on, color, count) => `<button class="f ${on ? "on" : ""}" data-${attr}="${esc(val)}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}${count ? ` <small>${count}</small>` : ""}</button>`;
   $("filters").innerHTML = Object.keys(SINCE).map(k => f("since", k, SINCE[k], state.since === k)).join("") + `<span class="gap"></span>` +
-    (state.project && (d.subs.length > 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon(state.sub ? "x" : "folder")}${esc(state.sub || "資料夾")}</button><span class="gap"></span>` : "") +
+    (state.project && (d.subs.length > 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon("folder")}${esc(state.sub ? base(state.sub) : "資料夾")}</button><span class="gap"></span>` : "") +
     Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
 
-  if (!state.projects.length) {
+  if (state.ready && !state.projects.length) {
     grid.innerHTML = `<div class="empty">先告訴我專案放在哪裡<br>
       <button class="big main" data-add="root">${icon("plus")}選擇放所有專案的資料夾</button></div>`;
     return;
   }
   const kindName = state.kind ? KIND[state.kind][0] : "檔案";
   if (!d.files.length) {
-    let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kindName}` : `這裡沒有${kindName}`;
+    const kn = (/^[A-Za-z]/.test(kindName) ? " " : "") + kindName;
+    let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kn}` : `這裡沒有${kn}`;
     if (state.sub) msg += `（資料夾：${esc(state.sub)}）`;
     const undo = (state.kind ? `<button class="big" data-kind="${esc(state.kind)}">看全部類型</button>` : "") +
       (state.sub ? `<button class="big" data-act="clear-sub">看全部資料夾</button>` : "") +
@@ -330,13 +344,17 @@ const cur = () => state.projects.find(p => p.path === state.project);
 function groupSheet(path) {
   const f = state.files.find(x => x.path === path);
   const title = {version: "所有版本（最新的在最上面）", series: "同系列的檔案（最新的在最上面）", batch: `這一批照片（共 ${f.versions.length + 1 + (f.more || 0)} 張）`}[f.group];
-  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${[f, ...f.versions].map((v, i) =>
-    fileCard({...v, versions: null}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96})).join("")}
+  const all = [f, ...f.versions].sort((a, b) => b.mtime - a.mtime);
+  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${all.map((v, i) =>
+    fileCard({...v, versions: null, later: 0, check: i === 0 && f.check}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96})).join("")}
     ${f.more ? `<p class="wide">還有 ${f.more} 個更舊的沒有列出，請用「在檔案總管開啟」查看。</p>` : ""}</div>`);
 }
 function subsSheet() {
-  sheet(head("只看哪個資料夾？") + `<div class="list three">${state.subs.map(s =>
-    `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(s.name)}<small>${s.count} 個檔案</small></span></button>`).join("")}</div>`);
+  const here = state.sub.replace(/\\/g, "/");
+  sheet(head(state.sub ? `目前只看：${esc(here)}` : "只看哪個資料夾？") + `<div class="list three">
+    ${state.sub ? `<button class="big main wide" data-sub="">${icon("x")}看全部資料夾</button>` : ""}
+    ${state.sub && state.subs.length ? `<p class="wide" style="margin:.3rem">或再縮小到裡面的：</p>` : ""}
+    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 個檔案</small></span></button>`).join("")}</div>`);
 }
 function moreSheet() {
   const c = cur();
@@ -377,7 +395,10 @@ async function addProject(asRoot) {
 }
 
 /* ---------- 事件 ---------- */
-async function refresh() { await loadFiles(); await loadProjects(); }
+async function refresh() {  // 第一次先取專案；之後先取檔案（會重新掃描），再更新專案列的「今天有動」
+  if (!state.ready) { await loadProjects(); state.ready = true; }
+  await loadFiles(); await loadProjects();
+}
 function setScale(delta) {
   let s = 1;
   try { s = parseFloat(localStorage.getItem("scale") || "1"); } catch (e) {}
@@ -413,7 +434,7 @@ document.addEventListener("click", async ev => {
     else if (d.act === "more") moreSheet();
     else if (d.act === "close") closeSheet();
     else if (d.act === "search") { const on = !$("bar").classList.contains("searching"); setSearch(on); if (!on) { resetList(); loadFiles(); } }
-    else if (d.act === "subs") { if (state.sub) { state.sub = ""; resetList(); await loadFiles(); } else subsSheet(); }
+    else if (d.act === "subs") subsSheet();
     else if (d.act === "clear-sub") { state.sub = ""; resetList(); await loadFiles(); }
     else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
     else if (d.act === "folders") foldersSheet();
@@ -430,6 +451,10 @@ document.addEventListener("click", async ev => {
 let qTimer;
 $("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $("q").value.trim(); resetList(); loadFiles(); }, 200); });
 
+function fades() { document.querySelectorAll(".col > .scroll").forEach(el =>
+  el.parentElement.classList.toggle("below", el.scrollHeight - el.scrollTop - el.clientHeight > 12)); }
+document.querySelectorAll(".col > .scroll").forEach(el => { el.addEventListener("scroll", fades, {passive: true}); new MutationObserver(fades).observe(el, {childList: true, subtree: true}); });
+window.addEventListener("resize", fades);
 setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
 loadTasks();

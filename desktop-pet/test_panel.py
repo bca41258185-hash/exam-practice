@@ -134,6 +134,8 @@ class IndexTest(Base):
         self.assertEqual({f["name"] for f in res["files"]}, {"平面圖.dwg", "地籍圖.pdf", "日景.png"})
         self.assertEqual([s["name"] for s in res["subs"]],
                          ["信義住宅_業主提供", "信義案渲染", "圖面"])
+        self.assertEqual([s["name"] for s in idx.files(main, sub="信義住宅_業主提供")["subs"]],
+                         [os.path.join("信義住宅_業主提供", "測量")])
         self.assertEqual([f["name"] for f in idx.files(main, sub="信義住宅_業主提供/測量")["files"]], ["地籍圖.pdf"])
         self.assertEqual([f["name"] for f in idx.files(main, sub="信義案渲染")["files"]], ["日景.png"])
         self.assertEqual([f["name"] for f in idx.files(main, q="業主 地籍")["files"]], ["地籍圖.pdf"])
@@ -162,6 +164,41 @@ class IndexTest(Base):
         last = idx.files(proj, since="lastweek")
         self.assertEqual(([f["name"] for f in last["files"]], last["kinds"]), (["上週四.pdf"], {"PDF": 1}))
         self.assertEqual(idx.files(proj, limit=1)["total"], 3)
+
+    def test_last_week_keeps_files_updated_again_since(self):
+        now = time.time()
+        monday = panel._midnight() - time.localtime().tm_wday * 86400
+        for name, ts in (("南向立面圖_v3.dwg", now), ("南向立面圖_v2.dwg", monday - 2 * 86400),
+                         ("南向立面圖_v1.dwg", monday - 40 * 86400)):
+            p = self.put("甲案/" + name)
+            os.utime(p, (ts, ts))
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        self.assertEqual(idx.files(proj)["times"], {"today": 1, "week": 1, "lastweek": 1})
+        f = idx.files(proj, since="lastweek")["files"][0]
+        self.assertEqual((f["name"], f["later"]), ("南向立面圖_v2.dwg", 1), "代表檔是上週那一版，並註明之後有更新")
+        self.assertEqual({v["name"] for v in f["versions"]}, {"南向立面圖_v3.dwg", "南向立面圖_v1.dwg"})
+        self.assertEqual(idx.files(proj, since="today")["files"][0]["later"], 0)
+
+    def test_version_number_conflict_is_flagged(self):
+        now = time.time()
+        for name, ts in (("報告_v6.pdf", now), ("報告_v7.pdf", now - 86400), ("同時_v6.pdf", now - 500), ("同時_v7.pdf", now - 500)):
+            p = self.put("甲案/" + name)
+            os.utime(p, (ts, ts))
+        idx = panel.Index()
+        got = {f["name"]: f["check"] for f in idx.files(str(self.root / "甲案"))["files"]}
+        self.assertEqual(got, {"報告_v6.pdf": True, "同時_v7.pdf": False}, "版號與修改時間矛盾要提醒；時間相同則版號大的為新")
+
+    def test_folder_filter_drills_down(self):
+        self.put("甲案/01_圖面/平面/a.dwg")
+        self.put("甲案/01_圖面/立面/b.dwg")
+        self.put("甲案/02_法規/c.pdf")
+        idx = panel.Index()
+        proj = str(self.root / "甲案")
+        self.assertEqual([s["name"] for s in idx.files(proj)["subs"]], ["01_圖面", "02_法規"])
+        inner = idx.files(proj, sub="01_圖面")
+        self.assertEqual([s["name"] for s in inner["subs"]], [os.path.join("01_圖面", "平面"), os.path.join("01_圖面", "立面")])
+        self.assertEqual(idx.files(proj, sub=os.path.join("01_圖面", "立面"))["subs"], [])
 
     def test_stable_project_order(self):
         self.put("乙案/a.pdf", 0)

@@ -220,6 +220,15 @@ def version_key(name: str, kind: str | None = None, mtime: float | None = None) 
     return ((stem or original) + ext).lower()
 
 
+_VNUM = re.compile(r"(?<![a-z])v(?:er)?\.?(\d+(?:\.\d+)?)", re.I)
+
+
+def version_number(name: str) -> float:
+    """檔名上寫的版號（v7 → 7.0）；沒有就回傳 -1。"""
+    m = _VNUM.search(os.path.splitext(name)[0])
+    return float(m.group(1)) if m else -1.0
+
+
 def has_version_marker(name: str) -> bool:
     return bool(_STRONG.search(os.path.splitext(name)[0]))
 
@@ -239,7 +248,7 @@ def collapse_versions(entries: list[tuple]) -> list[tuple[tuple, list[tuple], st
         groups.setdefault((_group_dir(e[2]), version_key(e[1], e[5], e[3])), []).append(e)
     out, photos = [], {}
     for g in groups.values():
-        g.sort(key=lambda e: -e[3])
+        g.sort(key=lambda e: (-e[3], -version_number(e[1])))  # 修改時間相同時，版號大的算新
         if len(g) > 1:
             in_old = any(os.path.basename(e[2]).lower() in OLD_DIRS for e in g)
             strong = in_old or any(has_version_marker(e[1]) for e in g)
@@ -354,12 +363,14 @@ class Index:
             scope = [(p, rel, e) for p in projects() for rel, e in self._scope(p, fresh=False)]
 
         subs: dict[str, int] = {}
-        if project:  # 第一層子資料夾（併入的其他資料夾各算一個）
-            for _, rel, _e in scope:
-                key = rel.split(os.sep)[0]
-                subs[key] = subs.get(key, 0) + 1
+        if project:  # 目前所在層的下一層子資料夾（最上層時，併入的其他資料夾各算一個）
             if sub:
                 scope = [x for x in scope if x[1] == sub or x[1].startswith(sub + os.sep)]
+            skip = len(sub) + 1 if sub else 0
+            for _, rel, _e in scope:
+                key = rel[skip:].split(os.sep)[0]
+                if key:
+                    subs[os.path.join(sub, key) if sub else key] = subs.get(os.path.join(sub, key) if sub else key, 0) + 1
         terms = q.lower().split()
         if terms:
             scope = [x for x in scope if all(t in x[2][0] or t in x[1].lower() for t in terms)]
@@ -371,10 +382,20 @@ class Index:
         monday = midnight - time.localtime().tm_wday * 86400
         ranges = {"today": (midnight, float("inf")), "week": (monday, float("inf")),
                   "lastweek": (monday - 7 * 86400, monday)}
-        times = {k: sum(lo <= g[0][3] < hi for g in groups) for k, (lo, hi) in ranges.items()}
+        def within(g, lo, hi):  # 組內任一版本落在期間內就算（上週改過、這週又改的檔案，上週也要看得到）
+            return [e for e in (g[0], *g[1]) if lo <= e[3] < hi]
+        times = {k: sum(bool(within(g, lo, hi)) for g in groups) for k, (lo, hi) in ranges.items()}
+        later: dict[int, int] = {}
         if since in ranges:
             lo, hi = ranges[since]
-            groups = [g for g in groups if lo <= g[0][3] < hi]
+            picked = []
+            for g in groups:
+                hit = within(g, lo, hi)
+                if hit:  # 以期間內最新的那一版當代表，並記下之後還有幾個更新的版本
+                    members = [g[0], *g[1]]
+                    later[id(hit[0])] = members.index(hit[0])
+                    picked.append((hit[0], [e for e in members if e is not hit[0]], g[2]))
+            groups = sorted(picked, key=lambda g: -g[0][3])
         kinds: dict[str, int] = {}
         for g in groups:
             kinds[g[0][5]] = kinds.get(g[0][5], 0) + 1
@@ -391,7 +412,9 @@ class Index:
         rows = []
         for head, others, gtype in groups[:limit]:
             d = card(head)
-            d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60))
+            d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60),
+                     later=later.get(id(head), 0),
+                     check=gtype == "version" and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
             rows.append(d)
         if not (kind or since or terms or sub):  # 沒有篩選時，開過兩次以上的檔案自動排最前（最多 4 個）
             often = sorted((d for d in rows if opened.get(d["path"], 0) >= 2), key=lambda d: -opened[d["path"]])[:4]
