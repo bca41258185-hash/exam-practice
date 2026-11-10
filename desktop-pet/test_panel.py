@@ -198,7 +198,8 @@ class IndexTest(Base):
         self.assertTrue(panel.toggle("pinned", old))
         first = idx.files(proj, limit=3)["files"][0]
         self.assertEqual((first["name"], first["pinned"]), ("結構計算書.pdf", True), "釘選的舊檔不受分頁上限影響")
-        self.assertEqual(idx.files(proj, kind="PDF")["files"][0]["name"], "新檔0.pdf", "有篩選時照時間排")
+        self.assertEqual(idx.files(proj, kind="PDF")["files"][0]["name"], "結構計算書.pdf", "篩選後仍符合條件就繼續置頂")
+        self.assertEqual(idx.files(proj, since="today")["files"][0]["name"], "新檔0.pdf", "不符合篩選條件就不出現")
         self.assertFalse(panel.toggle("pinned", old))
 
     def test_folder_filter_drills_down(self):

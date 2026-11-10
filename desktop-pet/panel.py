@@ -413,16 +413,16 @@ class Index:
 
         rows = []
         plain = not (kind or since or terms or sub)
-        if plain:  # 釘選的檔案固定在最上面，即使它很舊、排在第一頁之外
-            groups = [g for g in groups if os.path.join(g[0][2], g[0][1]) in pinned] + \
-                     [g for g in groups if os.path.join(g[0][2], g[0][1]) not in pinned]
+        # 釘選的檔案只要符合目前的篩選，就固定在最上面（即使它很舊、排在第一頁之外）
+        groups = [g for g in groups if os.path.join(g[0][2], g[0][1]) in pinned] + \
+                 [g for g in groups if os.path.join(g[0][2], g[0][1]) not in pinned]
         for head, others, gtype in groups[:limit]:
             d = card(head)
             d.update(group=gtype, versions=[card(o) for o in others[:60]], more=max(0, len(others) - 60),
                      later=later.get(id(head), 0),
                      check=gtype == "version" and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
             rows.append(d)
-        if plain:  # 沒有篩選時：釘選 → 常用（開過兩次以上，最多 4 個）→ 其餘依時間
+        if plain:  # 沒有篩選時，釘選之後接「常用」（開過兩次以上，最多 4 個），其餘依時間
             often = sorted((d for d in rows if not d["pinned"] and opened.get(d["path"], 0) >= 2),
                            key=lambda d: -opened[d["path"]])[:4]
             for d in often:
