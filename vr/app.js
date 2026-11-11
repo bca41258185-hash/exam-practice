@@ -157,18 +157,22 @@ function setAmt(g, a) {                                    // 0..1 淡入；0 �
   });
 }
 const F = {};                                              // 各「圖層」
+const TABLE_R = 104;                                       // VR 桌面模型的地面半徑（公尺）
 const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name]);
 
 // ---------- 周邊環境 ----------
 {
   const g = layer('ctx');
-  const big = new THREE.Shape();
-  big.moveTo(-420, -420); big.lineTo(420, -420); big.lineTo(420, 420); big.lineTo(-420, 420); big.closePath();
-  big.holes.push(shapeOf(SITE.poly));                      // 基地挖洞，才能在分區章節看到地下室
-  const gg = new THREE.ShapeGeometry(big); gg.rotateX(-Math.PI / 2);
-  const ground = new THREE.Mesh(gg, mat(0xeef1ec));
-  ground.position.y = -0.03; ground.receiveShadow = true;
-  g.add(ground);
+  const sq = r => { const q = new THREE.Shape(); q.moveTo(-r, -r); q.lineTo(r, -r); q.lineTo(r, r); q.lineTo(-r, r); q.closePath(); return q; };
+  const ground = (shape, hole) => {
+    shape.holes.push(hole);
+    const gg = new THREE.ShapeGeometry(shape); gg.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(gg, mat(0xeef1ec));
+    m.position.y = -0.03; m.receiveShadow = true;
+    g.add(m); return m;
+  };
+  ground(sq(TABLE_R), shapeOf(SITE.poly));                 // 基地挖洞，才能在分區章節看到地下室
+  F.outer = ground(sq(420), sq(TABLE_R));                  // 外圈：VR 桌面模型模式時隱藏
   const pit = box(-0.5, 50.5, -0.5, 52.5, -4.6, -4.2, mat(0xcfd6dc), false, false);
   g.add(pit);
   for (const r of CONTEXT.roads) {
@@ -592,36 +596,96 @@ function drawPanel(ch) {
   x.fillStyle = '#1f2430'; x.font = `500 29px ${FONT}`;
   let ln = '', y = 82;
   for (const chr of ch.say) {
-    if (x.measureText(ln + chr).width > W - 60) { x.fillText(ln, 30, y); y += 40; ln = ''; if (y > H - 40) break; }
+    if (x.measureText(ln + chr).width > W - 60) { x.fillText(ln, 30, y); y += 40; ln = ''; if (y > H - 80) break; }
     ln += chr;
   }
-  if (y <= H - 40) x.fillText(ln, 30, y);
+  if (y <= H - 80) x.fillText(ln, 30, y);
+  if (renderer.xr.isPresenting || XR.session) { x.fillStyle = '#6b7280'; x.font = `500 21px ${FONT}`; x.fillText(XR_HINT, 30, H - 34); }
   panel.t.needsUpdate = true;
 }
 
-// ---------- WebXR（Quest 等頭戴裝置）----------
-const XR_SCALE = 1 / 70;
-if (navigator.xr?.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { $('bXR').hidden = !ok; }).catch(() => { });
-$('bXR').onclick = async () => {
+// ---------- WebXR：PC VR（SteamVR／Quest Link）與一體機 ----------
+// 桌面模式＝1:100 模型放在面前；實境模式＝1:1 走進基地。
+const XR = { mode: 'table', auto: true, yaw: 0, zoom: 1, pivot: new THREE.Vector3(), walkYaw: 0, k: 0, chapter: -1, prev: {}, snapReady: true, session: null };
+const TABLE = { scale: 1 / 100, pos: new THREE.Vector3(0, 0.9, -1.25) };
+const UP = THREE.Object3D.DEFAULT_UP;
+const XR_HINT = '扳機 下一段｜握把 上一段｜A/X 桌面⇄1:1｜B/Y 播放暫停｜右搖桿 旋轉縮放｜左搖桿 行走';
+const xrSupported = navigator.xr?.isSessionSupported
+  ? navigator.xr.isSessionSupported('immersive-vr').catch(() => false) : Promise.resolve(false);
+xrSupported.then(ok => { $('bXR').hidden = !ok; });
+for (let i = 0; i < 2; i++) {                               // 控制器射線
+  const c = renderer.xr.getController(i);
+  c.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1.2)]),
+    new THREE.LineBasicMaterial({ color: 0x2563eb })));
+  scene.add(c);
+}
+function shadowScale(k) {                                   // 模型縮小時陰影範圍要跟著縮
+  Object.assign(sun.shadow.camera, { left: -110 * k, right: 110 * k, top: 110 * k, bottom: -110 * k, near: 1 * k, far: 400 * k });
+  sun.shadow.camera.updateProjectionMatrix();
+}
+function xrWalkFrom(p, l) { XR.pivot.set(p.x, 0, p.z); XR.walkYaw = Math.atan2(l.x - p.x, -(l.z - p.z)); }
+function xrToggleMode() {
+  XR.auto = false;
+  XR.mode = XR.mode === 'table' ? 'walk' : 'table';
+  if (XR.mode === 'walk') xrWalkFrom(V(11, 8), V(30, 30));
+}
+async function enterXR() {
   try {
     const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
     renderer.xr.setReferenceSpaceType('local-floor');
     await renderer.xr.setSession(s);
+    XR.session = s; XR.auto = true; XR.chapter = -1; XR.yaw = 0; XR.zoom = 1; XR.prev = {};
+    scene.add(panel.m); panel.m.position.set(0, 1.75, -2.6); panel.m.rotation.set(0, 0, 0); panel.m.scale.setScalar(1.8);
     s.addEventListener('select', () => go(S.i === LAST ? 0 : S.i + 1, true));
-    s.addEventListener('end', () => { world.position.set(0, 0, 0); world.rotation.set(0, 0, 0); world.scale.setScalar(1); setLabelScale(1); layout(); });
-    if (!S.playing) $('bPlay').click();
+    s.addEventListener('squeeze', () => go(S.i - 1, true));
+    s.addEventListener('end', () => {
+      XR.session = null; XR.k = 0;
+      world.position.set(0, 0, 0); world.rotation.set(0, 0, 0); world.scale.setScalar(1);
+      F.outer.visible = true; setLabelScale(1); shadowScale(1);
+      camera.add(panel.m); panel.m.position.set(0, -0.52, -1.9); panel.m.rotation.set(-0.2, 0, 0); panel.m.scale.setScalar(1);
+      S.free = false; drawPanel(CHAPTERS[S.i]); layout();
+    });
+    $('start')?.remove(); syncBtns();
+    go(S.i, true);
   } catch (e) { toast('無法進入 VR：' + e.message); }
-};
+}
+$('bXR').onclick = enterXR;
 function setLabelScale(k) { for (const l of labels) l.scale.set(l.userData.base[0] * k, l.userData.base[1] * k, 1); }
-let xrScale = 0;
-function placeWorldForXR(ps) {                              // 桌上模型（1:70）；最後一段切成 1:1 站在廣場
-  const walk = !!CHAPTERS[S.i].walk, k = walk ? 1 : XR_SCALE;
-  const f = ps.l.clone().sub(ps.p); const th = Math.atan2(f.x, -f.z);
+const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _d = new THREE.Vector3();
+function xrTick(ps, dt) {
+  if (XR.chapter !== S.i) {                                 // 換段：最後一段自動切成 1:1（手動切換後不再自動）
+    XR.chapter = S.i;
+    if (XR.auto) { XR.mode = CHAPTERS[S.i].walk ? 'walk' : 'table'; if (XR.mode === 'walk') xrWalkFrom(V(...CHAPTERS[S.i].cam), V(...CHAPTERS[S.i].look)); }
+  }
+  for (const src of XR.session?.inputSources || []) {      // 搖桿與按鍵
+    const gp = src.gamepad; if (!gp) continue;
+    const dz = v => (Math.abs(v || 0) < 0.2 ? 0 : v);
+    const ax = gp.axes.length >= 4 ? dz(gp.axes[2]) : dz(gp.axes[0]), ay = gp.axes.length >= 4 ? dz(gp.axes[3]) : dz(gp.axes[1]);
+    const hand = src.handedness || 'none', was = XR.prev[hand] || [], now = gp.buttons.map(b => b.pressed);
+    XR.prev[hand] = now;
+    if (now[4] && !was[4]) xrToggleMode();
+    if (now[5] && !was[5]) $('bPlay').click();
+    if (XR.mode === 'table') {
+      XR.yaw += ax * 1.6 * dt;
+      XR.zoom = Math.min(5, Math.max(0.5, XR.zoom * Math.exp(-ay * 1.2 * dt)));
+    } else if (hand === 'right') {                          // 右手：30° 分段轉向（避免暈眩）
+      if (Math.abs(ax) < 0.3) XR.snapReady = true;
+      else if (XR.snapReady && Math.abs(ax) > 0.6) { XR.snapReady = false; XR.walkYaw += Math.sign(ax) * Math.PI / 6; }
+    } else {                                                // 左手：朝視線方向行走
+      renderer.xr.getCamera().getWorldDirection(_f); _f.y = 0; _f.normalize();
+      _r.crossVectors(_f, UP);
+      _d.copy(_f).multiplyScalar(-ay).addScaledVector(_r, ax).multiplyScalar(3 * dt).applyAxisAngle(UP, -XR.walkYaw);
+      XR.pivot.add(_d);
+    }
+  }
+  const walk = XR.mode === 'walk', k = walk ? 1 : TABLE.scale * XR.zoom;
+  const th = walk ? XR.walkYaw : Math.atan2(ps.l.x - ps.p.x, -(ps.l.z - ps.p.z)) + XR.yaw;
   world.rotation.set(0, th, 0); world.scale.setScalar(k);
-  const pivot = walk ? new THREE.Vector3(ps.p.x, 0, ps.p.z) : new THREE.Vector3();
-  pivot.multiplyScalar(k).applyAxisAngle(THREE.Object3D.DEFAULT_UP, th);
-  world.position.copy(walk ? new THREE.Vector3() : new THREE.Vector3(0, 1.0, -1.0)).sub(pivot);
-  if (xrScale !== k) { xrScale = k; setLabelScale(1 / k); }
+  _d.copy(walk ? XR.pivot : _d.set(0, 0, 0)).multiplyScalar(k).applyAxisAngle(UP, th);
+  world.position.copy(walk ? _f.set(0, 0, 0) : TABLE.pos).sub(_d);
+  F.outer.visible = walk;
+  panel.m.position.set(0, walk ? 0.8 : 1.75, walk ? -2.2 : -2.6); panel.m.rotation.x = walk ? -0.55 : 0;   // 1:1 時字幕板放低，不擋視線
+  if (XR.k !== k) { XR.k = k; setLabelScale(1 / k); shadowScale(k); }
 }
 
 // ---------- 版面 ----------
@@ -655,7 +719,7 @@ renderer.setAnimationLoop(now => {
   applyState(S.i, S.t);
   const ps = pose(S.i, S.t), xr = renderer.xr.isPresenting;
   panel.m.visible = S.stereo || xr;
-  if (xr) placeWorldForXR(ps);
+  if (xr) xrTick(ps, dt);
   else if (!S.free) {
     camera.position.copy(ps.p); camera.lookAt(ps.l); controls.target.copy(ps.l);
     const fov = 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(ps.fov / 2)) * camera.userData.portraitBoost));
@@ -677,6 +741,8 @@ $('sRefs').innerHTML = `<a href="${META.examUrl}" target="_blank" rel="noopener"
 const begin = voice => { S.voice = voice; $('start').remove(); syncBtns(); go(0, true); };
 $('bStart').onclick = () => begin(true);
 $('bStartMute').onclick = () => begin(false);
+$('bStartXR').onclick = () => { S.voice = true; enterXR(); };
+xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先啟動 SteamVR 或 Quest Link，並用 Chrome／Edge 開啟本頁（需 https）。'; });
 $('cD').addEventListener('toggle', layout);
 syncBtns(); showCaption(); applyState(0, 0);
-window.__vr = { S, go, setPlaying, N, applyState, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
