@@ -1,5 +1,5 @@
 // 版本 B 街道家具與場所細節：路燈、旗桿、圍樹座椅、花台、車阻、標線、緣石、車輛、Ubike、指標、雨水花園、衛生所前庭
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 
 export function buildDetails(ctx) {
   const { V, box, mat, tex, setAmt, layer, amt, LAST, scheme } = ctx;
@@ -151,7 +151,7 @@ export function buildDetails(ctx) {
     const o = new THREE.Group(), m = CARS[(k + 2) % CARS.length];
     part(o, scBody, m, -0.05, 0.42, 0); part(o, scShield, m, 0.5, 0.75, 0); part(o, scSeat, dark, -0.25, 0.68, 0);
     part(o, scBar, metal, 0.52, 1.08, 0, false); part(o, scWheel, rubber, 0.6, 0.22, 0, false); part(o, scWheel, rubber, -0.6, 0.22, 0, false);
-    put(o, x, 9 + k * 0.85, 0.02, 0);
+    put(o, x, 9 + k * 0.85, 0.17, 0);          // 站在對側人行道面上
   });
 
   // ---------- 9 Ubike（停靠在既有車架之間） ----------

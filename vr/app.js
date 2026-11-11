@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { StereoEffect } from './vendor/StereoEffect.js';
 import { Sky } from './vendor/Sky.js';
@@ -333,8 +333,13 @@ const N = CHAPTERS.length, LAST = N - 1;
 const OFF = scheme.INTRO || 0;                              // 版本可在最前面加序章；其餘邏輯用 j = i - OFF
 let clock = 0;
 // 第 4 段以後的量體、分區、動線、立面等圖層由各版本模組建立
-const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js'))
-  .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY, tex });
+const CTX = { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY, tex };
+const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js')).build(CTX);
+// 街道設施與鄰房細部：兩個版本共用，跟著周邊環境一起顯示
+const extras = [];
+for (const f of ['street-detail', 'context-detail']) {
+  try { extras.push((await import(`./${f}.js`)).build(CTX)); } catch (e) { console.warn('細部模組載入失敗', f, e); }
+}
 function applyState(ri, t) {
   const i = ri - OFF;
   F.ctx.visible = F.site.visible = i >= 0 || t > 0.93;                        // 序章時隱藏城鎮模型
@@ -346,6 +351,9 @@ function applyState(ri, t) {
   setAmt(F.prog, amt(i, t, 3));
   F.progBars.scale.y = i === 3 ? Math.max(0.001, smooth(t / 0.35)) : 1;
   applyCase(i, t);
+  for (const a of extras) a(i, t);
+  if (F.street) F.street.visible = F.ctx.visible;
+  if (F.ctxDetail) F.ctxDetail.visible = F.ctx.visible;
   // 太陽：基地分析章節由東向西移動
   if (i === 1) { const p = sunPos(lerp(0.12, 0.9, t) * Math.PI); sunBall.position.copy(p); sun.position.copy(p); }
   else sun.position.copy(SUN_HOME);
@@ -354,6 +362,7 @@ function applyState(ri, t) {
 }
 
 // ---------- 寫實模式：天空、環境反射、材質貼圖、斜陽 ----------
+const ELEV_CLIP = [new THREE.Plane(new THREE.Vector3(0, 0, -1), 9.6 + CY)];   // 只留基地座標 y > -9.6
 const SUN_REAL = V(-70, -55, 48);
 const skyParams = s => { const u = s.material.uniforms; u.turbidity.value = 5; u.rayleigh.value = 1.1; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82; u.sunPosition.value.copy(SUN_REAL).normalize(); };
 const sky = new Sky(); sky.scale.setScalar(1400); sky.visible = false; skyParams(sky); scene.add(sky);
@@ -660,10 +669,15 @@ function tick(now) {
   applyState(S.i, S.t);
   const ps = pose(S.i, S.t), xr = renderer.xr.isPresenting;
   // 寫實模式：最後一段自動啟用，或由按鈕強制；最後一段同時隱藏標註，畫面只留建築
+  const clip = !!F.elevCut && !xr;                           // 版本模組要求剖立面視角時才裁切
+  if (clip !== S.clip) { S.clip = clip; renderer.clippingPlanes = clip ? ELEV_CLIP : []; }
   setReal(S.real || !!CHAPTERS[S.i].real);
   if (realOn) { sun.position.copy(SUN_REAL); scene.fog.color.set(0xd9e4ee); }
   const hideLbl = !!CHAPTERS[S.i].real;
-  if (hideLbl || S.lblHidden) { S.lblHidden = hideLbl; for (const l of labels) l.visible = !hideLbl; }
+  if (hideLbl || S.lblHidden) {
+    S.lblHidden = hideLbl; for (const l of labels) l.visible = !hideLbl;
+    if (!hideLbl) F.siteLabel.userData.a = undefined;         // 讓基地標籤依章節重新套用顯示狀態
+  }
   panel.m.visible = S.stereo || xr;
   if (xr) xrTick(ps, dt);
   else if (!S.free) {

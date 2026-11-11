@@ -1,5 +1,5 @@
 // 周邊建築細節：公有市場、透天厝街屋、國小校舍與校園、衛生所——把灰色量體打扮成南台灣小鎮街景
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 
 export function build(ctx) {
   const { V, box, mat, tex, layer, line } = ctx;

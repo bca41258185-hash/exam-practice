@@ -1,5 +1,5 @@
 // 街道基礎設施（兩版本共用）：對側人行道與緣石、路口標線、號誌、電桿與架空線、公車亭、機車停車、標誌、公有停車場整備、排水與街道小物
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 
 export function build(ctx) {
   const { V, box, mat, tex, layer } = ctx;
