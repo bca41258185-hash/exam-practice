@@ -3,7 +3,9 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 import { StereoEffect } from './vendor/StereoEffect.js';
 import { Sky } from './vendor/Sky.js';
 // 版本切換：?case=b 為手繪解題圖版本，預設為示範方案
-const CASE = new URLSearchParams(location.search).get('case') === 'b' ? 'b' : 'a';
+const QS = new URLSearchParams(location.search);
+const CASE = QS.get('case') === 'b' ? 'b' : 'a';
+const REC = QS.has('rec');                                  // 逐格錄影模式：隱藏介面，由外部腳本逐格取圖
 const scheme = await import(CASE === 'b' ? './scheme-b.js' : './scheme.js');
 const { META, SITE, CONTEXT, ZONES, PROGRAM, CHECKS, CHAPTERS } = scheme;
 
@@ -335,7 +337,7 @@ const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js'))
   .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY, tex });
 function applyState(ri, t) {
   const i = ri - OFF;
-  F.ctx.visible = i >= 0 || t > 0.93;                        // 序章時隱藏城鎮模型
+  F.ctx.visible = F.site.visible = i >= 0 || t > 0.93;                        // 序章時隱藏城鎮模型
   setAmt(F.dims, amt(i, t, 0, 2));
   setAmt(F.siteLabel, i >= 0 && i <= 2 ? 1 : 0);
   setAmt(F.ana, amt(i, t, 1));
@@ -629,7 +631,7 @@ function layout() {
   renderer.setSize(w, h); stereoFx.setSize(w, h);
   camera.aspect = asp;
   camera.userData.portraitBoost = asp < 1.15 ? Math.min(1.75, 1.15 / asp) : 1;
-  const capH = S.stereo ? 0 : document.querySelector('.cap').offsetHeight;
+  const capH = S.stereo || REC ? 0 : document.querySelector('.cap').offsetHeight;
   if (capH && !renderer.xr.isPresenting) camera.setViewOffset(w, h, 0, Math.round(capH * 0.42), w, h); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
@@ -638,7 +640,7 @@ addEventListener('resize', layout);
 // ---------- 主迴圈 ----------
 let last = performance.now();
 const tmpQ = new THREE.Quaternion();
-renderer.setAnimationLoop(now => {
+function tick(now) {
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now; clock += dt;
   const ch = CHAPTERS[S.i];
   if (S.playing) {
@@ -670,7 +672,8 @@ renderer.setAnimationLoop(now => {
     }
   } else controls.update();
   if (S.stereo && !xr) stereoFx.render(scene, camera); else renderer.render(scene, camera);
-});
+}
+renderer.setAnimationLoop(tick);
 
 // ---------- 開場 ----------
 $('sTitle').textContent = `VR 設計講解｜${META.title}`;
@@ -687,4 +690,7 @@ $('bStartXR').onclick = () => { S.voice = true; enterXR(); };
 xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先用 Virtual Desktop、SteamVR 或 Quest Link 連上電腦並啟動 VR，再用 Chrome／Edge 開啟本頁（需 https 或 localhost）。'; });
 $('cD').addEventListener('toggle', layout);
 syncBtns(); showCaption(); applyState(0, 0);
-window.__vr = { exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+if (REC) document.body.classList.add('rec');
+// 逐格算圖：設定章節與進度後立刻算一格並回傳 JPEG（不依賴實際時間，所以不會掉幀）
+const frame = (i, t, c) => { S.i = i; S.t = t; S.playing = false; S.free = false; clock = c; tick(last); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
+window.__vr = { frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
