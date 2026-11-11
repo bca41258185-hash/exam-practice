@@ -450,6 +450,9 @@ $('bPlay').onclick = () => {
 $('bPrev').onclick = () => go(S.t > 0.15 && S.playing ? S.i : S.i - 1);
 $('bNext').onclick = () => go(S.i + 1);
 $('bReal').onclick = () => { S.real = !S.real; };
+// 錄影用乾淨畫面：隱藏工具列與控制列，只留字幕；H 鍵切換
+const setClean = on => { document.body.classList.toggle('clean', on); layout(); if (on) { toast('錄影畫面：按 H 顯示按鈕，空白鍵播放／暫停'); document.documentElement.requestFullscreen?.().catch(() => { }); } };
+$('bClean').onclick = () => setClean(true);
 // 匯出目前畫面的模型（.glb），可匯入 Twinmotion、D5、Unreal、Blender 等做高階渲染
 async function exportGlb() {
   const { GLTFExporter } = await import('./vendor/GLTFExporter.js');
@@ -468,6 +471,7 @@ $('bVoice').onclick = () => { S.voice = !S.voice; if (!S.voice) hush(); syncBtns
 controls.addEventListener('start', () => { if (!S.free) { S.free = true; setPlaying(false); } });
 addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
+  if (e.key === 'h' || e.key === 'H') setClean(!document.body.classList.contains('clean'));
   if (e.key === 'ArrowRight') $('bNext').click();
   if (e.key === 'ArrowLeft') $('bPrev').click();
 });

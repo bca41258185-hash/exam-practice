@@ -51,6 +51,7 @@ summary{cursor:pointer;font-weight:700;color:var(--brand-d);}
 .big{display:block;width:100%;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;background:var(--brand);color:#fff;margin-top:10px;}
 .refs{font-size:12.5px;color:var(--muted);margin-top:12px;}
 .refs a{color:var(--brand-d);}
+body.clean .top,body.clean .ctl,body.clean details{display:none;}
 body.stereo .top,body.stereo .bottom,body.rec .top,body.rec .bottom,body.rec #start{display:none;}
 #exitStereo{display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:5;opacity:.6;}
 body.stereo #exitStereo{display:block;}
@@ -65,6 +66,7 @@ body.stereo #exitStereo{display:block;}
 <div class="top">
   <a class="pill" href="../index.html">← 題庫</a>
   <div class="tools">
+    <button class="pill" id="bClean" title="隱藏按鈕，方便螢幕錄影（按 H 切換）">🎬 錄影</button>
     <button class="pill" id="bGlb" title="匯出 3D 模型供專業渲染軟體使用">⬇ 模型</button>
     <button class="pill" id="bReal" title="寫實渲染（最後一段自動開啟）">🎨 寫實</button>
     <button class="pill" id="bVoice" title="語音旁白">🔊 旁白</button>
@@ -98,6 +100,7 @@ body.stereo #exitStereo{display:block;}
     <ul>
       <li id="sList"></li>
       <li>拖曳可自由轉視角（會暫停），按 ▶ 回到導覽</li>
+      <li>🎬 錄影：隱藏按鈕只留字幕，方便螢幕錄影；按 H 切換、空白鍵播放／暫停</li>
       <li>📱 環視：轉動手機看四周　👓 雙眼：放進 Cardboard</li>
       <li>🥽 PC VR：扳機下一段、握把上一段、A/X 切換桌面模型⇄1:1 走進基地、右搖桿旋轉縮放、左搖桿行走</li>
     </ul>
