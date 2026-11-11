@@ -1,6 +1,7 @@
 // 版本 B：依手繪解題圖重建——西側雙棟＋弧形洽公廊、東側鄰里共融廣場、頂層禮堂、GLT 構造
 import * as THREE from 'three';
 import { buildIntro } from './intro-fire.js';
+import { buildDetails } from './details-b.js';
 
 export function build(ctx) {
   const { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme, CX, CY, tex } = ctx;
@@ -351,8 +352,10 @@ export function build(ctx) {
   // ---- 每格更新 ----
   const grow = (grp, base, g, lift = 0) => { grp.scale.y = Math.max(0.001, g); grp.position.y = base * (1 - g) + lift; };
   const intro = buildIntro(ctx);                             // 序章：原始人學會用火（i === -1）
+  const details = buildDetails(ctx);                         // 街道家具與基地細部
   return function apply(i, t) {
     intro(i, t);
+    details(i, t);
     F.peopleMat.color.set(i >= LAST - 1 ? 0x3a4046 : 0xd9483b);   // 寫實段落：人改為深灰剪影
     setAmt(F.zoning, amt(i, t, 4));
     const ghost = i === 10 ? lerp(1, 0.2, smooth(t / 0.2)) : 1;
