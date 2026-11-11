@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>VR 設計講解｜114年 鄉公所行政大樓</title>
 <style>
+[hidden]{display:none!important;}
 :root{--ink:#1f2430;--muted:#6b7280;--line:#e4e7ec;--brand:#2563eb;--brand-d:#1d4ed8;--card:rgba(255,255,255,.94);}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;height:100%;overflow:hidden;background:#dfe7ee;color:var(--ink);
@@ -25,6 +26,8 @@ button{font:inherit;color:inherit;cursor:pointer;}
 .cap h2{margin:0 0 4px;font-size:16px;}
 .cap h2 .n{color:var(--brand-d);font-variant-numeric:tabular-nums;margin-right:6px;}
 .cap p{margin:0;font-size:14px;max-height:9.4em;overflow:auto;}
+.tip{margin-top:6px;font-size:13px;font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:5px 9px;}
+.ver{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;}
 .keys{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .keys span{font-size:12px;font-weight:700;background:#eef2ff;color:var(--brand-d);border-radius:999px;padding:3px 9px;}
 .checks{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;max-height:28vh;overflow:auto;}
@@ -74,6 +77,7 @@ body.stereo #exitStereo{display:block;}
   <div class="cap">
     <h2><span class="n" id="cN"></span><span id="cT"></span></h2>
     <p id="cP"></p>
+    <div class="tip" id="cTip" hidden></div>
     <div class="keys" id="cK"></div>
     <details id="cD" hidden><summary>法規檢核表（點開）</summary><ul class="checks" id="cC"></ul></details>
     <div class="ctl">
@@ -90,11 +94,12 @@ body.stereo #exitStereo{display:block;}
     <h1 id="sTitle"></h1>
     <p class="sub" id="sSub"></p>
     <ul>
-      <li>14 段、約 4 分鐘：基地分析 → 法規量體 → 定量 → 配置 → 量體 → 分區 → 動線 → 氣候 → 防災 → 結構 → 立面設計 → 立面材料 → 檢核</li>
+      <li id="sList"></li>
       <li>拖曳可自由轉視角（會暫停），按 ▶ 回到導覽</li>
       <li>📱 環視：轉動手機看四周　👓 雙眼：放進 Cardboard</li>
       <li>🥽 PC VR：扳機下一段、握把上一段、A/X 切換桌面模型⇄1:1 走進基地、右搖桿旋轉縮放、左搖桿行走</li>
     </ul>
+    <div class="ver"><a class="pill" id="vA" href="?case=a">版本 A｜示範方案</a><a class="pill" id="vB" href="?case=b">版本 B｜手繪解題圖</a></div>
     <div class="note" id="sNote"></div>
     <button class="big" id="bStartXR" hidden style="background:#111827">🥽 以 VR 頭戴裝置觀看（PC VR／Quest）</button>
     <button class="big" id="bStart">▶ 開始播放（含語音旁白）</button>
