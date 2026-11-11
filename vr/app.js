@@ -37,7 +37,8 @@ scene.add(camera);
 const world = new THREE.Group();                           // 所有模型都放這裡，VR 時整體縮放成桌上模型
 scene.add(world);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c2cc, 1.15));
+const hemi = new THREE.HemisphereLight(0xffffff, 0xb9c2cc, 1.15);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.1);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -191,8 +192,10 @@ const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name])
   for (let x = pk.x0 + 4; x < pk.x1 - 2; x += 2.6)
     for (const y of [58, 70, 76, 88]) g.add(line([V(x, y, 0.05), V(x, y - 5, 0.05)], 0xffffff, false, 0.9));
   for (const b of CONTEXT.blocks) {
-    g.add(box(b.x0, b.x1, b.y0, b.y1, 0, b.h, mat(0xd3d8de)));
-    if (b.name) g.add(label(b.name, V((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h + 1), { size: 0.85, color: '#374151', occlude: true }));
+    const bm = box(b.x0, b.x1, b.y0, b.y1, 0, b.h, mat(0xd3d8de));
+    g.add(bm);
+    if (b.y1 < 0) (F.southBlocks ||= []).push(bm);      // 南側鄰房：看剖立面時暫時隱藏
+    if (b.name) { const lb = label(b.name, V((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h + 1), { size: 0.85, color: '#374151', occlude: true }); g.add(lb); if (b.y1 < 0) F.southBlocks.push(lb); }
   }
   g.add(label(CONTEXT.gate.name, V(CONTEXT.gate.x, CONTEXT.gate.y, 1), { size: 0.8, color: '#b45309' }));
   // 指北
@@ -266,13 +269,16 @@ const sunPos = a => V(25 + 62 * Math.cos(a), 25 - 62 * Math.sin(a) * 0.5, 62 * M
 const amt = (i, t, k0, k1 = k0, ramp = 0.22) => (i < k0 || i > k1 ? 0 : i === k0 ? smooth(t / ramp) : 1);
 const bump = t => smooth((t - 0.12) / 0.22) * (1 - smooth((t - 0.86) / 0.12));
 const N = CHAPTERS.length, LAST = N - 1;
+const OFF = scheme.INTRO || 0;                              // 版本可在最前面加序章；其餘邏輯用 j = i - OFF
 let clock = 0;
 // 第 4 段以後的量體、分區、動線、立面等圖層由各版本模組建立
 const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js'))
-  .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme, world, CX, CY });
-function applyState(i, t) {
+  .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY });
+function applyState(ri, t) {
+  const i = ri - OFF;
+  F.ctx.visible = i >= 0 || t > 0.93;                        // 序章時隱藏城鎮模型
   setAmt(F.dims, amt(i, t, 0, 2));
-  setAmt(F.siteLabel, i <= 2 ? 1 : 0);
+  setAmt(F.siteLabel, i >= 0 && i <= 2 ? 1 : 0);
   setAmt(F.ana, amt(i, t, 1));
   setAmt(F.setback, amt(i, t, 2, 4));
   setAmt(F.legal, amt(i, t, 2));
@@ -510,7 +516,8 @@ function xrTick(ps, dt) {
   const walk = XR.mode === 'walk', k = walk ? 1 : TABLE.scale * XR.zoom;
   const th = walk ? XR.walkYaw : Math.atan2(ps.l.x - ps.p.x, -(ps.l.z - ps.p.z)) + XR.yaw;
   world.rotation.set(0, th, 0); world.scale.setScalar(k);
-  _d.copy(walk ? XR.pivot : _d.set(0, 0, 0)).multiplyScalar(k).applyAxisAngle(UP, th);
+  const pv = CHAPTERS[S.i].pivot;                           // 該段場景不在基地上時，桌面模型改以它為中心
+  _d.copy(walk ? XR.pivot : pv ? V(pv[0], pv[1], 0) : _d.set(0, 0, 0)).multiplyScalar(k).applyAxisAngle(UP, th);
   world.position.copy(walk ? _f.set(0, 0, 0) : TABLE.pos).sub(_d);
   F.outer.visible = walk;
   panel.m.position.set(0, walk ? 0.8 : 1.75, walk ? -2.2 : -2.6); panel.m.rotation.x = walk ? -0.55 : 0;   // 1:1 時字幕板放低，不擋視線

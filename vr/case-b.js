@@ -1,5 +1,6 @@
 // 版本 B：依手繪解題圖重建——西側雙棟＋弧形洽公廊、東側鄰里共融廣場、頂層禮堂、GLT 構造
 import * as THREE from 'three';
+import { buildIntro } from './intro-fire.js';
 
 export function build(ctx) {
   const { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme, CX, CY } = ctx;
@@ -108,7 +109,7 @@ export function build(ctx) {
     for (const x of [10, 17, 24]) tree(x, 30.5, 0.7);
     for (let x = 39.5; x <= 49.5; x += 2.6) { tree(x, 46, 1.0, dark); tree(x + 1.2, 49, 1.05, dark); }   // 防風喬林
     tree(OLD_TREE[0], OLD_TREE[1], 1.5, red);                                    // 老樹
-    tree(41, 30, 0.8); tree(47, 36, 0.8);
+    tree(40.5, 38, 0.8); tree(48.5, 40, 0.8);
 
     const l = layer('massLbl');
     l.add(label('鄉公所行政大樓 32×16 m・5F', V(24, 14, M.top + 3), { color: '#1e40af' }));
@@ -207,7 +208,7 @@ export function build(ctx) {
   {
     const g = layer('facade');
     const glass = mat(0x6f97ab, 0.86, { roughness: 0.12, metalness: 0.35 });
-    const wood = mat(0xa8743a), drip = mat(0xe9e6df), frame = mat(0x4b5258);
+    const wood = mat(0xa8743a), drip = mat(0xe9e6df), frame = mat(0x4b5258), shrub = mat(0x5fae6a), brickM = mat(0xa9654d);
     M.floors.forEach((f, k) => {
       const z = zs[k], a = xs(k) + 0.4, b = M.coreX - 0.3, s0 = z + (k === 0 ? 0.2 : 0.9), s1 = z + f.h - 0.6;
       g.add(box(a, b, M.y0 - 0.08, M.y0 + 0.05, s0, s1, glass, false, false));
@@ -230,6 +231,85 @@ export function build(ctx) {
     for (let x = G.x0 + 3; x <= G.x1 - 3; x += 2.5) g.add(box(x - 0.06, x + 0.06, G.y1, G.y1 + 0.1, FLOOR0, FLOOR0 + G.h, frame, false, false));
     g.add(box(G.x0, G.x1, G.y0 + 0.05, G.y1 + 0.15, FLOOR0 + 4.3, FLOOR0 + 4.6, drip, false, false));
 
+    // ---- 立面細部：窗框分割、磚縫、欄杆、植栽、人、屋架、逃生梯 ----
+    const thin = (x0, x1, y0, y1, z0, z1, m = frame) => g.add(box(x0, x1, y0, y1, z0, z1, m, false, false));
+    const brick = [], rail = [];
+    const courses = (x0, x1, y, z0, z1) => { for (let z = z0 + 0.3; z < z1; z += 0.38) brick.push(V(x0, y, z), V(x1, y, z)); };
+    M.floors.forEach((f, k) => {
+      const z = zs[k], a = xs(k) + 0.4, b = M.coreX - 0.3, s0 = z + (k === 0 ? 0.2 : 0.9), s1 = z + f.h - 0.6;
+      for (let x = a; x <= b + 0.01; x += (b - a) / Math.round((b - a) / 1.9)) thin(x - 0.05, x + 0.05, M.y0 - 0.16, M.y0 - 0.06, s0, s1);   // 直框
+      thin(a, b, M.y0 - 0.16, M.y0 - 0.06, s0 + (s1 - s0) * 0.68, s0 + (s1 - s0) * 0.68 + 0.07);                                         // 橫框
+      if (k > 0) courses(xs(k), M.coreX, M.y0 - 0.02, z, z + 0.9);                                                                       // 窗台牆磚縫
+      courses(M.coreX, M.x1, M.y0 - 0.02, z, z + f.h); courses(M.coreX, M.x1, M.y1 + 0.02, z, z + f.h);
+      for (let zz = z + 0.3; zz < z + f.h; zz += 0.38) brick.push(V(M.x1 + 0.02, M.y0, zz), V(M.x1 + 0.02, 11, zz), V(M.x1 + 0.02, 17, zz), V(M.x1 + 0.02, M.y1, zz));
+      thin(M.coreX + 1.6, M.coreX + 3.4, M.y0 - 0.1, M.y0 + 0.03, z + 1.0, z + f.h - 0.9, glass);                                        // 服務核小窗
+      if (k < 4) {                                                                                                                       // 退台：玻璃欄杆、灌木、小樹
+        const tz = z + f.h + 0.3;
+        thin(xs(k), xs(k) + 0.06, M.y0, M.y1, tz, tz + 1.1, mat(0x9fc3d1, 0.45));
+        rail.push(V(xs(k), M.y0, tz + 1.1), V(xs(k), M.y1, tz + 1.1), V(xs(k), M.y0, tz + 1.1), V(xs(k + 1), M.y0, tz + 1.1), V(xs(k), M.y1, tz + 1.1), V(xs(k + 1), M.y1, tz + 1.1));
+        for (let y = M.y0 + 4.5; y < M.y1 - 0.5; y += 2.4) {
+          const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55 + (y * 7 % 3) * 0.12, 0), shrub); sh.position.copy(V(xs(k) + 0.9, y, tz + 0.45)); sh.castShadow = true; g.add(sh);
+        }
+        const tt = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 1), shrub); tt.position.copy(V(xs(k) + 1, M.y1 - 2.2 - k, tz + 1.9)); g.add(tt);
+        thin(xs(k) + 0.94, xs(k) + 1.06, M.y1 - 2.26 - k, M.y1 - 2.14 - k, tz, tz + 1.4, wood);
+      }
+    });
+    // 五樓禮堂：直立木格柵
+    for (let x = xs(4) + 0.8; x < M.coreX - 0.4; x += 0.95) thin(x - 0.07, x + 0.07, M.y0 - 0.5, M.y0 - 0.12, zs[4] + 0.9, M.top - 0.6, wood);
+    // 斜屋頂下的 GLT 椽木與南北封簷
+    const raft = new THREE.Group(); raft.position.copy(F.roof.position); raft.rotation.copy(F.roof.rotation);
+    const rl = M.x1 - xs(4);
+    for (let x = -rl / 2; x <= rl / 2 + 0.01; x += rl / 9) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, M.y1 - M.y0 + 1.4), wood); r.position.set(x, -0.4, 0); raft.add(r); }
+    g.add(raft);
+    thin(xs(4), M.x1, M.y1 - 0.05, M.y1 + 0.06, M.top, M.top + 1.6, glass);                       // 北側高窗
+    // 綠牆花槽
+    for (let x = 17; x <= 31; x += 4.6) thin(x - 0.15, x + 1.75, M.y0 - 0.55, M.y0 - 0.05, zs[1] - 0.1, zs[1] + 0.35, drip);
+    // 東端戶外逃生梯：折返梯段與扶手
+    for (let z = FLOOR0, n = 0; z < M.top - 2; z += 1.9, n++) {
+      const y0 = n % 2 ? 16.6 : 11.4, y1 = n % 2 ? 11.4 : 16.6;
+      rail.push(V(M.x1 + 0.7, y0, z + 0.2), V(M.x1 + 0.7, y1, z + 2.1), V(M.x1 + 1.9, y0, z + 0.2), V(M.x1 + 1.9, y1, z + 2.1));
+      rail.push(V(M.x1 + 2.55, 11, z + 1.2), V(M.x1 + 2.55, 17, z + 1.2));
+    }
+    // 弧形洽公廊：橫框、入口門框、雨庇
+    for (const z of [FLOOR0 + 2.4, FLOOR0 + 6.4]) thin(G.x0 + G.r, G.x1 - G.r, G.y1, G.y1 + 0.1, z, z + 0.07);
+    thin(15.5, 18.5, G.y1 + 0.05, G.y1 + 1.8, FLOOR0 + 2.9, FLOOR0 + 3.1, drip); thin(15.6, 15.75, G.y1 + 1.6, G.y1 + 1.75, FLOOR0, FLOOR0 + 2.9, wood); thin(18.25, 18.4, G.y1 + 1.6, G.y1 + 1.75, FLOOR0, FLOOR0 + 2.9, wood);
+    // 代表會：磚壁柱、窗框、磚縫、屋頂欄杆與灌木、入口雨庇
+    C.floors.forEach((f, k) => {
+      const z = cz[k];
+      for (let x = C.x0; x <= C.x1 + 0.01; x += (C.x1 - C.x0) / 6) { thin(x - 0.3, x + 0.3, C.y0 - 0.25, C.y0, z, z + f.h, brickM); thin(x - 0.3, x + 0.3, C.y1, C.y1 + 0.25, z, z + f.h, brickM); }
+      for (let x = C.x0 + 1.4; x < C.x1 - 1; x += 1.45) thin(x - 0.04, x + 0.04, C.y0 - 0.15, C.y0 - 0.05, z + 0.8, z + f.h - 0.6);
+      courses(C.x0, C.x1, C.y0 - 0.02, z, z + 0.8);
+      for (let zz = z + 0.3; zz < z + f.h; zz += 0.38) brick.push(V(C.x0 - 0.02, C.y0, zz), V(C.x0 - 0.02, C.y1, zz), V(C.x1 + 0.02, C.y0, zz), V(C.x1 + 0.02, C.y1, zz));
+    });
+    rail.push(V(C.x0, C.y0, C.top + 1.3), V(C.x1, C.y0, C.top + 1.3), V(C.x1, C.y0, C.top + 1.3), V(C.x1, C.y1, C.top + 1.3), V(C.x1, C.y1, C.top + 1.3), V(C.x0, C.y1, C.top + 1.3), V(C.x0, C.y1, C.top + 1.3), V(C.x0, C.y0, C.top + 1.3));
+    for (let x = C.x0 + 2; x < C.x1 - 1; x += 3.1) { const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), shrub); sh.position.copy(V(x, C.y0 + 1.6 + (x * 3 % 5), C.top + 0.8)); g.add(sh); }
+    thin(17.5, 20.5, C.y0 - 1.8, C.y0, cz[0] + 2.9, cz[0] + 3.1, drip);
+    const bl = new THREE.LineBasicMaterial({ color: 0x8a4f3a, transparent: true }); bl.userData.o = 0.55;
+    g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(brick), bl));
+    const rm = new THREE.LineBasicMaterial({ color: 0x3f474d, transparent: true }); rm.userData.o = 0.95;
+    g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rail), rm));
+    // 人：手繪圖用紅色小人標示活動
+    const pm = mat(0xd9483b);
+    const person = (x, y, h) => {
+      const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.9, 3, 8), pm), hd = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), pm);
+      b.position.copy(V(x, y, h + 0.65)); hd.position.copy(V(x, y, h + 1.5)); b.castShadow = true; g.add(b, hd);
+    };
+    [[42, 20], [43.5, 22], [41, 33], [47, 12], [41, 9], [45, 16.5], [44, 36], [3, 27], [2, 30], [12, 30], [20, 31], [17, 28.4], [36.5, 24], [8, 3], [30, 2.5], [56, 20], [60, 24]].forEach(([x, y]) => person(x, y, 0.05));
+    for (let k = 0; k < 4; k++) person(xs(k) + 1.1, M.y0 + 5 + k * 2, zs[k] + M.floors[k].h + 0.3);
+    person(14, 40, C.top + 0.35); person(26, 38, C.top + 0.35); person(31.5, 30, zs[1]);
+    // 廣場座椅與 Ubike 架
+    for (const [x, y] of [[41, 16], [47, 17], [44, 18.5]]) thin(x - 0.9, x + 0.9, y - 0.25, y + 0.25, 0.05, 0.5, wood);
+    for (let x = 1; x <= 5; x += 0.8) thin(x - 0.05, x + 0.05, 1.2, 2.6, 0.05, 1.0, frame);
+
+    const e = layer('elevLbl');                                // 剖立面視角的帶狀標註
+    const strip = (t, x) => e.add(label(t, V(x, -1, 0.3), { size: 0.85 }));
+    strip('市場', -29); strip('12M 道路', -6); strip('人行道', 2.5); strip('鄉公所行政大樓', 22); strip('鄰里共融廣場', 45); strip('衛生所', 77); strip('住宅區', 101);
+    e.add(label('5F 鄰里共享禮堂', V(26, M.y0 - 1, zs[4] + 2.5), { color: '#1f2430', bg: '#e9c46af0', size: 0.85 }));
+    e.add(label('屋頂開放空間・人工基盤綠化', V(7, M.y0 - 1, zs[3] + 5.5), { color: '#166534', size: 0.8 }));
+    e.add(label('BERS 屋頂太陽能設施', V(27, M.y0 - 1, M.top + 4), { color: '#fff', bg: 'rgba(30,58,95,.93)', size: 0.85 }));
+    e.add(label('老樹伴讀廣場', V(OLD_TREE[0], OLD_TREE[1], 10.5), { color: '#b91c1c', size: 0.8 }));
+    e.add(label('人本人行道・全區鋪面透水', V(-2, -1, 5), { size: 0.8, color: '#166534' }));
+
     const d = layer('facLbl');
     d.add(label('西端退台與階梯：垂直綠化開放空間', V(5, 5, 16), { color: '#fff', bg: 'rgba(22,101,52,.93)', size: 0.9, occlude: true }));
     d.add(label('南面：GLT 外柱＋滴水線板＝半戶外廊', V(26, 3, 10), { color: '#fff', bg: 'rgba(122,79,29,.95)', size: 0.9, occlude: true }));
@@ -250,7 +330,9 @@ export function build(ctx) {
 
   // ---- 每格更新 ----
   const grow = (grp, base, g, lift = 0) => { grp.scale.y = Math.max(0.001, g); grp.position.y = base * (1 - g) + lift; };
+  const intro = buildIntro(ctx);                             // 序章：原始人學會用火（i === -1）
   return function apply(i, t) {
+    intro(i, t);
     setAmt(F.zoning, amt(i, t, 4));
     const ghost = i === 10 ? lerp(1, 0.2, smooth(t / 0.2)) : 1;
     setAmt(F.mass, amt(i, t, 5, LAST, 0.1) * ghost);
@@ -284,7 +366,10 @@ export function build(ctx) {
     setAmt(F.disaster, amt(i, t, 9));
     setAmt(F.struct, amt(i, t, 10));
     setAmt(F.facade, matT);
-    setAmt(F.facLbl, amt(i, t, 11));
+    const elev = i === 11 && t < 0.42;                         // 立面段前半：正南向剖立面視角
+    setAmt(F.elevLbl, elev ? smooth(t / 0.12) : 0);
+    for (const b of F.southBlocks || []) b.visible = !(i === 11 && t < 0.5);
+    setAmt(F.facLbl, i === 11 && t > 0.5 ? smooth((t - 0.5) / 0.1) : 0);
     setAmt(F.matLbl, amt(i, t, 12));
   };
 }
