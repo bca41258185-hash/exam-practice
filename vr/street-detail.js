@@ -173,7 +173,7 @@ export function build(ctx) {
     };
     const spd = canvasMat(256, 256, (x, w) => { x.fillStyle = '#fff'; x.beginPath(); x.arc(w / 2, w / 2, w / 2 - 2, 0, 7); x.fill(); x.strokeStyle = '#d0201a'; x.lineWidth = 30; x.beginPath(); x.arc(w / 2, w / 2, w / 2 - 18, 0, 7); x.stroke(); txt(x, '30', 112, w / 2 + 6, w, '#111', 800); });
     const disc = new THREE.CircleGeometry(0.33, 28);
-    sign(33.5, -11.5, -HP, disc, spd, W + 2.25); sign(89.5, 1.3, HP, disc, spd, W + 2.25);
+    sign(25, -11.5, -HP, disc, spd, W + 2.25); sign(89.5, 1.3, HP, disc, spd, W + 2.25);
     const warn = canvasMat(256, 256, (x, w) => {
       x.fillStyle = '#fff'; x.beginPath(); x.moveTo(w / 2, 4); x.lineTo(w * 0.93, w * 0.75 - 2); x.lineTo(w * 0.07, w * 0.75 - 2); x.closePath(); x.fill();
       x.strokeStyle = '#d0201a'; x.lineWidth = 18; x.lineJoin = 'round'; x.beginPath(); x.moveTo(w / 2, 20); x.lineTo(w * 0.87, w * 0.72); x.lineTo(w * 0.13, w * 0.72); x.closePath(); x.stroke();
