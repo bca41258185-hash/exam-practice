@@ -409,25 +409,41 @@ CHAPTERS.forEach((c, k) => {
   el.onclick = () => go(k);
   $('seg').appendChild(el); segs.push(el.firstChild);
 });
+// 語音旁白：一句一句唸（Chrome 單段超過約 15 秒會被截斷），換段時以 sayGen 作廢舊的句子
+let sayGen = 0, voiceOK = false, voiceWarned = false;
+function warnNoVoice() {
+  if (voiceOK || voiceWarned || !S.voice) return;
+  voiceWarned = true;
+  toast('沒有聽到旁白？iPhone 請關閉側邊靜音開關並調高音量；LINE 等 App 內建瀏覽器可能沒有語音，請改用 Safari 或 Chrome 開啟。', 8000);
+}
 function speak(text) {
-  if (!S.voice || !('speechSynthesis' in window)) return;
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-TW'; u.rate = 1.05;
-    const v = speechSynthesis.getVoices().find(v => /zh[-_]TW/i.test(v.lang)) || speechSynthesis.getVoices().find(v => /^zh/i.test(v.lang));
-    if (v) u.voice = v;
-    S.speaking = true; S.waited = 0;
-    let started = false;
-    u.onstart = () => { started = true; };
-    u.onend = u.onerror = () => { S.speaking = false; };
-    speechSynthesis.speak(u);
-    // 有些瀏覽器（例如頭戴裝置內建瀏覽器）沒有語音引擎：2.5 秒內沒開始唸就不等旁白
-    setTimeout(() => { if (!started && !speechSynthesis.speaking) S.speaking = false; }, 2500);
-  } catch (e) { S.speaking = false; }
+  if (!S.voice) return;
+  if (!('speechSynthesis' in window)) { warnNoVoice(); return; }
+  const gen = ++sayGen, parts = text.match(/[^。！？]+[。！？]?/g) || [text];
+  let busy = false;
+  try { busy = speechSynthesis.speaking || speechSynthesis.pending; if (busy) speechSynthesis.cancel(); } catch (e) { }
+  S.speaking = true; S.waited = 0;
+  let k = 0, started = false;
+  const next = () => {
+    if (gen !== sayGen) return;
+    if (k >= parts.length) { S.speaking = false; return; }
+    try {
+      const u = new SpeechSynthesisUtterance(parts[k++]);
+      u.lang = 'zh-TW'; u.rate = 1.05;
+      const vs = speechSynthesis.getVoices(), v = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang));
+      if (v) u.voice = v;
+      u.onstart = () => { started = voiceOK = true; };
+      u.onend = next;
+      u.onerror = e => { if (gen !== sayGen) return; if (e.error === 'not-allowed') S.speaking = false; else next(); };
+      speechSynthesis.speak(u);
+    } catch (e) { S.speaking = false; }
+  };
+  // 第一次要在點擊當下直接唸（iOS 限制）；剛 cancel 後立刻 speak 在 Chrome 會被吞掉，所以稍等再唸
+  if (busy) setTimeout(next, 120); else next();
+  setTimeout(() => { if (gen === sayGen && !started) { S.speaking = false; warnNoVoice(); } }, 3000);
 }
 const sayOf = c => c.say + (c.tip ? '大師心法：' + c.tip : '');
-function hush() { S.speaking = false; try { speechSynthesis.cancel(); } catch (e) { } }
+function hush() { sayGen++; S.speaking = false; try { speechSynthesis.cancel(); } catch (e) { } }
 function showCaption() {
   const c = CHAPTERS[S.i];
   $('cN').textContent = `${S.i + 1}/${N}`;
@@ -485,7 +501,7 @@ $('bGlb').onclick = async () => {
     a.download = `township-office-case-${CASE}.glb`; a.click();
   } catch (e) { toast('匯出失敗：' + e.message); }
 };
-$('bVoice').onclick = () => { S.voice = !S.voice; if (!S.voice) hush(); syncBtns(); };
+$('bVoice').onclick = () => { S.voice = !S.voice; if (!S.voice) hush(); else if (S.playing) speak(sayOf(CHAPTERS[S.i])); syncBtns(); };   // 開啟時在點擊當下就唸，iOS 才會允許
 controls.addEventListener('start', () => { if (!S.free) { S.free = true; setPlaying(false); } });
 addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
@@ -520,7 +536,7 @@ async function setGyro(on) {
   if (on) setTimeout(() => { if (S.gyro && !gy.has) { S.gyro = false; syncBtns(); toast('此裝置沒有陀螺儀，請改用拖曳轉視角'); } }, 1500);
 }
 $('bGyro').onclick = () => setGyro(!S.gyro);
-function toast(msg) { const e = $('err'); e.textContent = msg; e.style.display = 'block'; setTimeout(() => (e.style.display = 'none'), 3200); }
+function toast(msg, ms = 3200) { const e = $('err'); e.textContent = msg; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => (e.style.display = 'none'), ms); }
 
 // ---------- 雙眼（Cardboard）----------
 async function setStereo(on) {
