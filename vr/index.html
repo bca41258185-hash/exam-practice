@@ -52,6 +52,21 @@ summary{cursor:pointer;font-weight:700;color:var(--brand-d);}
 .refs{font-size:12.5px;color:var(--muted);margin-top:12px;}
 .refs a{color:var(--brand-d);}
 body.clean .top,body.clean .ctl,body.clean details{display:none;}
+#bMore{display:none;}
+@media (max-width:700px){.tools .pill{display:none;}.tools #bMore{display:inline-block;}.tools.open .pill{display:inline-block;}}
+/* 精簡字幕（手機預設）：標題＋兩行，點文字展開 */
+body.mini .cap{padding:8px 12px 8px;}
+body.mini .cap h2{font-size:14px;margin:0 0 2px;}
+body.mini .cap p{font-size:13px;line-height:1.45;max-height:none;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+body.mini .tip,body.mini .keys,body.mini details{display:none!important;}
+body.mini .ctl{margin-top:6px;}
+body.mini .ctl button{height:32px;min-width:38px;font-size:14px;}
+body.mini .seg{height:32px;}
+.cap h2,.cap p{cursor:pointer;}
+body.nocap .cap h2,body.nocap .cap p,body.nocap .tip,body.nocap .keys,body.nocap details{display:none!important;}
+body.nocap .cap{padding:6px 10px;background:rgba(255,255,255,.7);}
+body.nocap .ctl{margin-top:0;}
+body.nocap.clean .cap{display:none;}
 body.stereo .top,body.stereo .bottom,body.rec .top,body.rec .bottom,body.rec #start{display:none;}
 #exitStereo{display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:5;opacity:.6;}
 body.stereo #exitStereo{display:block;}
@@ -64,7 +79,10 @@ body.stereo #exitStereo{display:block;}
 
 <div class="top">
   <a class="pill" href="../index.html">← 題庫</a>
-  <div class="tools">
+  <div class="tools" id="tools">
+    <button class="pill" id="bMore" title="顯示或收合選項">☰ 選項</button>
+    <button class="pill on" id="bCap" title="顯示或隱藏下方字幕文字">💬 字幕</button>
+    <button class="pill on" id="bLbl" title="顯示或隱藏場景中的標註">🏷 標註</button>
     <button class="pill" id="bClean" title="隱藏按鈕，方便螢幕錄影（按 H 切換）">🎬 錄影</button>
     <button class="pill" id="bGlb" title="匯出 3D 模型供專業渲染軟體使用">⬇ 模型</button>
     <button class="pill" id="bReal" title="寫實渲染（最後一段自動開啟）">🎨 寫實</button>
@@ -99,6 +117,8 @@ body.stereo #exitStereo{display:block;}
     <ul>
       <li id="sList"></li>
       <li>拖曳可自由轉視角（會暫停），按 ▶ 回到導覽</li>
+      <li>手機預設精簡字幕：點字幕展開全文與大師心法，再點一次收合</li>
+      <li>💬 字幕／🏷 標註：關掉下方文字或場景裡的標籤，只看模型</li>
       <li>🎬 錄影：隱藏按鈕只留字幕，方便螢幕錄影；按 H 切換、空白鍵播放／暫停</li>
       <li>📱 環視：轉動手機看四周　👓 雙眼：放進 Cardboard</li>
       <li>🥽 PC VR：扳機下一段、握把上一段、A/X 切換桌面模型⇄1:1 走進基地、右搖桿旋轉縮放、左搖桿行走</li>
@@ -113,6 +133,6 @@ body.stereo #exitStereo{display:block;}
   </div>
 </div>
 <div id="err"></div>
-<script type="module" src="./app.js?v=4"></script>
+<script type="module" src="./app.js?v=5"></script>
 </body>
 </html>

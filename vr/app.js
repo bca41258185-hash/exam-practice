@@ -463,6 +463,14 @@ $('bReal').onclick = () => { S.real = !S.real; };
 // 錄影用乾淨畫面：隱藏工具列與控制列，只留字幕；H 鍵切換
 const setClean = on => { document.body.classList.toggle('clean', on); layout(); if (on) { toast('錄影畫面：按 H 顯示按鈕，空白鍵播放／暫停'); document.documentElement.requestFullscreen?.().catch(() => { }); } };
 $('bClean').onclick = () => setClean(true);
+$('bMore').onclick = () => $('tools').classList.toggle('open');   // 手機：選項按鈕預設收合
+// 精簡字幕：窄螢幕預設開啟，點字幕文字切換展開／收合
+if (innerWidth < 700) document.body.classList.add('mini');
+for (const id of ['cT', 'cP', 'cN']) $(id).addEventListener('click', () => { document.body.classList.toggle('mini'); layout(); });
+// 字幕與標註開關（手機上想只看模型時用）
+$('bCap').onclick = () => { const off = document.body.classList.toggle('nocap'); $('bCap').classList.toggle('on', !off); layout(); };
+$('bLbl').onclick = () => { S.noLbl = !S.noLbl; $('bLbl').classList.toggle('on', !S.noLbl); };
+if (QS.get('text') === '0') { $('bCap').click(); $('bLbl').click(); }   // 網址帶 text=0：一開啟就關掉字幕與標註
 // 匯出目前畫面的模型（.glb），可匯入 Twinmotion、D5、Unreal、Blender 等做高階渲染
 async function exportGlb() {
   const { GLTFExporter } = await import('./vendor/GLTFExporter.js');
@@ -674,7 +682,7 @@ function tick(now) {
   if (clip !== S.clip) { S.clip = clip; renderer.clippingPlanes = clip ? ELEV_CLIP : []; }
   setReal(S.real || !!CHAPTERS[S.i].real);
   if (realOn) { sun.position.copy(SUN_REAL); scene.fog.color.set(0xd9e4ee); }
-  const hideLbl = !!CHAPTERS[S.i].real;
+  const hideLbl = !!CHAPTERS[S.i].real || !!S.noLbl;
   if (hideLbl || S.lblHidden) {
     S.lblHidden = hideLbl; for (const l of labels) l.visible = !hideLbl;
     if (!hideLbl) F.siteLabel.userData.a = undefined;         // 讓基地標籤依章節重新套用顯示狀態
