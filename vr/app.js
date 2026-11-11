@@ -493,8 +493,12 @@ function speak(text) {
     const v = speechSynthesis.getVoices().find(v => /zh[-_]TW/i.test(v.lang)) || speechSynthesis.getVoices().find(v => /^zh/i.test(v.lang));
     if (v) u.voice = v;
     S.speaking = true; S.waited = 0;
+    let started = false;
+    u.onstart = () => { started = true; };
     u.onend = u.onerror = () => { S.speaking = false; };
     speechSynthesis.speak(u);
+    // 有些瀏覽器（例如頭戴裝置內建瀏覽器）沒有語音引擎：2.5 秒內沒開始唸就不等旁白
+    setTimeout(() => { if (!started && !speechSynthesis.speaking) S.speaking = false; }, 2500);
   } catch (e) { S.speaking = false; }
 }
 function hush() { S.speaking = false; try { speechSynthesis.cancel(); } catch (e) { } }
