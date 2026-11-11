@@ -86,6 +86,7 @@ body.stereo #exitStereo{display:block;}
     <button class="pill" id="bClean" title="隱藏按鈕，方便螢幕錄影（按 H 切換）">🎬 錄影</button>
     <button class="pill" id="bGlb" title="匯出 3D 模型供專業渲染軟體使用">⬇ 模型</button>
     <button class="pill" id="bReal" title="寫實渲染（最後一段自動開啟）">🎨 寫實</button>
+    <button class="pill" id="bSpeed" title="播放速度（含旁白語速），點一下切換">⏩ 1×</button>
     <button class="pill" id="bVoice" title="語音旁白">🔊 旁白</button>
     <button class="pill" id="bGyro" title="轉動手機環視">📱 環視</button>
     <button class="pill" id="bStereo" title="手機放入 Cardboard 眼鏡">👓 雙眼</button>
@@ -116,7 +117,8 @@ body.stereo #exitStereo{display:block;}
     <p class="sub" id="sSub"></p>
     <ul>
       <li id="sList"></li>
-      <li>拖曳可自由轉視角（會暫停），按 ▶ 回到導覽</li>
+      <li>⏩ 速度：0.75×、1×、1.25×、1.5×、2× 循環切換，旁白語速跟著變，會記住上次的設定</li>
+      <li>播放中也能拖曳轉視角、雙指或滾輪縮放；換下一段或雙擊畫面會回到導覽視角</li>
       <li>手機預設精簡字幕：點字幕展開全文與大師心法，再點一次收合</li>
       <li>💬 字幕／🏷 標註：關掉下方文字或場景裡的標籤，只看模型</li>
       <li>🎬 錄影：隱藏按鈕只留字幕，方便螢幕錄影；按 H 切換、空白鍵播放／暫停</li>
@@ -133,6 +135,6 @@ body.stereo #exitStereo{display:block;}
   </div>
 </div>
 <div id="err"></div>
-<script type="module" src="./app.js?v=7"></script>
+<script type="module" src="./app.js?v=9"></script>
 </body>
 </html>

@@ -56,6 +56,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 3; controls.maxDistance = 320;
+controls.enabled = false;                                  // 改用下方的「導覽中轉視角」，拖曳不再暫停
 
 // ---------- 建模工具 ----------
 const EDGE = new THREE.LineBasicMaterial({ color: 0x4b5563, transparent: true, opacity: 0.45 });
@@ -429,7 +430,7 @@ function speak(text) {
     if (k >= parts.length) { S.speaking = false; return; }
     try {
       const u = new SpeechSynthesisUtterance(parts[k++]);
-      u.lang = 'zh-TW'; u.rate = 1.05;
+      u.lang = 'zh-TW'; u.rate = Math.min(2.5, 1.05 * SPEED.v);   // 跟著播放速度
       const vs = speechSynthesis.getVoices(), v = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang));
       if (v) u.voice = v;
       u.onstart = () => { started = voiceOK = true; };
@@ -457,7 +458,7 @@ function showCaption() {
   layout();
 }
 function go(k, keepPlaying = S.playing) {
-  S.i = Math.min(LAST, Math.max(0, k)); S.t = 0; S.free = false;
+  S.i = Math.min(LAST, Math.max(0, k)); S.t = 0; S.free = false; U.back = true;
   hush(); showCaption();
   setPlaying(keepPlaying);
   if (keepPlaying) speak(sayOf(CHAPTERS[S.i]));
@@ -501,8 +502,65 @@ $('bGlb').onclick = async () => {
     a.download = `township-office-case-${CASE}.glb`; a.click();
   } catch (e) { toast('匯出失敗：' + e.message); }
 };
+// 播放速度（同時改變旁白語速與每段長度）：按鈕循環切換，網址可帶 ?speed=2，會記住上次的設定
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+const SPEED = { v: 1 };
+{
+  let v = parseFloat(QS.get('speed'));
+  if (!(v > 0)) try { v = parseFloat(localStorage.getItem('vr.speed')); } catch (e) { }
+  if (v > 0) SPEED.v = Math.max(0.5, Math.min(3, v));
+}
+function setSpeed(v) {
+  SPEED.v = v; $('bSpeed').textContent = '⏩ ' + v + '×'; $('bSpeed').classList.toggle('on', v !== 1);
+  try { localStorage.setItem('vr.speed', String(v)); } catch (e) { }
+}
+setSpeed(SPEED.v);
+$('bSpeed').onclick = () => {
+  const k = SPEEDS.findIndex(x => x >= SPEED.v - 0.01);
+  setSpeed(SPEEDS[(k + 1) % SPEEDS.length]);
+  toast(`播放速度 ${SPEED.v}×（下一句起生效）`, 1500);
+};
 $('bVoice').onclick = () => { S.voice = !S.voice; if (!S.voice) hush(); else if (S.playing) speak(sayOf(CHAPTERS[S.i])); syncBtns(); };   // 開啟時在點擊當下就唸，iOS 才會允許
-controls.addEventListener('start', () => { if (!S.free) { S.free = true; setPlaying(false); } });
+// ---------- 導覽中轉視角：拖曳旋轉、雙指／滾輪縮放，播放不中斷；換段或雙擊回到導覽視角 ----------
+const U = { yaw: 0, pitch: 0, zoom: 1, back: false, moved: 0, pts: new Map(), pinch: 0 };
+const cv = renderer.domElement;
+cv.addEventListener('pointerdown', e => { U.pts.set(e.pointerId, [e.clientX, e.clientY]); U.back = false; U.moved = 0; try { cv.setPointerCapture(e.pointerId); } catch (_) { } });
+cv.addEventListener('pointermove', e => {
+  const o = U.pts.get(e.pointerId); if (!o) return;
+  const dx = e.clientX - o[0], dy = e.clientY - o[1]; o[0] = e.clientX; o[1] = e.clientY;
+  if (U.pts.size === 1) {
+    U.moved += Math.abs(dx) + Math.abs(dy);
+    U.yaw -= dx * 0.006; U.pitch = Math.max(-1.3, Math.min(1.3, U.pitch + dy * 0.005));
+  } else if (U.pts.size === 2) {                            // 雙指縮放
+    const [a, b] = [...U.pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (U.pinch) U.zoom = Math.max(0.35, Math.min(3, U.zoom * U.pinch / d));
+    U.pinch = d; U.moved += 10;
+  }
+});
+const lift = e => { U.pts.delete(e.pointerId); U.pinch = 0; };
+cv.addEventListener('pointerup', lift); cv.addEventListener('pointercancel', lift);
+cv.addEventListener('wheel', e => { e.preventDefault(); U.back = false; U.zoom = Math.max(0.35, Math.min(3, U.zoom * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
+cv.addEventListener('dblclick', () => { U.back = true; });
+const _v = new THREE.Vector3(), _sph = new THREE.Spherical();
+function userView(ps, walk, dt) {                            // 把使用者的旋轉／縮放疊在導覽鏡頭上
+  if (U.back && !U.pts.size) {                               // 平滑回到導覽視角
+    const k = Math.min(1, dt * 3);
+    U.yaw -= U.yaw * k; U.pitch -= U.pitch * k; U.zoom += (1 - U.zoom) * k;
+    if (Math.abs(U.yaw) + Math.abs(U.pitch) + Math.abs(U.zoom - 1) < 0.002) { U.yaw = U.pitch = 0; U.zoom = 1; U.back = false; }
+  }
+  if (!U.yaw && !U.pitch && U.zoom === 1) return;
+  if (walk) {                                                // 人視角：原地轉頭，縮放改變視角寬度
+    _sph.setFromVector3(_v.copy(ps.l).sub(ps.p));
+    _sph.theta += U.yaw; _sph.phi = Math.max(0.5, Math.min(2.6, _sph.phi - U.pitch));
+    ps.l.copy(ps.p).add(_v.setFromSpherical(_sph));
+    ps.fov = Math.max(20, Math.min(100, ps.fov * U.zoom));
+  } else {                                                   // 鳥瞰：繞注視點轉，限制在地面以上
+    _sph.setFromVector3(_v.copy(ps.p).sub(ps.l));
+    _sph.theta += U.yaw; _sph.phi = Math.max(0.08, Math.min(1.52, _sph.phi - U.pitch));
+    _sph.radius = Math.max(3, _sph.radius * U.zoom);
+    ps.p.copy(ps.l).add(_v.setFromSpherical(_sph));
+  }
+}
 addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
   if (e.key === 'h' || e.key === 'H') setClean(!document.body.classList.contains('clean'));
@@ -550,7 +608,7 @@ async function setStereo(on) {
 }
 $('bStereo').onclick = () => setStereo(true);
 $('exitStereo').onclick = () => setStereo(false);
-renderer.domElement.addEventListener('click', () => { if (S.stereo) go(S.i === LAST ? 0 : S.i + 1, true); });
+renderer.domElement.addEventListener('click', () => { if (S.stereo && U.moved < 8) go(S.i === LAST ? 0 : S.i + 1, true); });
 
 // ---------- 雙眼／頭戴裝置內的字幕板（跟著視線）----------
 const panel = (() => {
@@ -712,7 +770,7 @@ function tick(now) {
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now; clock += dt;
   const ch = CHAPTERS[S.i];
   if (S.playing) {
-    S.t += dt / ch.dur;
+    S.t += dt * SPEED.v / ch.dur;
     if (S.t >= 1) {
       S.t = 1;
       if (S.speaking && (S.waited += dt) < ch.dur * 1.5) { /* 等旁白唸完 */ }
@@ -736,6 +794,7 @@ function tick(now) {
   panel.m.visible = S.stereo || xr;
   if (xr) xrTick(ps, dt);
   else if (!S.free) {
+    userView(ps, !!CHAPTERS[S.i].walk, dt);
     camera.position.copy(ps.p); camera.lookAt(ps.l); controls.target.copy(ps.l);
     const fov = 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(ps.fov / 2)) * camera.userData.portraitBoost));
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
@@ -769,4 +828,4 @@ syncBtns(); showCaption(); applyState(0, 0);
 if (REC) document.body.classList.add('rec');
 // 逐格算圖：設定章節與進度後立刻算一格並回傳 JPEG（不依賴實際時間，所以不會掉幀）
 const frame = (i, t, c) => { S.i = i; S.t = t; S.playing = false; S.free = false; clock = c; tick(last); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
-window.__vr = { Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { SPEED, U, Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
