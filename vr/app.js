@@ -742,9 +742,29 @@ const XR = { mode: 'table', auto: true, yaw: 0, zoom: 1, pivot: new THREE.Vector
 const TABLE = { scale: 1 / 100, pos: new THREE.Vector3(0, 0.9, -1.25) };
 const UP = THREE.Object3D.DEFAULT_UP;
 const XR_HINT = '扳機 下一段｜握把 上一段｜A/X 桌面⇄1:1｜B/Y 播放暫停｜右搖桿 旋轉縮放｜左搖桿 行走';
-const xrSupported = navigator.xr?.isSessionSupported
-  ? navigator.xr.isSessionSupported('immersive-vr').catch(() => false) : Promise.resolve(false);
-xrSupported.then(ok => { $('bXR').hidden = !ok; });
+// 偵測 VR：頭戴裝置常常比網頁晚接上（先開網頁、後啟動 Virtual Desktop／SteamVR），所以持續重試
+const XR_HELP = 'PC：先讓 Virtual Desktop 連線，在它的設定把 OpenXR Runtime 改成 SteamVR 並啟動 SteamVR，再重新整理本頁（用 Chrome 或 Edge）。也可以直接在 Quest 內建瀏覽器開本網址。';
+const xrState = { ok: false, tries: 0 };
+function showXR(ok) {
+  xrState.ok = ok;
+  const has = !!navigator.xr;
+  // 沒偵測到也顯示「嘗試進入」：有些執行環境要實際請求才會回應
+  $('bXR').hidden = !has; $('bXR').textContent = ok ? '🥽 進入 VR' : '🥽 嘗試進入 VR';
+  const sb = $('bStartXR'); if (sb) { sb.hidden = !has; sb.textContent = ok ? '🥽 以 VR 頭戴裝置觀看（PC VR／Quest）' : '🥽 嘗試以 VR 頭戴裝置觀看'; }
+  const t = $('sXR'); if (t) t.textContent = ok ? '已偵測到 VR 裝置，可直接進入。'
+    : !window.isSecureContext ? '目前不是 https 網址，瀏覽器不允許 VR。'
+    : !has ? '這個瀏覽器不支援 WebXR：電腦請用 Chrome 或 Edge，頭戴裝置請用 Quest 內建瀏覽器。'
+    : '尚未偵測到 VR 裝置（會自動重試）。' + XR_HELP;
+}
+async function checkXR() {
+  let ok = false;
+  try { ok = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr')); } catch (e) { }
+  showXR(ok); return ok;
+}
+const xrSupported = checkXR();
+navigator.xr?.addEventListener?.('devicechange', checkXR);
+addEventListener('focus', () => { if (!xrState.ok) checkXR(); });
+const xrPoll = setInterval(() => { if (xrState.ok || ++xrState.tries > 60 || !navigator.xr) clearInterval(xrPoll); else checkXR(); }, 3000);
 for (let i = 0; i < 2; i++) {                               // 控制器射線
   const c = renderer.xr.getController(i);
   c.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1.2)]),
@@ -764,8 +784,13 @@ function xrToggleMode() {
 async function enterXR() {
   if (S.nav) setNav(S.nav);                                  // 進 VR 前先離開走路／飛行
   try {
+    if (!navigator.xr) throw new Error('這個瀏覽器不支援 WebXR');
     const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
-    renderer.xr.setReferenceSpaceType('local-floor');
+    // 有些執行環境沒有「地板」座標，就改用以頭部為原點的座標，並把模型往下移一個身高
+    let type = 'local-floor';
+    try { await s.requestReferenceSpace('local-floor'); } catch (e) { type = 'local'; }
+    XR.yOff = type === 'local' ? -1.6 : 0;
+    renderer.xr.setReferenceSpaceType(type);
     await renderer.xr.setSession(s);
     XR.session = s; XR.auto = true; XR.chapter = -1; XR.yaw = 0; XR.zoom = 1; XR.prev = {};
     scene.add(panel.m); panel.m.position.set(0, 1.75, -2.6); panel.m.rotation.set(0, 0, 0); panel.m.scale.setScalar(1.8);
@@ -780,7 +805,7 @@ async function enterXR() {
     });
     $('start')?.remove(); syncBtns();
     go(S.i, true);
-  } catch (e) { toast('無法進入 VR：' + e.message); }
+  } catch (e) { toast('無法進入 VR（' + (e.message || e.name) + '）。' + XR_HELP, 14000); checkXR(); }
 }
 $('bXR').onclick = enterXR;
 function setLabelScale(k) { for (const l of labels) l.scale.set(l.userData.base[0] * k, l.userData.base[1] * k, 1); }
@@ -816,7 +841,7 @@ function xrTick(ps, dt) {
   world.rotation.set(0, th, 0); world.scale.setScalar(k);
   const pv = CHAPTERS[S.i].pivot;                           // 該段場景不在基地上時，桌面模型改以它為中心
   _d.copy(walk ? XR.pivot : pv ? V(pv[0], pv[1], 0) : _d.set(0, 0, 0)).multiplyScalar(k).applyAxisAngle(UP, th);
-  world.position.copy(walk ? _f.set(0, 0, 0) : TABLE.pos).sub(_d);
+  world.position.copy(walk ? _f.set(0, 0, 0) : TABLE.pos).sub(_d); world.position.y += XR.yOff || 0;
   F.outer.visible = walk;
   panel.m.position.set(0, walk ? 0.8 : 1.75, walk ? -2.2 : -2.6); panel.m.rotation.x = walk ? -0.55 : 0;   // 1:1 時字幕板放低，不擋視線
   if (XR.k !== k) { XR.k = k; setLabelScale(1 / k); shadowScale(k); }
@@ -924,7 +949,7 @@ const begin = voice => {
 $('bStart').onclick = () => begin(true);
 $('bStartMute').onclick = () => begin(false);
 $('bStartXR').onclick = () => { S.voice = true; enterXR(); };
-xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先用 Virtual Desktop、SteamVR 或 Quest Link 連上電腦並啟動 VR，再用 Chrome／Edge 開啟本頁（需 https 或 localhost）。'; });
+showXR(xrState.ok);                                        // 開場畫面的 VR 按鈕與說明（之後偵測結果會自動更新）
 $('cD').addEventListener('toggle', layout);
 syncBtns(); showCaption(); applyState(0, 0);
 if (REC) document.body.classList.add('rec');
