@@ -79,7 +79,7 @@ export function build(ctx) {
   let sid = 0;
 
   // ---------- 1 透天厝街屋：分戶壁柱、捲門、懸挑陽台、雨遮、冷氣、直立招牌、屋頂水塔 ----------
-  function terrace(f, s0, s1, n, H, key, deep) {
+  function terrace(f, s0, s1, n, H, key, deep, tight) {   // tight：立面貼齊道路，地面不外擺貨架
     const w = (s1 - s0) / n;
     for (let k = 0; k <= n; k++) {
       const a = s0 + k * w;
@@ -91,7 +91,7 @@ export function build(ctx) {
       fb(f, 'tint', a + 0.18, b - 0.18, 0, 0.04, 0, H, pick(WALL, r(1)));                                // 外牆磁磚
       if (r(2) < 0.3) {                                                                                   // 營業中：店面內部＋貨架
         fb(f, 'dark', a + 0.45, b - 0.45, 0, 0.06, 0, 2.9);
-        fb(f, 'tint', a + 0.7, b - 0.7, 0.06, 0.5, 0, 0.9, pick(TILE, r(12)));
+        if (!tight) fb(f, 'tint', a + 0.7, b - 0.7, 0.06, 0.5, 0, 0.9, pick(TILE, r(12)));
       } else fb(f, 'rib', a + 0.45, b - 0.45, 0.04, 0.1, 0, 2.85, pick(SHUT, r(3)));                   // 鐵捲門
       fb(f, 'steel', a + 0.4, b - 0.4, 0, 0.3, 2.85, 3.15);                                             // 捲門箱
       for (const z of [3.5, 7]) {
@@ -135,8 +135,14 @@ export function build(ctx) {
   // 住宅 A（面 12M 路）、住宅 B（面 10M 路）、住宅 C（南面 10M 路、西面朝衛生所巷道）
   terrace({ ax: 'x', at: -14, dir: 1 }, 33, 62, 6, 10.5, 1, true);
   terrace({ ax: 'y', at: -13, dir: 1 }, -44, -16, 6, 10.5, 2, true);
-  terrace({ ax: 'y', at: 0, dir: -1 }, 91, 112, 4, 10.5, 3, false);
+  terrace({ ax: 'y', at: 0, dir: -1 }, 91, 112, 4, 10.5, 3, false, true);
   terrace({ ax: 'x', at: 91, dir: -1 }, 9.5, 44, 7, 10.5, 4, true);
+  {
+    const CW = { ax: 'x', at: 91, dir: -1 };                                                          // 住宅 C 西南角側牆：車庫捲門＋側窗
+    fb(CW, 'rib', 2, 8, 0.04, 0.1, 0, 2.85, '#9aa29a'); fb(CW, 'steel', 1.9, 8.1, 0, 0.3, 2.85, 3.15);
+    for (const z of [3.5, 7]) for (const s of [2, 5.6]) { fb(CW, 'win', s, s + 1.9, 0, 0.06, z + 0.9, z + 2.4); fb(CW, 'tint', s - 0.15, s + 2.05, 0, 0.6, z + 2.55, z + 2.6, '#6b7a8a', -0.3); }
+    fb(CW, 'ac', 4.15, 4.95, 0.05, 0.35, 5.0, 5.55); fb(CW, 'steel', 4.2, 4.9, 0, 0.35, 4.92, 4.97);
+  }
   for (const [x0, x1, y0, y1, c] of [[-44, -14, 33, 62, '#b9b2a4'], [-44, -16, -42, -13, '#aeb3ad'], [91, 112, 0, 44, '#b7ad9f']]) { roof(x0, x1, y0, y1, 10.5, c); pp(x0, x1, y0, y1, 10.5, '#dcd6ca'); }
 
   // ---------- 2 公有零售市場：條紋遮陽棚、攤位、捲門、招牌、山形鐵皮屋頂＋高側窗 ----------
