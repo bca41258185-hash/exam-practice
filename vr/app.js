@@ -675,10 +675,40 @@ function layout() {
 }
 addEventListener('resize', layout);
 
+// ---------- 自動畫質：依實際幀時間調整（大螢幕電腦最常卡在像素太多）----------
+// 先把總像素限制在約 230 萬（≈1920×1200），太慢再逐步降解析度、關陰影；順了再慢慢調回
+const Q = { max: 1, pr: 1, acc: 0, n: 0, good: 0, shadows: true, warned: false, soft: false };
+const pixelCap = () => Math.max(0.5, Math.min(devicePixelRatio || 1, 2, Math.sqrt(2.3e6 / (innerWidth * innerHeight))));
+function applyPR(pr) { Q.pr = pr; renderer.setPixelRatio(pr); layout(); }
+try {                                                        // 瀏覽器沒用顯示卡（硬體加速關閉）時會非常慢
+  const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+  Q.soft = /swiftshader|llvmpipe|software|basic render/i.test(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '');
+} catch (e) { }
+Q.max = pixelCap();
+if (Q.soft && !REC) { Q.shadows = false; sun.castShadow = false; }
+applyPR(Q.soft && !REC ? Math.min(Q.max, 0.75) : Q.max);
+addEventListener('resize', () => { Q.max = pixelCap(); if (Q.pr > Q.max) applyPR(Q.max); });
+function adapt(ms) {
+  if (renderer.xr.isPresenting || REC || document.hidden || ms > 3000) return;   // 切換分頁回來的長間隔不算
+  Q.acc += ms; if (++Q.n < 45 && Q.acc < 1500) return;          // 每 45 格或 1.5 秒評估一次（很慢的電腦也能及時降級）
+  const avg = Q.acc / Q.n; Q.acc = Q.n = 0;
+  if (avg > 26) {                                            // 慢於約 38 fps
+    Q.good = 0;
+    if (Q.pr > 0.6) applyPR(Math.max(0.6, +(Q.pr * 0.8).toFixed(2)));
+    else if (Q.shadows) { Q.shadows = false; sun.castShadow = false; }
+    else if (!Q.warned) { Q.warned = true; toast('畫面仍然很慢：請確認瀏覽器已開啟「硬體加速」，並關閉其他分頁或程式。', 8000); }
+  } else if (avg < 14 && ++Q.good >= 4) {                     // 連續約 3 秒很順才調回
+    Q.good = 0;
+    if (!Q.shadows && !Q.soft) { Q.shadows = true; sun.castShadow = true; }
+    else if (Q.pr < Q.max) applyPR(Math.min(Q.max, +(Q.pr * 1.15).toFixed(2)));
+  }
+}
+
 // ---------- 主迴圈 ----------
 let last = performance.now();
 const tmpQ = new THREE.Quaternion();
 function tick(now) {
+  adapt(now - last);
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now; clock += dt;
   const ch = CHAPTERS[S.i];
   if (S.playing) {
@@ -726,7 +756,10 @@ $('sSub').textContent = META.exam;
 $('sNote').textContent = `⚠ ${META.source}。面積為估算值，請自行複核。`;
 $('sRefs').innerHTML = `<a href="${META.examUrl}" target="_blank" rel="noopener">考選部原題</a>` + (META.refs.length ? '　延伸參考：' +
   META.refs.map(r => `<a href="${r.url}" target="_blank" rel="noopener">${r.name}</a>`).join('、') : '');
-const begin = voice => { S.voice = voice; $('start').remove(); syncBtns(); go(0, true); };
+const begin = voice => {
+  S.voice = voice; $('start').remove(); syncBtns(); go(0, true);
+  if (Q.soft) setTimeout(() => toast('偵測到瀏覽器沒有使用顯示卡，畫面會很卡。Chrome／Edge：設定 → 系統 → 開啟「使用圖形加速功能」，再重新開啟瀏覽器。', 10000), 3500);
+};
 $('bStart').onclick = () => begin(true);
 $('bStartMute').onclick = () => begin(false);
 $('bStartXR').onclick = () => { S.voice = true; enterXR(); };
@@ -736,4 +769,4 @@ syncBtns(); showCaption(); applyState(0, 0);
 if (REC) document.body.classList.add('rec');
 // 逐格算圖：設定章節與進度後立刻算一格並回傳 JPEG（不依賴實際時間，所以不會掉幀）
 const frame = (i, t, c) => { S.i = i; S.t = t; S.playing = false; S.free = false; clock = c; tick(last); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
-window.__vr = { frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
