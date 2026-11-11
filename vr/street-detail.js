@@ -138,7 +138,7 @@ export function build(ctx) {
 
   // ---------- 5 公車亭（10M 路北側，衛生所前；住宅臨路無人行道故移到 x 75–80） ----------
   {
-    for (const x of [75.2, 77.5, 79.8]) g.add(box(x - 0.05, x + 0.05, 1.8, 1.9, W, W + 2.55, metal, false));
+    for (const x of [75.2, 77.5, 79.8]) g.add(box(x - 0.05, x + 0.05, 1.8, 1.9, W, W + 2.55, metal, false, true));
     g.add(box(74.8, 80.2, 0.25, 2.0, W + 2.55, W + 2.68, galv, false));
     g.add(box(75.25, 79.75, 1.82, 1.86, W + 0.35, W + 2.3, glass, false, false), box(75.18, 75.22, 1.0, 1.8, W + 0.35, W + 2.3, glass, false, false));
     g.add(box(76, 79, 1.3, 1.75, W + 0.42, W + 0.48, wood, false), box(76.2, 76.3, 1.4, 1.65, W, W + 0.42, metal, false), box(78.7, 78.8, 1.4, 1.65, W, W + 0.42, metal, false));
@@ -156,11 +156,12 @@ export function build(ctx) {
     for (let k = 0; k < 12; k++) sc.push([sx, 12.2 + k * 0.9, W, 0]);   // 避開 B 版 y 9–11 的三台
     for (let k = 0; k < 8; k++) sc.push([48 + k * 1.1, -11.05, W, HP - 0.45]);
     const body = mat(0xffffff, 1, { roughness: 0.4, metalness: 0.2 }), cols = [0xf1f1ee, 0x2f4a6b, 0x7b2d2d, 0x9aa3ab, 0x3c4650, 0xd9c7a0, 0x5d7f5a];
-    const P = (sx_, sy_, sz_, x, y) => new THREE.BoxGeometry(sx_, sy_, sz_).translate(x, y, 0);
-    inst(P(1.25, 0.3, 0.4, -0.05, 0.42), body, sc, true, cols); inst(P(0.16, 0.7, 0.38, 0.52, 0.76), body, sc, true, cols); inst(P(0.7, 0.26, 0.36, -0.32, 0.68), body, sc, false, cols);
-    inst(P(0.64, 0.1, 0.3, -0.25, 0.86), dark, sc); inst(P(0.08, 0.06, 0.64, 0.5, 1.13), metal, sc);
-    const wh = x => new THREE.CylinderGeometry(0.22, 0.22, 0.1, 10).rotateX(HP).translate(x, 0.22, 0);
-    inst(wh(0.62), rubber, sc); inst(wh(-0.62), rubber, sc);
+    const P = (a, b, c, x, y, rz = 0) => new THREE.BoxGeometry(a, b, c).rotateZ(rz).translate(x, y, 0);   // 本地 +x 為車頭
+    inst(P(0.8, 0.36, 0.36, -0.34, 0.54), body, sc, true, cols); inst(P(0.12, 0.74, 0.38, 0.5, 0.66, 0.28), body, sc, true, cols);   // 後車殼、前擋（後傾）
+    inst(P(0.24, 0.12, 0.2, 0.62, 0.36), body, sc, false, cols); inst(P(0.5, 0.07, 0.32, 0.12, 0.3), dark, sc);                    // 前土除、腳踏板
+    inst(P(0.68, 0.1, 0.3, -0.3, 0.77), dark, sc); inst(P(0.1, 0.08, 0.62, 0.42, 1.06), metal, sc); inst(P(0.06, 0.1, 0.16, 0.5, 0.96), lampM, sc);
+    const wh = x => new THREE.CylinderGeometry(0.2, 0.2, 0.1, 10).rotateX(HP).translate(x, 0.2, 0);
+    inst(wh(0.6), rubber, sc); inst(wh(-0.6), rubber, sc);
   }
 
   // ---------- 7 標誌：速限 30、當心兒童、停車場 P ----------
@@ -172,7 +173,7 @@ export function build(ctx) {
     };
     const spd = canvasMat(256, 256, (x, w) => { x.fillStyle = '#fff'; x.beginPath(); x.arc(w / 2, w / 2, w / 2 - 2, 0, 7); x.fill(); x.strokeStyle = '#d0201a'; x.lineWidth = 30; x.beginPath(); x.arc(w / 2, w / 2, w / 2 - 18, 0, 7); x.stroke(); txt(x, '30', 112, w / 2 + 6, w, '#111', 800); });
     const disc = new THREE.CircleGeometry(0.33, 28);
-    sign(32, -11.5, -HP, disc, spd, W + 2.25); sign(89.5, 1.3, HP, disc, spd, W + 2.25);
+    sign(33.5, -11.5, -HP, disc, spd, W + 2.25); sign(89.5, 1.3, HP, disc, spd, W + 2.25);
     const warn = canvasMat(256, 256, (x, w) => {
       x.fillStyle = '#fff'; x.beginPath(); x.moveTo(w / 2, 4); x.lineTo(w * 0.93, w * 0.75 - 2); x.lineTo(w * 0.07, w * 0.75 - 2); x.closePath(); x.fill();
       x.strokeStyle = '#d0201a'; x.lineWidth = 18; x.lineJoin = 'round'; x.beginPath(); x.moveTo(w / 2, 20); x.lineTo(w * 0.87, w * 0.72); x.lineTo(w * 0.13, w * 0.72); x.closePath(); x.stroke();
@@ -223,7 +224,7 @@ export function build(ctx) {
     put(mesh(new THREE.SphereGeometry(0.16, 12, 8, 0, 7, 0, HP), mat(0xe9b931)), -12.5, 2.3, W + 0.7);
     put(mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), red), -12.5, 2.3, W + 0.5, HP);
     for (const [x, c] of [[-13.72, 0x2e7d32], [-13.22, 0xc62828]]) {   // 郵筒：綠＝普通、紅＝限時
-      g.add(box(x - 0.22, x + 0.22, 4.95, 5.35, W, W + 1.0, mat(c, 1, { roughness: 0.5 })));
+      g.add(box(x - 0.22, x + 0.22, 4.95, 5.35, W, W + 1.0, mat(c, 1, { roughness: 0.5 }), false));
       put(mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.4, 14, 1, false, 0, Math.PI).rotateZ(HP), mat(c, 1, { roughness: 0.5 }), false), x, 5.15, W + 1.0, HP);
     }
     inst(new THREE.CylinderGeometry(0.25, 0.22, 0.85, 12).translate(0, 0.425, 0), mat(0x3f6b4a, 1, { roughness: 0.6 }), [[-12.6, 36, W], [81.5, 1.5, W], [27, -11.5, W]], true);
