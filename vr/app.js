@@ -272,7 +272,7 @@ const sunPos = a => V(25 + 62 * Math.cos(a), 25 - 62 * Math.sin(a) * 0.5, 62 * M
 }
 
 // ---------- 5 量體 ----------
-const WHITE = new THREE.Color(0xf6f4ef);
+const WHITE = new THREE.Color(0xf6f4ef), HALL_ZONE = new THREE.Color(ZONES.hall.color);
 const floorsA = [];
 {
   const g = layer('mass');
@@ -414,6 +414,70 @@ const floorLbl = [];
   g.add(label('鋼桁架屋頂 跨距 20 m', V(37, 12, top + 1), { size: 0.9 }));
 }
 
+// ---------- 11–12 立面與材料 ----------
+const MAT_WALL = new THREE.Color(0xddd6c8), MAT_BRICK = new THREE.Color(0xb5654a);   // 抿石子、紅磚
+{
+  const g = layer('facade');
+  const glass = mat(0x6f97ab, 0.86, { roughness: 0.12, metalness: 0.35 });
+  const frame = mat(0x4b5258), terra = mat(0xc8704a), wood = mat(0xb08a5e), roofM = mat(0x8d969c, 1, { roughness: 0.55, metalness: 0.4 }), conc = mat(0xe9e6df);
+  const gx0 = A.cores[0].x1 + 0.3, gx1 = A.cores[1].x0 - 0.3;
+  let z = FLOOR0;
+  A.floors.forEach((f, k) => {
+    const s0 = k === 0 ? z + 0.15 : z + 0.9, s1 = z + f.h - 0.55;      // 南向：橫帶窗（一樓為通透大廳）
+    g.add(box(gx0, gx1, A.y0 - 0.08, A.y0 + 0.05, s0, s1, glass, false, false));
+    g.add(box(gx0, gx1, A.y1 - 0.05, A.y1 + 0.08, z + 0.75, z + f.h - 0.4, glass, false, false));   // 北向：大面採光
+    for (let x = gx0; x <= gx1 + 0.01; x += (gx1 - gx0) / 10) {
+      g.add(box(x - 0.06, x + 0.06, A.y0 - 0.14, A.y0, s0, s1, frame, false, false));
+      g.add(box(x - 0.06, x + 0.06, A.y1, A.y1 + 0.14, z + 0.75, z + f.h - 0.4, frame, false, false));
+    }
+    z += f.h;
+  });
+  for (const c of A.cores) {                                 // 樓梯間直條窗
+    g.add(box(c.x0 + 1.9, c.x0 + 3.1, A.y0 - 0.08, A.y0 + 0.05, FLOOR0 + 0.4, A.top - 0.6, glass, false, false));
+    g.add(box(c.x0 + 1.9, c.x0 + 3.1, A.y1 - 0.05, A.y1 + 0.08, FLOOR0 + 0.4, A.top - 0.6, glass, false, false));
+  }
+  for (let h = FLOOR0 + 0.9; h < A.top - 0.2; h += 0.55) {   // 東西端：陶板水平格柵
+    g.add(box(A.x0 - 0.45, A.x0 - 0.2, A.y0 + 0.6, A.y1 - 0.6, h, h + 0.22, terra, false));
+    g.add(box(A.x1 + 0.2, A.x1 + 0.45, A.y0 + 0.6, A.y1 - 0.6, h, h + 0.22, terra, false));
+  }
+  for (const y of [A.y0 + 0.6, (A.y0 + A.y1) / 2, A.y1 - 0.6]) {
+    g.add(box(A.x0 - 0.3, A.x0 - 0.05, y - 0.1, y + 0.1, FLOOR0, A.top, frame, false));
+    g.add(box(A.x1 + 0.05, A.x1 + 0.3, y - 0.1, y + 0.1, FLOOR0, A.top, frame, false));
+  }
+  g.add(box(A.x0 - 0.2, A.x1 + 0.2, A.y0 - 0.2, A.y1 + 0.2, A.top, A.top + 0.3, conc, false));      // 屋頂版
+  // 大禮堂：紅磚實牆＋高窗＋面向廣場的折疊門＋金屬屋面
+  const hb = FLOOR0, ht = FLOOR0 + B.h, by1 = B.y1 - 0.3;
+  g.add(box(B.x0 - 0.08, B.x0 + 0.05, B.y0 + 1, by1 - 1, ht - 2.3, ht - 0.7, glass, false, false));
+  g.add(box(B.x1 - 0.05, B.x1 + 0.08, B.y0 + 1, by1 - 1, ht - 2.3, ht - 0.7, glass, false, false));
+  g.add(box(B.x0 + 1, B.x1 - 1, B.y0 - 0.08, B.y0 + 0.05, ht - 2.3, ht - 0.7, glass, false, false));
+  g.add(box(B.x0 - 0.08, B.x0 + 0.05, B.y0 + 3, by1 - 3, hb + 0.1, hb + 3.3, glass, false, false));
+  for (let y = B.y0 + 3; y <= by1 - 3 + 0.01; y += 2) g.add(box(B.x0 - 0.14, B.x0, y - 0.06, y + 0.06, hb + 0.1, hb + 3.3, frame, false, false));
+  g.add(box(B.x0 - 0.5, B.x1 + 0.5, B.y0 - 0.5, by1, ht, ht + 0.25, roofM, false));
+  const seams = [];
+  for (let y = B.y0; y < by1; y += 1.1) seams.push(V(B.x0 - 0.5, y, ht + 0.27), V(B.x1 + 0.5, y, ht + 0.27));
+  const sm = new THREE.LineBasicMaterial({ color: 0x5f686e, transparent: true }); sm.userData.o = 0.9;
+  g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seams), sm));
+  // 簷廊：木紋鋁格柵天花
+  g.add(box(A.x0 + 0.2, B.x0 - 0.2, A.y0 - 2.8, A.y0 - 0.2, 4.45, 4.6, wood, false, false), box(B.x0 - 2.8, B.x0 - 0.2, B.y0 + 0.2, A.y0 - 2.8, 4.45, 4.6, wood, false, false));
+
+  const d = layer('facLbl');                                 // 11 立面設計
+  d.add(label('南向：1.6 m 深遮陽＋橫帶窗', V(22, 22.5, 14.5), { color: '#fff', bg: 'rgba(31,36,48,.9)', size: 0.9, occlude: true }));
+  d.add(label('西向：實牆＋陶板格柵擋西曬', V(4, 36, A.top + 1.5), { color: '#fff', bg: 'rgba(200,112,74,.95)', size: 0.9 }));
+  d.add(label('北向：大面窗・穩定天光', V(26, 49, 11), { color: '#fff', bg: 'rgba(63,110,130,.95)', size: 0.9, occlude: true }));
+  d.add(label('大禮堂：實牆量體＋高窗', V(37, 4.5, ht + 1.5), { color: '#fff', bg: 'rgba(150,75,52,.95)', size: 0.9, occlude: true }));
+  d.add(label('一樓：通透大廳', V(16, 24, 5.4), { size: 0.85, occlude: true }));
+  const m = layer('matLbl');                                 // 12 材料
+  const tag = (t, pos, bg, color = '#fff') => m.add(label(t, pos, { color, bg, size: 0.85 }));
+  tag('抿石子外牆（窗台牆）', V(32, 27.5, 17.6), 'rgba(160,150,130,.96)');
+  tag('Low-E 複層膠合玻璃', V(20, 27.5, 10.2), 'rgba(63,110,130,.96)');
+  tag('清水混凝土遮陽板', V(34, 26.5, 12.6), 'rgba(110,112,115,.96)');
+  tag('陶板格柵', V(4.5, 30, 15), 'rgba(200,112,74,.96)');
+  tag('在地紅磚', V(30, 5.5, 5.4), 'rgba(150,75,52,.96)');
+  tag('氟碳烤漆鋁鎂錳合金屋面', V(38, 16, ht + 1.2), 'rgba(95,104,110,.96)');
+  tag('木紋鋁格柵天花', V(14, 26, 5.2), 'rgba(140,105,65,.96)');
+  tag('鋼柱：熱浸鍍鋅＋氟碳塗裝', V(25.5, 14, 2.2), 'rgba(75,82,88,.96)');
+}
+
 // ---------- 章節狀態 → 畫面 ----------
 const amt = (i, t, k0, k1 = k0, ramp = 0.22) => (i < k0 || i > k1 ? 0 : i === k0 ? smooth(t / ramp) : 1);
 const bump = t => smooth((t - 0.12) / 0.22) * (1 - smooth((t - 0.86) / 0.12));
@@ -436,17 +500,21 @@ function applyState(i, t) {
   // 樓層逐層長出 → 上色 → 抽開看分區
   const colorT = i < 6 ? 0 : i === 6 ? smooth(t / 0.15) : 1;
   const ex = i === 6 ? bump(t) : 0;
+  const matT = amt(i, t, 11, LAST, 0.25);                   // 分區色 → 實際材料色
   floorsA.forEach((fg, k) => {
     const grow = i === 5 ? smooth((t - 0.08 - k * 0.11) / 0.14) : 1;
     fg.scale.y = Math.max(0.001, grow);
     fg.position.y = (fg.userData.z) * (1 - grow) + ex * k * 2.4;
-    fg.userData.m.color.copy(WHITE).lerp(fg.userData.zone, colorT);
+    fg.userData.m.color.copy(WHITE).lerp(fg.userData.zone, colorT).lerp(MAT_WALL, matT);
     const l = floorLbl[k];
     l.position.copy(V(A.x0 - 1.5, A.y0, fg.userData.z + fg.userData.h / 2 + ex * k * 2.4));
   });
   const hg = i === 5 ? Math.max(0.001, smooth((t - 0.62) / 0.2)) : 1;
   F.hall.scale.y = hg; F.hall.position.y = FLOOR0 + B.h / 2 * hg;
-  F.hallMat.color.copy(WHITE).lerp(new THREE.Color(ZONES.hall.color), colorT);
+  F.hallMat.color.copy(WHITE).lerp(HALL_ZONE, colorT).lerp(MAT_BRICK, matT);
+  setAmt(F.facade, matT);
+  setAmt(F.facLbl, amt(i, t, 11));
+  setAmt(F.matLbl, amt(i, t, 12));
   setAmt(F.zoneLbl, amt(i, t, 6));
   setAmt(F.b1, i === 6 ? ex : 0);
   setAmt(F.siteSurf, 1 - 0.85 * ex);
@@ -465,13 +533,14 @@ function applyState(i, t) {
 }
 
 // 鏡頭
-const camOf = c => ({ p: V(...c.cam), l: V(...c.look) });
+const camEnd = k => ({ p: V(...(CHAPTERS[k].cam2 || CHAPTERS[k].cam)), l: V(...(CHAPTERS[k].look2 || CHAPTERS[k].look)) });
 function pose(i, t) {
-  const c = camOf(CHAPTERS[i]);
-  let p = c.p, l = c.l;
-  if (i > 0) { const a = camOf(CHAPTERS[i - 1]), s = smooth(t / 0.3); p = a.p.clone().lerp(c.p, s); l = a.l.clone().lerp(c.l, s); }
-  const ang = (CHAPTERS[i].walk ? 0.5 : 0.16) * (t - 0.5);
-  if (CHAPTERS[i].walk) l = l.clone().sub(p).applyAxisAngle(THREE.Object3D.DEFAULT_UP, ang).add(p);
+  const c = CHAPTERS[i];
+  let p = V(...c.cam), l = V(...c.look);
+  if (i > 0) { const a = camEnd(i - 1), s = smooth(t / 0.3); p = a.p.lerp(p, s); l = a.l.lerp(l, s); }
+  if (c.cam2) { const s = smooth((t - 0.45) / 0.25); p.lerp(V(...c.cam2), s); l.lerp(V(...(c.look2 || c.look)), s); }   // 章節中途換機位
+  const ang = (c.walk ? 0.5 : 0.16) * (t - 0.5);
+  if (c.walk) l = l.clone().sub(p).applyAxisAngle(THREE.Object3D.DEFAULT_UP, ang).add(p);
   else p = p.clone().sub(l).applyAxisAngle(THREE.Object3D.DEFAULT_UP, ang).add(l);
   return { p, l, fov: i === LAST ? lerp(45, 68, smooth(t / 0.3)) : 45 };
 }
