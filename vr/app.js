@@ -746,7 +746,7 @@ const begin = voice => { S.voice = voice; $('start').remove(); syncBtns(); go(0,
 $('bStart').onclick = () => begin(true);
 $('bStartMute').onclick = () => begin(false);
 $('bStartXR').onclick = () => { S.voice = true; enterXR(); };
-xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先啟動 SteamVR 或 Quest Link，並用 Chrome／Edge 開啟本頁（需 https）。'; });
+xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先用 Virtual Desktop、SteamVR 或 Quest Link 連上電腦並啟動 VR，再用 Chrome／Edge 開啟本頁（需 https 或 localhost）。'; });
 $('cD').addEventListener('toggle', layout);
 syncBtns(); showCaption(); applyState(0, 0);
 window.__vr = { S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
