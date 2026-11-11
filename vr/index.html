@@ -70,6 +70,9 @@ body.nocap.clean .cap{display:none;}
 body.stereo .top,body.stereo .bottom,body.rec .top,body.rec .bottom,body.rec #start{display:none;}
 #exitStereo{display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:5;opacity:.6;}
 body.stereo #exitStereo{display:block;}
+#navHint{position:fixed;left:10px;top:calc(56px + env(safe-area-inset-top));z-index:4;max-width:min(560px,calc(100% - 20px));background:rgba(17,24,39,.82);color:#fff;border-radius:10px;padding:8px 12px;font-size:13px;line-height:1.7;pointer-events:none;}
+#navHint kbd{background:rgba(255,255,255,.18);border-radius:4px;padding:0 5px;font-family:inherit;}
+@media (hover:none){#bWalk,#bFly{display:none!important;}}
 #err{position:fixed;inset:auto 10px 50% 10px;z-index:10;background:#fdeaea;color:#b91c1c;border-radius:10px;padding:12px;font-size:14px;display:none;}
 @media (max-height:520px){.cap p{max-height:2.9em}.cap h2{font-size:14px}.keys{display:none}}
 </style>
@@ -86,6 +89,8 @@ body.stereo #exitStereo{display:block;}
     <button class="pill" id="bClean" title="隱藏按鈕，方便螢幕錄影（按 H 切換）">🎬 錄影</button>
     <button class="pill" id="bGlb" title="匯出 3D 模型供專業渲染軟體使用">⬇ 模型</button>
     <button class="pill" id="bReal" title="寫實渲染（最後一段自動開啟）">🎨 寫實</button>
+    <button class="pill" id="bWalk" title="電腦用：W A S D 走路">🚶 走路</button>
+    <button class="pill" id="bFly" title="電腦用：自由飛行">✈️ 飛行</button>
     <button class="pill" id="bSpeed" title="播放速度（含旁白語速），點一下切換">⏩ 1×</button>
     <button class="pill" id="bVoice" title="語音旁白">🔊 旁白</button>
     <button class="pill" id="bGyro" title="轉動手機環視">📱 環視</button>
@@ -117,6 +122,7 @@ body.stereo #exitStereo{display:block;}
     <p class="sub" id="sSub"></p>
     <ul>
       <li id="sList"></li>
+      <li>🚶 走路／✈️ 飛行（電腦）：W A S D 移動、滑鼠看、Shift 加速，飛行用空白鍵／C 升降；導覽照常播放</li>
       <li>⏩ 速度：0.75×、1×、1.25×、1.5×、2× 循環切換，旁白語速跟著變，會記住上次的設定</li>
       <li>播放中也能拖曳轉視角、雙指或滾輪縮放；換下一段或雙擊畫面會回到導覽視角</li>
       <li>手機預設精簡字幕：點字幕展開全文與大師心法，再點一次收合</li>
@@ -134,7 +140,8 @@ body.stereo #exitStereo{display:block;}
     <div class="refs" id="sRefs"></div>
   </div>
 </div>
+<div id="navHint" hidden></div>
 <div id="err"></div>
-<script type="module" src="./app.js?v=9"></script>
+<script type="module" src="./app.js?v=10"></script>
 </body>
 </html>

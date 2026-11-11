@@ -528,6 +528,7 @@ cv.addEventListener('pointerdown', e => { U.pts.set(e.pointerId, [e.clientX, e.c
 cv.addEventListener('pointermove', e => {
   const o = U.pts.get(e.pointerId); if (!o) return;
   const dx = e.clientX - o[0], dy = e.clientY - o[1]; o[0] = e.clientX; o[1] = e.clientY;
+  if (S.nav && U.pts.size === 1) { navLook(dx, dy); U.moved += Math.abs(dx) + Math.abs(dy); return; }   // 走路／飛行：拖曳轉頭
   if (U.pts.size === 1) {
     U.moved += Math.abs(dx) + Math.abs(dy);
     U.yaw -= dx * 0.006; U.pitch = Math.max(-1.3, Math.min(1.3, U.pitch + dy * 0.005));
@@ -562,6 +563,7 @@ function userView(ps, walk, dt) {                            // 把使用者的�
   }
 }
 addEventListener('keydown', e => {
+  if (S.nav && navKey(e, true)) return;
   if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
   if (e.key === 'h' || e.key === 'H') setClean(!document.body.classList.contains('clean'));
   if (e.key === 'ArrowRight') $('bNext').click();
@@ -608,7 +610,88 @@ async function setStereo(on) {
 }
 $('bStereo').onclick = () => setStereo(true);
 $('exitStereo').onclick = () => setStereo(false);
-renderer.domElement.addEventListener('click', () => { if (S.stereo && U.moved < 8) go(S.i === LAST ? 0 : S.i + 1, true); });
+renderer.domElement.addEventListener('click', () => {
+  if (S.nav && !document.pointerLockElement) { try { cv.requestPointerLock(); } catch (e) { } return; }   // 走路／飛行：點畫面鎖定滑鼠
+  if (S.stereo && U.moved < 8) go(S.i === LAST ? 0 : S.i + 1, true);
+});
+
+// ---------- 電腦用：走路與飛行模式（W A S D 移動、滑鼠看）----------
+// 導覽照常播放（圖層、字幕、旁白都繼續），只有鏡頭交給使用者；走路會貼地、撞牆、可走上 45 cm 以內的台階
+const NAV = { yaw: 0, pitch: 0, keys: new Set(), eye: 1.6, ground: 0 };
+const ray = new THREE.Raycaster(); ray.camera = camera;
+const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+function hit(origin, dir, far) {                             // 只算看得見、不太透明的實體
+  ray.set(origin, dir); ray.far = far;
+  for (const h of ray.intersectObject(world, true)) {
+    const o = h.object, m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if ((o.isMesh || o.isInstancedMesh) && shown(o) && !(m && m.transparent && m.opacity < 0.5)) return h;
+  }
+  return null;
+}
+const DOWN = new THREE.Vector3(0, -1, 0), _o = new THREE.Vector3(), _nd = new THREE.Vector3();
+function groundAt(x, z, feet) {                              // 腳下 45 cm 以內最高的面
+  const h = hit(_o.set(x, feet + 0.45, z), DOWN, 60);
+  return h ? h.point.y : 0;
+}
+function blocked(from, dx, dz) {
+  const len = Math.hypot(dx, dz); if (len < 1e-5) return false;
+  _nd.set(dx / len, 0, dz / len);
+  for (const hgt of [0.55, 1.35]) if (hit(_o.set(from.x, NAV.ground + hgt, from.z), _nd, len + 0.35)) return true;
+  return false;
+}
+function navLook(dx, dy) { NAV.yaw -= dx * 0.0035; NAV.pitch = Math.max(-1.45, Math.min(1.45, NAV.pitch - dy * 0.0035)); }
+function navKey(e, down) {
+  const k = e.code;
+  if (!/^(Key[WASDQEC]|Arrow(Up|Down|Left|Right)|Space|ShiftLeft|ShiftRight|ControlLeft)$/.test(k)) return false;
+  if (k === 'Space' && S.nav !== 'fly') return false;      // 走路時空白鍵仍是播放／暫停
+  e.preventDefault(); if (down) NAV.keys.add(k); else NAV.keys.delete(k);
+  return true;
+}
+addEventListener('keyup', e => { if (S.nav) navKey(e, false); });
+addEventListener('blur', () => NAV.keys.clear());
+document.addEventListener('mousemove', e => { if (S.nav && document.pointerLockElement === cv) navLook(e.movementX, e.movementY); });
+function setNav(mode) {
+  if (mode === S.nav) mode = null;                           // 再按一次同一顆按鈕就離開
+  S.nav = mode; NAV.keys.clear(); NAV.settled = false;
+  $('bWalk').classList.toggle('on', mode === 'walk'); $('bFly').classList.toggle('on', mode === 'fly');
+  $('navHint').hidden = !mode;
+  if (!mode) { try { document.exitPointerLock(); } catch (e) { } return; }
+  $('navHint').innerHTML = (mode === 'walk' ? '<b>🚶 走路</b>' : '<b>✈️ 飛行</b>') +
+    '　點畫面鎖定滑鼠　<kbd>W A S D</kbd> 移動　滑鼠 看　<kbd>Shift</kbd> 加速' +
+    (mode === 'fly' ? '　<kbd>空白</kbd>／<kbd>E</kbd> 上升　<kbd>C</kbd>／<kbd>Q</kbd> 下降' : '') + '　<kbd>Esc</kbd> 放開滑鼠，再按按鈕離開';
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+  if (mode === 'fly') { NAV.yaw = e.y; NAV.pitch = Math.max(-1.4, Math.min(1.4, e.x)); }
+  else {                                                     // 走路從主入口前的人行道出發，面向基地
+    const st = scheme.WALK_START || [-4, 24, 75];
+    camera.position.copy(V(st[0], st[1], 0)); NAV.yaw = THREE.MathUtils.degToRad(-st[2]); NAV.pitch = 0.05;   // st[2]：方位角（0 北、90 東）
+    NAV.ground = groundAt(camera.position.x, camera.position.z, 0); camera.position.y = NAV.ground + NAV.eye;
+  }
+  camera.fov = 70; camera.updateProjectionMatrix();
+}
+$('bWalk').onclick = () => setNav('walk');
+$('bFly').onclick = () => setNav('fly');
+function navTick(dt) {
+  const K = NAV.keys, f = (K.has('KeyW') || K.has('ArrowUp')) - (K.has('KeyS') || K.has('ArrowDown')), r = (K.has('KeyD') || K.has('ArrowRight')) - (K.has('KeyA') || K.has('ArrowLeft'));
+  const fast = K.has('ShiftLeft') || K.has('ShiftRight');
+  const sy = Math.sin(NAV.yaw), cy = Math.cos(NAV.yaw);
+  if (S.nav === 'fly') {
+    const v = (fast ? 40 : 12) * dt, cp = Math.cos(NAV.pitch), sp = Math.sin(NAV.pitch);
+    const u = (K.has('Space') || K.has('KeyE')) - (K.has('KeyC') || K.has('KeyQ') || K.has('ControlLeft'));
+    camera.position.x += (-sy * cp * f + cy * r) * v; camera.position.z += (-cy * cp * f - sy * r) * v;
+    camera.position.y = Math.max(0.4, camera.position.y + (sp * f + u) * v);
+  } else {
+    const v = (fast ? 4.5 : 1.6) * dt, dx = (-sy * f + cy * r) * v, dz = (-cy * f - sy * r) * v, p = camera.position;
+    if (dx || dz) {                                          // 撞牆時沿牆滑動
+      if (!blocked(p, dx, dz)) { p.x += dx; p.z += dz; }
+      else if (!blocked(p, dx, 0)) p.x += dx;
+      else if (!blocked(p, 0, dz)) p.z += dz;
+    }
+    if (dx || dz || !NAV.settled) { NAV.ground = groundAt(p.x, p.z, NAV.ground); NAV.settled = true; }
+    const target = NAV.ground + NAV.eye;                     // 上台階快、往下像走樓梯
+    p.y += (target - p.y) * Math.min(1, dt * (target > p.y ? 14 : 8));
+  }
+  camera.rotation.set(NAV.pitch, NAV.yaw, 0, 'YXZ');
+}
 
 // ---------- 雙眼／頭戴裝置內的字幕板（跟著視線）----------
 const panel = (() => {
@@ -662,6 +745,7 @@ function xrToggleMode() {
   if (XR.mode === 'walk') xrWalkFrom(V(...CHAPTERS[LAST].cam), V(...CHAPTERS[LAST].look));
 }
 async function enterXR() {
+  if (S.nav) setNav(S.nav);                                  // 進 VR 前先離開走路／飛行
   try {
     const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
     renderer.xr.setReferenceSpaceType('local-floor');
@@ -793,6 +877,7 @@ function tick(now) {
   }
   panel.m.visible = S.stereo || xr;
   if (xr) xrTick(ps, dt);
+  else if (S.nav) navTick(dt);
   else if (!S.free) {
     userView(ps, !!CHAPTERS[S.i].walk, dt);
     camera.position.copy(ps.p); camera.lookAt(ps.l); controls.target.copy(ps.l);
@@ -828,4 +913,4 @@ syncBtns(); showCaption(); applyState(0, 0);
 if (REC) document.body.classList.add('rec');
 // 逐格算圖：設定章節與進度後立刻算一格並回傳 JPEG（不依賴實際時間，所以不會掉幀）
 const frame = (i, t, c) => { S.i = i; S.t = t; S.playing = false; S.free = false; clock = c; tick(last); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
-window.__vr = { SPEED, U, Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { setNav, NAV, SPEED, U, Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
