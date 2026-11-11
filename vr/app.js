@@ -617,7 +617,7 @@ renderer.domElement.addEventListener('click', () => {
 
 // ---------- 電腦用：走路與飛行模式（W A S D 移動、滑鼠看）----------
 // 導覽照常播放（圖層、字幕、旁白都繼續），只有鏡頭交給使用者；走路會貼地、撞牆、可走上 45 cm 以內的台階
-const NAV = { yaw: 0, pitch: 0, keys: new Set(), eye: 1.6, ground: 0 };
+const NAV = { yaw: 0, pitch: 0, keys: new Map(), eye: 1.6, ground: 0 };   // keys：按鍵代碼 → { t: 最後一次 keydown 時間, rep: 是否收到自動連發 }
 const ray = new THREE.Raycaster(); ray.camera = camera;
 const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 function hit(origin, dir, far) {                             // 只算看得見、不太透明的實體
@@ -644,21 +644,33 @@ function navKey(e, down) {
   const k = e.code;
   if (!/^(Key[WASDQEC]|Arrow(Up|Down|Left|Right)|Space|ShiftLeft|ShiftRight|ControlLeft)$/.test(k)) return false;
   if (k === 'Space' && S.nav !== 'fly') return false;      // 走路時空白鍵仍是播放／暫停
-  e.preventDefault(); if (down) NAV.keys.add(k); else NAV.keys.delete(k);
+  e.preventDefault();
+  if (down) { const o = NAV.keys.get(k); NAV.keys.set(k, { t: performance.now(), rep: !!(o && e.repeat) || !!(o && o.rep) }); }
+  else NAV.keys.delete(k);
+  showKeys();
   return true;
 }
 addEventListener('keyup', e => { if (S.nav) navKey(e, false); });
-addEventListener('blur', () => NAV.keys.clear());
+// 鬆開按鍵的事件可能遺失（切換視窗、輸入法、滑鼠鎖定切換），這些時候一律清空，避免一直自己走
+const clearKeys = () => { NAV.keys.clear(); showKeys(); };
+addEventListener('blur', clearKeys);
+document.addEventListener('visibilitychange', clearKeys);
+document.addEventListener('pointerlockchange', clearKeys);
+const KEYNAME = { KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyQ: 'Q', KeyE: 'E', KeyC: 'C', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: '空白', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Ctrl' };
+function showKeys() {                                        // 在提示列顯示目前按住的鍵，方便發現卡住的按鍵
+  const el = $('navKeys'); if (!el) return;
+  el.textContent = NAV.keys.size ? '　按住：' + [...new Set([...NAV.keys.keys()].map(k => KEYNAME[k] || k))].join(' ') : '';
+}
 document.addEventListener('mousemove', e => { if (S.nav && document.pointerLockElement === cv) navLook(e.movementX, e.movementY); });
 function setNav(mode) {
   if (mode === S.nav) mode = null;                           // 再按一次同一顆按鈕就離開
-  S.nav = mode; NAV.keys.clear(); NAV.settled = false;
+  S.nav = mode; clearKeys(); NAV.settled = false;
   $('bWalk').classList.toggle('on', mode === 'walk'); $('bFly').classList.toggle('on', mode === 'fly');
   $('navHint').hidden = !mode;
   if (!mode) { try { document.exitPointerLock(); } catch (e) { } return; }
   $('navHint').innerHTML = (mode === 'walk' ? '<b>🚶 走路</b>' : '<b>✈️ 飛行</b>') +
     '　點畫面鎖定滑鼠　<kbd>W A S D</kbd> 移動　滑鼠 看　<kbd>Shift</kbd> 加速' +
-    (mode === 'fly' ? '　<kbd>空白</kbd>／<kbd>E</kbd> 上升　<kbd>C</kbd>／<kbd>Q</kbd> 下降' : '') + '　<kbd>Esc</kbd> 放開滑鼠，再按按鈕離開';
+    (mode === 'fly' ? '　<kbd>空白</kbd>／<kbd>E</kbd> 上升　<kbd>C</kbd>／<kbd>Q</kbd> 下降' : '') + '　<kbd>Esc</kbd> 放開滑鼠，再按按鈕離開<span id="navKeys"></span>';
   const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
   if (mode === 'fly') { NAV.yaw = e.y; NAV.pitch = Math.max(-1.4, Math.min(1.4, e.x)); }
   else {                                                     // 走路從主入口前的人行道出發，面向基地
@@ -671,6 +683,9 @@ function setNav(mode) {
 $('bWalk').onclick = () => setNav('walk');
 $('bFly').onclick = () => setNav('fly');
 function navTick(dt) {
+  // 有自動連發的鍵，若 0.4 秒沒再收到 keydown，表示其實已經放開（keyup 遺失）
+  const now = performance.now();
+  for (const [k, v] of NAV.keys) if (v.rep && now - v.t > 400) { NAV.keys.delete(k); showKeys(); }
   const K = NAV.keys, f = (K.has('KeyW') || K.has('ArrowUp')) - (K.has('KeyS') || K.has('ArrowDown')), r = (K.has('KeyD') || K.has('ArrowRight')) - (K.has('KeyA') || K.has('ArrowLeft'));
   const fast = K.has('ShiftLeft') || K.has('ShiftRight');
   const sy = Math.sin(NAV.yaw), cy = Math.cos(NAV.yaw);
@@ -682,9 +697,11 @@ function navTick(dt) {
   } else {
     const v = (fast ? 4.5 : 1.6) * dt, dx = (-sy * f + cy * r) * v, dz = (-cy * f - sy * r) * v, p = camera.position;
     if (dx || dz) {                                          // 撞牆時沿牆滑動
+      // 只有幾乎平行牆面時才沿牆滑動；斜斜撞上就停住，免得被帶著一直往旁邊走
+      const len = Math.hypot(dx, dz);
       if (!blocked(p, dx, dz)) { p.x += dx; p.z += dz; }
-      else if (!blocked(p, dx, 0)) p.x += dx;
-      else if (!blocked(p, 0, dz)) p.z += dz;
+      else if (Math.abs(dx) > 0.7 * len && !blocked(p, dx, 0)) p.x += dx;
+      else if (Math.abs(dz) > 0.7 * len && !blocked(p, 0, dz)) p.z += dz;
     }
     if (dx || dz || !NAV.settled) { NAV.ground = groundAt(p.x, p.z, NAV.ground); NAV.settled = true; }
     const target = NAV.ground + NAV.eye;                     // 上台階快、往下像走樓梯
