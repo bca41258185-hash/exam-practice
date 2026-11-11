@@ -1,5 +1,5 @@
 // 版本 B：依手繪解題圖重建——西側雙棟＋弧形洽公廊、東側鄰里共融廣場、頂層禮堂、GLT 構造
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 import { buildIntro } from './intro-fire.js';
 import { buildDetails } from './details-b.js';
 
@@ -393,7 +393,7 @@ export function build(ctx) {
     setAmt(F.facade, matT);
     const elev = i === 11 && t < 0.42;                         // 立面段前半：正南向剖立面視角
     setAmt(F.elevLbl, elev ? smooth(t / 0.12) : 0);
-    for (const b of F.southBlocks || []) b.visible = !(i === 11 && t < 0.5);
+    F.elevCut = i === 11 && t < 0.5;                           // 剖立面：請引擎切掉道路以南的鄰房與街道細部
     setAmt(F.facLbl, i === 11 && t > 0.5 ? smooth((t - 0.5) / 0.1) : 0);
     setAmt(F.matLbl, amt(i, t, 12));
   };

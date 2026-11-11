@@ -1,5 +1,5 @@
 // 序章：大師出現之前，人類畫考卷如同還不會用火——穴居人鑽木取火
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 
 export function buildIntro(ctx) {
   const { V, label, mat, setAmt, layer, smooth, lerp, world } = ctx;

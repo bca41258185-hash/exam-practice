@@ -1,5 +1,5 @@
 // 版本 A：依題目條件推導的示範方案（北側長條主棟＋東側獨立禮堂）
-import * as THREE from 'three';
+import * as THREE from './vendor/three.module.min.js';
 
 export function build(ctx) {
   const { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme } = ctx;
