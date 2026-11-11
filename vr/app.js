@@ -4,9 +4,10 @@ import { StereoEffect } from './vendor/StereoEffect.js';
 import { Sky } from './vendor/Sky.js';
 // 版本切換：?case=b 為手繪解題圖版本，預設為示範方案
 const QS = new URLSearchParams(location.search);
-const CASE = QS.get('case') === 'b' ? 'b' : 'a';
+const CASE = QS.get('case') === 'a' ? 'a' : 'b';            // 預設為版本 B（黃仁澤手繪解法）
+const VER = '?v=' + (new URL(import.meta.url).searchParams.get('v') || '0');   // 版本號：避免瀏覽器沿用舊快取
 const REC = QS.has('rec');                                  // 逐格錄影模式：隱藏介面，由外部腳本逐格取圖
-const scheme = await import(CASE === 'b' ? './scheme-b.js' : './scheme.js');
+const scheme = await import((CASE === 'b' ? './scheme-b.js' : './scheme.js') + VER);
 const { META, SITE, CONTEXT, ZONES, PROGRAM, CHECKS, CHAPTERS } = scheme;
 
 const $ = id => document.getElementById(id);
@@ -334,11 +335,11 @@ const OFF = scheme.INTRO || 0;                              // 版本可在最�
 let clock = 0;
 // 第 4 段以後的量體、分區、動線、立面等圖層由各版本模組建立
 const CTX = { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY, tex };
-const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js')).build(CTX);
+const applyCase = (await import((CASE === 'b' ? './case-b.js' : './case-a.js') + VER)).build(CTX);
 // 街道設施與鄰房細部：兩個版本共用，跟著周邊環境一起顯示
 const extras = [];
 for (const f of ['street-detail', 'context-detail']) {
-  try { extras.push((await import(`./${f}.js`)).build(CTX)); } catch (e) { console.warn('細部模組載入失敗', f, e); }
+  try { extras.push((await import(`./${f}.js${VER}`)).build(CTX)); } catch (e) { console.warn('細部模組載入失敗', f, e); }
 }
 function applyState(ri, t) {
   const i = ri - OFF;
