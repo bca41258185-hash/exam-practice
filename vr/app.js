@@ -457,7 +457,7 @@ function applyState(i, t) {
   if (i === 1) { const p = sunPos(lerp(0.12, 0.9, t) * Math.PI); sunBall.position.copy(p); sun.position.copy(p); }
   else sun.position.copy(SUN_HOME);
   F.rings.forEach((r, k) => r.scale.setScalar(1 + 0.25 * Math.sin(clock * 3 + k)));
-  for (const f of flows) f.dots.forEach((d, k) => d.position.copy(f.curve.getPointAt((k / f.dots.length + clock * f.speed) % 1)));
+  for (const f of flows) f.dots.forEach((d, k) => d.position.copy(f.curve.getPointAt((((k / f.dots.length + clock * f.speed) % 1) + 1) % 1)));
 }
 
 // 鏡頭
@@ -640,7 +640,7 @@ addEventListener('resize', layout);
 let last = performance.now();
 const tmpQ = new THREE.Quaternion();
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+  const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now; clock += dt;
   const ch = CHAPTERS[S.i];
   if (S.playing) {
     S.t += dt / ch.dur;
