@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildIntro } from './intro-fire.js';
 
 export function build(ctx) {
-  const { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme, CX, CY } = ctx;
+  const { V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST, scheme, CX, CY, tex } = ctx;
   const { CONTEXT, FLOOR0, M, G, C, BRIDGE, B1, PLAZA, RAMP, ZONES, OLD_TREE } = scheme;
   const WHITE = new THREE.Color(0xf6f4ef), BRICK = new THREE.Color(0xb9745a);
   const hex = z => '#' + ZONES[z].color.toString(16).padStart(6, '0') + 'f0';
@@ -41,14 +41,16 @@ export function build(ctx) {
   }
 
   // ---------- 5 量體 ----------
-  const floorsM = [], floorsC = [], floorLbl = [], cLbl = [];
-  const terrace = mat(0x86c98a);
+  const floorsM = [], floorsC = [], floorLbl = [], cLbl = [], coreMats = [];
+  const CORE = new THREE.Color(0xc9ced6);
+  const terrace = tex(mat(0x86c98a), 'grass');
   {
     const g = layer('mass');
     M.floors.forEach((f, k) => {
-      const fg = new THREE.Group(), m = mat(0xf6f4ef), z = zs[k];
+      const fg = new THREE.Group(), m = tex(mat(0xf6f4ef), 'brick'), z = zs[k];
       fg.add(box(xs(k), M.coreX, M.y0, M.y1, z, z + f.h, m));
-      fg.add(box(M.coreX, M.x1, M.y0, M.y1, z, z + f.h, mat(0xc9ced6)));
+      const cm = tex(mat(0xc9ced6), 'brick'); coreMats.push(cm);
+      fg.add(box(M.coreX, M.x1, M.y0, M.y1, z, z + f.h, cm));
       if (k < M.floors.length - 1) {                         // 退台：植栽平臺＋通往上層的階梯
         fg.add(box(xs(k), xs(k + 1), M.y0, M.y1, z + f.h, z + f.h + 0.3, terrace, false));
         fg.add(box(xs(k) + 0.2, xs(k + 1), M.y0 + 1, M.y0 + 3.2, z + f.h * 0.5, z + f.h + 0.3, mat(0xd9d4c8), false));
@@ -62,7 +64,7 @@ export function build(ctx) {
     F.gallery.add(prism(arcPts().map(([x, y]) => [x + (x < 22 ? -0.5 : 0.5), y > G.y0 ? y + 0.5 : y]), FLOOR0 + G.h, FLOOR0 + G.h + 0.3, mat(0xe9e6df)));
     g.add(F.gallery);
     C.floors.forEach((f, k) => {
-      const fg = new THREE.Group(), m = mat(0xf6f4ef), z = cz[k];
+      const fg = new THREE.Group(), m = tex(mat(0xf6f4ef), 'brick'), z = cz[k];
       fg.add(box(C.x0, C.x1, C.y0, C.y1, z, z + f.h, m));
       fg.userData = { m, z, h: f.h, zone: new THREE.Color(ZONES[f.zone].color) };
       g.add(fg); floorsC.push(fg);
@@ -80,20 +82,20 @@ export function build(ctx) {
     slab.castShadow = true; F.roof.add(slab);
     g.add(F.roof);
     F.stair = new THREE.Group();
-    for (let z = FLOOR0; z < M.top - 1; z += 1.9) F.stair.add(box(M.x1, M.x1 + 2.6, 11, 17, z, z + 0.2, mat(0xbfc4c9), false));
-    for (const y of [11, 17]) F.stair.add(box(M.x1 + 2.4, M.x1 + 2.6, y - 0.1, y + 0.1, 0, M.top - 1, mat(0x6b7280), false));
+    for (let z = FLOOR0; z < M.top - 1; z += 1.9) F.stair.add(box(M.x1, M.x1 + 2.6, 6.5, 11, z, z + 0.2, mat(0xbfc4c9), false));
+    for (const y of [6.5, 11]) F.stair.add(box(M.x1 + 2.4, M.x1 + 2.6, y - 0.1, y + 0.1, 0, M.top - 1, mat(0x6b7280), false));
     g.add(F.stair);
 
     const ls = layer('land');
-    ls.add(flat(rect(PLAZA.x0, PLAZA.x1, PLAZA.y0, PLAZA.y1), 0.06, mat(0xf3d9a0)));
-    ls.add(flat(rect(PLAZA.x1, PLAZA.ext, 6, 42), 0.05, mat(0xf7e8c4, 0.9)));
+    ls.add(flat(rect(PLAZA.x0, PLAZA.x1, PLAZA.y0, PLAZA.y1), 0.06, tex(mat(0xf3d9a0), 'paver')));
+    ls.add(flat(rect(PLAZA.x1, PLAZA.ext, 6, 42), 0.05, tex(mat(0xf7e8c4, 0.9), 'paver')));
     for (let x = PLAZA.x0; x <= PLAZA.ext; x += 3.6) ls.add(line([V(x, x > PLAZA.x1 ? 6 : PLAZA.y0, 0.1), V(x, x > PLAZA.x1 ? 42 : PLAZA.y1, 0.1)], 0xd8b76a, false, 0.8));
     for (let y = 8; y <= 42; y += 3.6) ls.add(line([V(PLAZA.x0, y, 0.1), V(PLAZA.ext, y, 0.1)], 0xd8b76a, false, 0.8));
-    ls.add(flat(rect(M.x0, C.x1, G.y1, C.y0), 0.06, mat(0xe7efe0)));           // 鄰里同樂道
-    ls.add(flat(rect(0, 6, 22, 34), 0.07, mat(0xe9dfc8)));                      // 主入口廣場
-    ls.add(flat(rect(0, 6, 0, 6), 0.07, mat(0xf2d7c0)));                        // 藝術轉角廣場
-    ls.add(flat(rect(40, 48, 8, 11), 0.1, mat(0x9bd3a0)));                      // 雨水花園
-    ls.add(flat(rect(0, 26, 46, 50.5), 0.05, mat(0xc3c9d0)));
+    ls.add(flat(rect(M.x0, C.x1, G.y1, C.y0), 0.06, tex(mat(0xe7efe0), 'paver')));           // 鄰里同樂道
+    ls.add(flat(rect(0, 6, 22, 34), 0.07, tex(mat(0xe9dfc8), 'paver')));                      // 主入口廣場
+    ls.add(flat(rect(0, 6, 0, 6), 0.07, tex(mat(0xf2d7c0), 'paver')));                        // 藝術轉角廣場
+    ls.add(flat(rect(40, 48, 8, 11), 0.1, tex(mat(0x9bd3a0), 'grass')));                      // 雨水花園
+    ls.add(flat(rect(0, 26, 46, 50.5), 0.05, tex(mat(0xc3c9d0), 'noise')));
     const rg = new THREE.BufferGeometry().setFromPoints([V(RAMP.x0, RAMP.y0, 0.07), V(RAMP.x1, RAMP.y0, -3.6), V(RAMP.x1, RAMP.y1, -3.6), V(RAMP.x0, RAMP.y0, 0.07), V(RAMP.x1, RAMP.y1, -3.6), V(RAMP.x0, RAMP.y1, 0.07)]);
     rg.computeVertexNormals();
     ls.add(new THREE.Mesh(rg, mat(0x8b95a1, 1, { side: THREE.DoubleSide })));
@@ -101,8 +103,13 @@ export function build(ctx) {
     const tree = (x, y, s = 1, c = crown) => {
       const t = new THREE.Group();
       const a = new THREE.Mesh(new THREE.CylinderGeometry(0.18 * s, 0.25 * s, 3 * s, 6), trunk); a.position.y = 1.5 * s;
-      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2 * s, 1), c); b.position.y = 4.4 * s;
-      a.castShadow = b.castShadow = true; t.add(a, b); t.position.copy(V(x, y, 0)); ls.add(t);
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(1.9 * s, 2), c); b.position.y = 4.3 * s;
+      a.castShadow = b.castShadow = true; t.add(a, b);
+      for (let n = 0; n < 5; n++) {                           // 外圍小葉團
+        const an = n * 1.26 + x, q = new THREE.Mesh(new THREE.IcosahedronGeometry((1.0 + (n % 3) * 0.22) * s, 1), c);
+        q.position.set(Math.cos(an) * 1.35 * s, (4.0 + (n % 2) * 1.1) * s, Math.sin(an) * 1.35 * s); q.castShadow = true; t.add(q);
+      }
+      t.rotation.y = x * 1.7 + y; t.position.copy(V(x, y, 0)); ls.add(t);
     };
     for (let x = 9; x <= 48; x += 6.5) tree(x, 2.5, 0.8);
     for (const y of [9, 15, 37, 43]) tree(2.5, y, 0.8);
@@ -143,7 +150,7 @@ export function build(ctx) {
     g.add(label('次入口：面向廣場與校門', V(38, 25, 4), { color: '#fff', bg: 'rgba(22,163,74,.93)', size: 0.85 }));
     g.add(label('代表會入口', V(19, 34, 5), { color: '#fff', bg: 'rgba(124,58,237,.93)', size: 0.85 }));
     g.add(label('地下停車入口：避開車潮、人潮', V(4, 49, 3), { color: '#fff', bg: 'rgba(220,38,38,.93)', size: 0.9 }));
-    g.add(label('戶外逃生梯', V(M.x1 + 1.5, 14, M.top), { size: 0.8 }), label('通學區減速鋪面', V(58, -5, 1), { size: 0.8, color: '#b45309' }));
+    g.add(label('戶外逃生梯', V(M.x1 + 1.5, 8.5, M.top), { size: 0.8 }), label('通學區減速鋪面', V(58, -5, 1), { size: 0.8, color: '#b45309' }));
     g.add(label('藝術轉角廣場・Ubike', V(2, 2, 2), { size: 0.8, color: '#9a3412' }));
   }
 
@@ -182,7 +189,7 @@ export function build(ctx) {
   // ---------- 10 結構（GLT 膠合木）----------
   {
     const g = layer('struct');
-    const wood = mat(0xa8743a), rc = mat(0x6b7280), bm = [];
+    const wood = tex(mat(0xa8743a), 'wood'), rc = mat(0x6b7280), bm = [];
     for (const x of M.gridX) for (const y of M.gridY) {
       const k = Math.max(0, Math.min(4, Math.ceil((x - M.x0) / M.step)));       // 退台處柱子只到該層
       const top = x >= xs(4) ? M.top : zs[Math.min(4, Math.floor((x - M.x0) / M.step))] + M.floors[Math.min(4, Math.floor((x - M.x0) / M.step))].h;
@@ -208,7 +215,7 @@ export function build(ctx) {
   {
     const g = layer('facade');
     const glass = mat(0x6f97ab, 0.86, { roughness: 0.12, metalness: 0.35 });
-    const wood = mat(0xa8743a), drip = mat(0xe9e6df), frame = mat(0x4b5258), shrub = mat(0x5fae6a), brickM = mat(0xa9654d);
+    const wood = tex(mat(0xa8743a), 'wood'), drip = tex(mat(0xe9e6df), 'noise'), frame = mat(0x4b5258), shrub = mat(0x5fae6a), brickM = tex(mat(0xa9654d), 'brick');
     M.floors.forEach((f, k) => {
       const z = zs[k], a = xs(k) + 0.4, b = M.coreX - 0.3, s0 = z + (k === 0 ? 0.2 : 0.9), s1 = z + f.h - 0.6;
       g.add(box(a, b, M.y0 - 0.08, M.y0 + 0.05, s0, s1, glass, false, false));
@@ -241,7 +248,7 @@ export function build(ctx) {
       thin(a, b, M.y0 - 0.16, M.y0 - 0.06, s0 + (s1 - s0) * 0.68, s0 + (s1 - s0) * 0.68 + 0.07);                                         // 橫框
       if (k > 0) courses(xs(k), M.coreX, M.y0 - 0.02, z, z + 0.9);                                                                       // 窗台牆磚縫
       courses(M.coreX, M.x1, M.y0 - 0.02, z, z + f.h); courses(M.coreX, M.x1, M.y1 + 0.02, z, z + f.h);
-      for (let zz = z + 0.3; zz < z + f.h; zz += 0.38) brick.push(V(M.x1 + 0.02, M.y0, zz), V(M.x1 + 0.02, 11, zz), V(M.x1 + 0.02, 17, zz), V(M.x1 + 0.02, M.y1, zz));
+      for (let zz = z + 0.3; zz < z + f.h; zz += 0.38) brick.push(V(M.x1 + 0.02, M.y0, zz), V(M.x1 + 0.02, M.y1, zz));
       thin(M.coreX + 1.6, M.coreX + 3.4, M.y0 - 0.1, M.y0 + 0.03, z + 1.0, z + f.h - 0.9, glass);                                        // 服務核小窗
       if (k < 4) {                                                                                                                       // 退台：玻璃欄杆、灌木、小樹
         const tz = z + f.h + 0.3;
@@ -254,6 +261,19 @@ export function build(ctx) {
         thin(xs(k) + 0.94, xs(k) + 1.06, M.y1 - 2.26 - k, M.y1 - 2.14 - k, tz, tz + 1.4, wood);
       }
     });
+    // 東立面（面向共融廣場，對照手繪透視圖）：開窗、垂直綠化、木質飾帶、滴水線板
+    M.floors.forEach((f, k) => {
+      const z = zs[k];
+      if (k >= 2) thin(M.x1 - 0.05, M.x1 + 0.08, 12.2, 21.2, z + 0.9, z + f.h - 0.6, glass);
+      if (k >= 2) for (let y = 12.2; y <= 21.21; y += 1.8) thin(M.x1 + 0.06, M.x1 + 0.16, y - 0.05, y + 0.05, z + 0.9, z + f.h - 0.6);
+      thin(M.x1, M.x1 + 0.9, 11.4, M.y1, z + f.h - 0.22, z + f.h, drip);
+    });
+    for (const y of [13.6, 17.2, 20.6]) thin(M.x1 + 0.1, M.x1 + 0.35, y - 0.55, y + 0.55, zs[2] + 0.3, M.top - 1.3, shrub);
+    for (const z of [zs[2] - 0.35, M.top - 1.0]) {                 // 木質飾帶：繞南、東、北三面
+      thin(xs(4), M.x1 + 0.3, M.y0 - 0.3, M.y0, z, z + (z > 15 ? 1.0 : 0.6), wood);
+      thin(M.x1, M.x1 + 0.3, M.y0 - 0.3, M.y1 + 0.3, z, z + (z > 15 ? 1.0 : 0.6), wood);
+      thin(xs(4), M.x1 + 0.3, M.y1, M.y1 + 0.3, z, z + (z > 15 ? 1.0 : 0.6), wood);
+    }
     // 五樓禮堂：直立木格柵
     for (let x = xs(4) + 0.8; x < M.coreX - 0.4; x += 0.95) thin(x - 0.07, x + 0.07, M.y0 - 0.5, M.y0 - 0.12, zs[4] + 0.9, M.top - 0.6, wood);
     // 斜屋頂下的 GLT 椽木與南北封簷
@@ -266,9 +286,9 @@ export function build(ctx) {
     for (let x = 17; x <= 31; x += 4.6) thin(x - 0.15, x + 1.75, M.y0 - 0.55, M.y0 - 0.05, zs[1] - 0.1, zs[1] + 0.35, drip);
     // 東端戶外逃生梯：折返梯段與扶手
     for (let z = FLOOR0, n = 0; z < M.top - 2; z += 1.9, n++) {
-      const y0 = n % 2 ? 16.6 : 11.4, y1 = n % 2 ? 11.4 : 16.6;
+      const y0 = n % 2 ? 10.7 : 6.8, y1 = n % 2 ? 6.8 : 10.7;
       rail.push(V(M.x1 + 0.7, y0, z + 0.2), V(M.x1 + 0.7, y1, z + 2.1), V(M.x1 + 1.9, y0, z + 0.2), V(M.x1 + 1.9, y1, z + 2.1));
-      rail.push(V(M.x1 + 2.55, 11, z + 1.2), V(M.x1 + 2.55, 17, z + 1.2));
+      rail.push(V(M.x1 + 2.55, 6.5, z + 1.2), V(M.x1 + 2.55, 11, z + 1.2));
     }
     // 弧形洽公廊：橫框、入口門框、雨庇
     for (const z of [FLOOR0 + 2.4, FLOOR0 + 6.4]) thin(G.x0 + G.r, G.x1 - G.r, G.y1, G.y1 + 0.1, z, z + 0.07);
@@ -289,12 +309,12 @@ export function build(ctx) {
     const rm = new THREE.LineBasicMaterial({ color: 0x3f474d, transparent: true }); rm.userData.o = 0.95;
     g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rail), rm));
     // 人：手繪圖用紅色小人標示活動
-    const pm = mat(0xd9483b);
+    const pm = mat(0xd9483b); F.peopleMat = pm;
     const person = (x, y, h) => {
       const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.9, 3, 8), pm), hd = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), pm);
       b.position.copy(V(x, y, h + 0.65)); hd.position.copy(V(x, y, h + 1.5)); b.castShadow = true; g.add(b, hd);
     };
-    [[42, 20], [43.5, 22], [41, 33], [47, 12], [41, 9], [45, 16.5], [44, 36], [3, 27], [2, 30], [12, 30], [20, 31], [17, 28.4], [36.5, 24], [8, 3], [30, 2.5], [56, 20], [60, 24]].forEach(([x, y]) => person(x, y, 0.05));
+    [[42, 19], [40.5, 21.5], [41, 33], [47, 12], [41, 9], [45, 16.5], [44, 36], [3, 27], [2, 30], [12, 30], [20, 31], [17, 28.4], [36.5, 24], [8, 3], [30, 2.5], [56, 20], [60, 24]].forEach(([x, y]) => person(x, y, 0.05));
     for (let k = 0; k < 4; k++) person(xs(k) + 1.1, M.y0 + 5 + k * 2, zs[k] + M.floors[k].h + 0.3);
     person(14, 40, C.top + 0.35); person(26, 38, C.top + 0.35); person(31.5, 30, zs[1]);
     // 廣場座椅與 Ubike 架
@@ -333,6 +353,7 @@ export function build(ctx) {
   const intro = buildIntro(ctx);                             // 序章：原始人學會用火（i === -1）
   return function apply(i, t) {
     intro(i, t);
+    F.peopleMat.color.set(i >= LAST - 1 ? 0x3a4046 : 0xd9483b);   // 寫實段落：人改為深灰剪影
     setAmt(F.zoning, amt(i, t, 4));
     const ghost = i === 10 ? lerp(1, 0.2, smooth(t / 0.2)) : 1;
     setAmt(F.mass, amt(i, t, 5, LAST, 0.1) * ghost);
@@ -344,6 +365,7 @@ export function build(ctx) {
     floorsM.forEach((fg, k) => {
       grow(fg, fg.userData.z, st(0.06 + k * 0.09), ex * k * 2.2);
       fg.userData.m.color.copy(WHITE).lerp(fg.userData.zone, colorT).lerp(BRICK, matT);
+      coreMats[k].color.copy(CORE).lerp(BRICK, matT);
       floorLbl[k].position.copy(V(xs(k) - 1.5, M.y0, fg.userData.z + fg.userData.h / 2 + ex * k * 2.2));
     });
     grow(F.gallery, FLOOR0, st(0.55));

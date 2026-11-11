@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { StereoEffect } from './vendor/StereoEffect.js';
+import { Sky } from './vendor/Sky.js';
 // 版本切換：?case=b 為手繪解題圖版本，預設為示範方案
 const CASE = new URLSearchParams(location.search).get('case') === 'b' ? 'b' : 'a';
 const scheme = await import(CASE === 'b' ? './scheme-b.js' : './scheme.js');
@@ -26,6 +27,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.xr.enabled = true;
+renderer.toneMapping = THREE.NeutralToneMapping;           // 保留圖解配色，同時讓寫實模式的高光不過曝
 $('gl').appendChild(renderer.domElement);
 const stereoFx = new StereoEffect(renderer);
 
@@ -61,6 +63,11 @@ function mat(color, o = 1, extra = {}) {
 }
 function box(x0, x1, y0, y1, z0, z1, material, edges = true, shadow = true) {
   const g = new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0);
+  const uv = g.attributes.uv, W = x1 - x0, H = z1 - z0, D = y1 - y0;
+  for (let i = 0; i < uv.count; i++) {
+    const f = Math.floor(i / 4), su = f < 2 ? D : W, sv = f === 2 || f === 3 ? D : H;
+    uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+  }
   const m = new THREE.Mesh(g, material);
   m.position.copy(V((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
   m.castShadow = shadow; m.receiveShadow = true;
@@ -154,12 +161,62 @@ function setAmt(g, a) {                                    // 0..1 淡入；0 �
   if (!g.visible) return;
   g.traverse(o => {
     const m = o.material;
-    if (!m || m.userData.o === undefined) return;
+    if (!m || Array.isArray(m) || m.userData.o === undefined) return;
     const op = m.userData.o * a;
     m.opacity = op;
     if (!o.isSprite && !o.isLine) { m.transparent = op < 0.995; m.depthWrite = op > 0.5; }
   });
 }
+// ---------- 寫實模式：程序化細節貼圖（灰階，乘在原本的材質顏色上）----------
+function detailTex(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d'), R = (a, b) => a + Math.random() * (b - a), g = v => `rgb(${v | 0},${v | 0},${v | 0})`;
+  let size = 2, sizeV = 0;
+  const speckle = (n, lo, hi, r = 1.5) => { for (let i = 0; i < n; i++) { x.fillStyle = g(R(lo, hi)); x.fillRect(R(0, 512), R(0, 512), R(0.5, r), R(0.5, r)); } };
+  if (kind === 'brick') {                                    // 2 m 見方：順砌磚＋灰縫
+    x.fillStyle = g(150); x.fillRect(0, 0, 512, 512);
+    const rows = 28, cols = 9, rh = 512 / rows, bw = 512 / cols;
+    for (let r = 0; r < rows; r++) for (let k = -1; k < cols; k++) {
+      const v = R(196, 255); x.fillStyle = `rgb(${v | 0},${(v * R(0.93, 1)) | 0},${(v * R(0.88, 0.98)) | 0})`;
+      x.fillRect((k + (r % 2) * 0.5) * bw + 1.5, r * rh + 1.5, bw - 3, rh - 3);
+    }
+    speckle(2500, 150, 235);
+  } else if (kind === 'wood') {                              // 1 m：直紋木理
+    x.fillStyle = g(232); x.fillRect(0, 0, 512, 512); size = 1;
+    for (let i = 0; i < 160; i++) {
+      x.strokeStyle = `rgba(90,60,30,${R(0.05, 0.28)})`; x.lineWidth = R(0.6, 2.4);
+      const x0 = R(0, 512), a = R(2, 9), p = R(0, 6);
+      x.beginPath(); for (let y = 0; y <= 512; y += 16) x.lineTo(x0 + Math.sin(y / 70 + p) * a, y); x.stroke();
+    }
+  } else if (kind === 'paver') {                             // 2.4 m：60 cm 鋪面磚
+    size = 2.4; x.fillStyle = g(168); x.fillRect(0, 0, 512, 512);
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) { x.fillStyle = g(R(222, 252)); x.fillRect(k * 128 + 1, r * 128 + 1, 126, 126); }
+    speckle(5000, 200, 255);
+  } else if (kind === 'grass') {                             // 2 m：草葉斑點
+    x.fillStyle = g(215); x.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(${R(40, 90) | 0},${R(90, 150) | 0},${R(30, 70) | 0},${R(0.15, 0.5)})`; x.fillRect(R(0, 512), R(0, 512), R(1, 3), R(2, 7)); }
+  } else if (kind === 'windows') {                           // 7×3.5 m：鄰房開窗
+    size = 7; sizeV = 3.5; x.fillStyle = g(236); x.fillRect(0, 0, 512, 512); speckle(3000, 205, 245, 3);
+    for (let k = 0; k < 2; k++) {
+      const wx = 48 + k * 256, wy = 120;
+      x.fillStyle = '#5d6a73'; x.fillRect(wx - 6, wy - 6, 172, 262);
+      const gr = x.createLinearGradient(0, wy, 0, wy + 250); gr.addColorStop(0, '#8fb0c2'); gr.addColorStop(1, '#3f5565');
+      x.fillStyle = gr; x.fillRect(wx, wy, 160, 250);
+      x.fillStyle = '#5d6a73'; x.fillRect(wx + 77, wy, 6, 250); x.fillRect(wx, wy + 90, 160, 5);
+      x.fillStyle = g(205); x.fillRect(wx - 14, wy + 256, 188, 12);
+    }
+    x.fillStyle = g(190); x.fillRect(0, 0, 512, 10);
+  } else {                                                   // noise 3 m：混凝土／柏油顆粒
+    size = 3; x.fillStyle = g(228); x.fillRect(0, 0, 512, 512); speckle(14000, 170, 255, 2.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / size, 1 / (sizeV || size));
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+const TEX = {}, realMats = [];
+const tex = (m, kind) => { realMats.push([m, kind]); return m; };   // 登記：寫實模式時替這個材質貼上細節
+
 const F = {};                                              // 各「圖層」
 const TABLE_R = 104;                                       // VR 桌面模型的地面半徑（公尺）
 const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name]);
@@ -171,7 +228,7 @@ const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name])
   const ground = (shape, hole) => {
     shape.holes.push(hole);
     const gg = new THREE.ShapeGeometry(shape); gg.rotateX(-Math.PI / 2);
-    const m = new THREE.Mesh(gg, mat(0xeef1ec));
+    const m = new THREE.Mesh(gg, tex(mat(0xeef1ec), 'noise'));
     m.position.y = -0.03; m.receiveShadow = true;
     g.add(m); return m;
   };
@@ -180,7 +237,7 @@ const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name])
   const pit = box(-0.5, 50.5, -0.5, 52.5, -4.6, -4.2, mat(0xcfd6dc), false, false);
   g.add(pit);
   for (const r of CONTEXT.roads) {
-    g.add(flat(rect(r.x0, r.x1, r.y0, r.y1), 0.0, mat(0xb8c0c8)));
+    g.add(flat(rect(r.x0, r.x1, r.y0, r.y1), 0.0, tex(mat(0xb8c0c8), 'noise')));
     g.add(label(r.name, V(r.at[0], r.at[1], 0.5), { color: '#fff', bg: 'rgba(75,85,99,.85)', size: 0.8, occlude: true }));
   }
   g.add(flat([[-12, -10], [-22, -10], [-50, -48], [-40, -48]], 0.0, mat(0xb8c0c8)));   // 西南斜向 10M 道路
@@ -193,6 +250,8 @@ const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name])
     for (const y of [58, 70, 76, 88]) g.add(line([V(x, y, 0.05), V(x, y - 5, 0.05)], 0xffffff, false, 0.9));
   for (const b of CONTEXT.blocks) {
     const bm = box(b.x0, b.x1, b.y0, b.y1, 0, b.h, mat(0xd3d8de));
+    const roofM = mat(0xc4c9cf); bm.material = [bm.material, bm.material, roofM, roofM, bm.material, bm.material];   // 屋頂不貼窗
+    tex(bm.material[0], 'windows'); tex(roofM, 'noise');
     g.add(bm);
     if (b.y1 < 0) (F.southBlocks ||= []).push(bm);      // 南側鄰房：看剖立面時暫時隱藏
     if (b.name) { const lb = label(b.name, V((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h + 1), { size: 0.85, color: '#374151', occlude: true }); g.add(lb); if (b.y1 < 0) F.southBlocks.push(lb); }
@@ -204,7 +263,7 @@ const layer = name => (F[name] = new THREE.Group(), world.add(F[name]), F[name])
 }
 { // 基地本體
   const g = layer('site');
-  F.siteSurf = flat(SITE.poly, 0.0, mat(0xf7f3e8));
+  F.siteSurf = flat(SITE.poly, 0.0, tex(mat(0xf7f3e8), 'noise'));
   g.add(F.siteSurf);
   const ring = SITE.poly.map(([x, y]) => V(x, y, 0.12)); ring.push(ring[0].clone());
   g.add(line(ring, 0xdc2626));
@@ -273,7 +332,7 @@ const OFF = scheme.INTRO || 0;                              // 版本可在最�
 let clock = 0;
 // 第 4 段以後的量體、分區、動線、立面等圖層由各版本模組建立
 const applyCase = (await import(CASE === 'b' ? './case-b.js' : './case-a.js'))
-  .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY });
+  .build({ V, box, flat, rect, line, label, arrow, flow, mat, setAmt, layer, F, amt, bump, smooth, lerp, LAST: LAST - OFF, scheme, world, CX, CY, tex });
 function applyState(ri, t) {
   const i = ri - OFF;
   F.ctx.visible = i >= 0 || t > 0.93;                        // 序章時隱藏城鎮模型
@@ -292,12 +351,37 @@ function applyState(ri, t) {
   for (const f of flows) f.dots.forEach((d, k) => d.position.copy(f.curve.getPointAt((((k / f.dots.length + clock * f.speed) % 1) + 1) % 1)));
 }
 
+// ---------- 寫實模式：天空、環境反射、材質貼圖、斜陽 ----------
+const SUN_REAL = V(-70, -55, 48);
+const skyParams = s => { const u = s.material.uniforms; u.turbidity.value = 5; u.rayleigh.value = 1.1; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82; u.sunPosition.value.copy(SUN_REAL).normalize(); };
+const sky = new Sky(); sky.scale.setScalar(1400); sky.visible = false; skyParams(sky); scene.add(sky);
+let envTex = null, realOn = false;
+function setReal(on) {
+  if (on === realOn) return;
+  realOn = on;
+  if (on && !envTex) {                                       // 第一次啟用才產生貼圖與環境圖
+    for (const k of ['brick', 'wood', 'paver', 'grass', 'windows', 'noise']) TEX[k] = detailTex(k);
+    const s2 = new THREE.Scene(), sk = new Sky(); sk.scale.setScalar(60); skyParams(sk); s2.add(sk);
+    const pm = new THREE.PMREMGenerator(renderer); envTex = pm.fromScene(s2, 0, 0.1, 200).texture; pm.dispose();
+  }
+  for (const [m, k] of realMats) {
+    m.map = on ? TEX[k] : null;
+    m.bumpMap = on && k !== 'windows' && k !== 'grass' ? TEX[k] : null; m.bumpScale = k === 'brick' ? 1.6 : 0.8;
+    m.needsUpdate = true;
+  }
+  scene.environment = on ? envTex : null; scene.environmentIntensity = 0.75;
+  sky.visible = on;
+  hemi.intensity = on ? 0.6 : 1.15; sun.intensity = on ? 3.4 : 2.1; sun.color.set(on ? 0xffe3c0 : 0xfff4e0);
+  renderer.toneMappingExposure = on ? 0.8 : 1;
+  $('bReal').classList.toggle('on', on);
+}
+
 // 鏡頭
 const camEnd = k => ({ p: V(...(CHAPTERS[k].cam2 || CHAPTERS[k].cam)), l: V(...(CHAPTERS[k].look2 || CHAPTERS[k].look)) });
 function pose(i, t) {
   const c = CHAPTERS[i];
   let p = V(...c.cam), l = V(...c.look);
-  if (i > 0) { const a = camEnd(i - 1), s = smooth(t / 0.3); p = a.p.lerp(p, s); l = a.l.lerp(l, s); }
+  if (i > 0 && !c.walk) { const a = camEnd(i - 1), s = smooth(t / 0.3); p = a.p.lerp(p, s); l = a.l.lerp(l, s); }
   if (c.cam2) { const s = smooth((t - 0.45) / 0.25); p.lerp(V(...c.cam2), s); l.lerp(V(...(c.look2 || c.look)), s); }   // 章節中途換機位
   const ang = (c.walk ? 0.5 : 0.16) * (t - 0.5);
   if (c.walk) l = l.clone().sub(p).applyAxisAngle(THREE.Object3D.DEFAULT_UP, ang).add(p);
@@ -363,6 +447,21 @@ $('bPlay').onclick = () => {
 };
 $('bPrev').onclick = () => go(S.t > 0.15 && S.playing ? S.i : S.i - 1);
 $('bNext').onclick = () => go(S.i + 1);
+$('bReal').onclick = () => { S.real = !S.real; };
+// 匯出目前畫面的模型（.glb），可匯入 Twinmotion、D5、Unreal、Blender 等做高階渲染
+async function exportGlb() {
+  const { GLTFExporter } = await import('./vendor/GLTFExporter.js');
+  setReal(true);
+  return new Promise((res, rej) => new GLTFExporter().parse(world, res, rej, { binary: true, onlyVisible: true }));
+}
+$('bGlb').onclick = async () => {
+  toast('正在匯出模型…');
+  try {
+    const buf = await exportGlb(), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' }));
+    a.download = `township-office-case-${CASE}.glb`; a.click();
+  } catch (e) { toast('匯出失敗：' + e.message); }
+};
 $('bVoice').onclick = () => { S.voice = !S.voice; if (!S.voice) hush(); syncBtns(); };
 controls.addEventListener('start', () => { if (!S.free) { S.free = true; setPlaying(false); } });
 addEventListener('keydown', e => {
@@ -554,6 +653,11 @@ renderer.setAnimationLoop(now => {
   segs.forEach((b, k) => (b.style.width = (k < S.i ? 100 : k === S.i ? S.t * 100 : 0) + '%'));
   applyState(S.i, S.t);
   const ps = pose(S.i, S.t), xr = renderer.xr.isPresenting;
+  // 寫實模式：最後一段自動啟用，或由按鈕強制；最後一段同時隱藏標註，畫面只留建築
+  setReal(S.real || !!CHAPTERS[S.i].real);
+  if (realOn) { sun.position.copy(SUN_REAL); scene.fog.color.set(0xd9e4ee); }
+  const hideLbl = !!CHAPTERS[S.i].real;
+  if (hideLbl || S.lblHidden) { S.lblHidden = hideLbl; for (const l of labels) l.visible = !hideLbl; }
   panel.m.visible = S.stereo || xr;
   if (xr) xrTick(ps, dt);
   else if (!S.free) {
@@ -583,4 +687,4 @@ $('bStartXR').onclick = () => { S.voice = true; enterXR(); };
 xrSupported.then(ok => { $('bStartXR').hidden = !ok; $('sXR').textContent = ok ? '已偵測到 VR 裝置，可直接進入。' : '未偵測到 VR 裝置：PC VR 請先用 Virtual Desktop、SteamVR 或 Quest Link 連上電腦並啟動 VR，再用 Chrome／Edge 開啟本頁（需 https 或 localhost）。'; });
 $('cD').addEventListener('toggle', layout);
 syncBtns(); showCaption(); applyState(0, 0);
-window.__vr = { S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
