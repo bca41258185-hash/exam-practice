@@ -354,8 +354,9 @@ function applyState(ri, t) {
   F.progBars.scale.y = i === 3 ? Math.max(0.001, smooth(t / 0.35)) : 1;
   applyCase(i, t);
   for (const a of extras) a(i, t);
-  if (F.street) F.street.visible = F.ctx.visible;
-  if (F.ctxDetail) F.ctxDetail.visible = F.ctx.visible;
+  if (F.street) F.street.visible = F.ctx.visible && !F.lite;
+  if (F.ctxDetail) F.ctxDetail.visible = F.ctx.visible && !F.lite;
+  if (F.lite && F.props) F.props.visible = false;            // 輕量模式：街道、鄰房、基地家具細部都不畫
   // 太陽：基地分析章節由東向西移動
   if (i === 1) { const p = sunPos(lerp(0.12, 0.9, t) * Math.PI); sunBall.position.copy(p); sun.position.copy(p); }
   else sun.position.copy(SUN_HOME);
@@ -796,13 +797,15 @@ async function enterXR() {
     try { await s.requestReferenceSpace('local-floor'); } catch (e) { type = 'local'; }
     XR.yOff = type === 'local' ? -1.6 : 0;
     renderer.xr.setReferenceSpaceType(type);
+    renderer.xr.setFramebufferScaleFactor(0.85);
+    XR.prevShadows = Q.shadows; F.lite = true; setShadowPass(false);   // VR 每格要畫兩眼：先減量，避免卡住
     await renderer.xr.setSession(s);
     XR.session = s; XR.auto = true; XR.chapter = -1; XR.yaw = 0; XR.zoom = 1; XR.prev = {};
     scene.add(panel.m); panel.m.position.set(0, 1.75, -2.6); panel.m.rotation.set(0, 0, 0); panel.m.scale.setScalar(1.8);
     s.addEventListener('select', () => go(S.i === LAST ? 0 : S.i + 1, true));
     s.addEventListener('squeeze', () => go(S.i - 1, true));
     s.addEventListener('end', () => {
-      XR.session = null; XR.k = 0;
+      XR.session = null; XR.k = 0; F.lite = !!Q.soft; setShadowPass(!!XR.prevShadows);
       world.position.set(0, 0, 0); world.rotation.set(0, 0, 0); world.scale.setScalar(1);
       F.outer.visible = true; setLabelScale(1); shadowScale(1);
       camera.add(panel.m); panel.m.position.set(0, -0.52, -1.9); panel.m.rotation.set(-0.2, 0, 0); panel.m.scale.setScalar(1);
@@ -823,7 +826,8 @@ async function xrDiag(e) {
   try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); gpu = x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : ''; } catch (_) { }
   const n = e && e.name || '', m = (e && e.message) || String(e);
   const quest = /OculusBrowser/.test(ua);
-  const tip = /makeXRCompatible|compatible|context/i.test(m)
+  const tip = Q.soft ? '瀏覽器沒有使用顯示卡（硬體加速關閉），無法進入 VR，網頁也會非常卡。Chrome：設定 → 系統 → 開啟「使用圖形加速功能」→ 重新啟動 Chrome。'
+    : /makeXRCompatible|compatible|context/i.test(m)
     ? '瀏覽器用的顯示卡和頭戴裝置接的不是同一張（筆電常見）。Windows「設定 → 系統 → 顯示器 → 圖形」把 Chrome／Edge 設為「高效能」，重開瀏覽器再試。'
     : n === 'NotSupportedError' ? (quest ? 'Quest 瀏覽器回報不支援：請確認是用「Meta Quest 瀏覽器」開啟，並更新頭戴裝置系統。' : '瀏覽器找不到 VR 裝置。' + XR_HELP)
     : n === 'SecurityError' || n === 'NotAllowedError' ? '瀏覽器拒絕進入 VR：請直接點按鈕（不要從其他程式自動開啟），若跳出權限詢問請選「允許」；Quest 請在網址列左邊的鎖頭裡允許「虛擬實境」。'
@@ -898,12 +902,19 @@ addEventListener('resize', layout);
 const Q = { max: 1, pr: 1, acc: 0, n: 0, good: 0, shadows: true, warned: false, soft: false };
 const pixelCap = () => Math.max(0.5, Math.min(devicePixelRatio || 1, 2, Math.sqrt(2.3e6 / (innerWidth * innerHeight))));
 function applyPR(pr) { Q.pr = pr; renderer.setPixelRatio(pr); layout(); }
+// 關陰影＝停止每格重算陰影貼圖（沿用最後一張，換段與每 1.5 秒更新一次），材質不必重新編譯
+function setShadowPass(on) { Q.shadows = on; renderer.shadowMap.autoUpdate = on; renderer.shadowMap.needsUpdate = true; }
+let shadowAt = 0, shadowCh = -1;
+function refreshShadow() {
+  if (renderer.shadowMap.autoUpdate) return;
+  if (S.i !== shadowCh || clock - shadowAt > 1.5) { shadowCh = S.i; shadowAt = clock; renderer.shadowMap.needsUpdate = true; }
+}
 try {                                                        // 瀏覽器沒用顯示卡（硬體加速關閉）時會非常慢
   const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
   Q.soft = /swiftshader|llvmpipe|software|basic render/i.test(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '');
 } catch (e) { }
 Q.max = pixelCap();
-if (Q.soft && !REC) { Q.shadows = false; sun.castShadow = false; }
+if (Q.soft && !REC) { Q.shadows = false; sun.castShadow = false; F.lite = true; }   // 沒用顯示卡：第一次繪製前就關陰影、去細部
 applyPR(Q.soft && !REC ? Math.min(Q.max, 0.75) : Q.max);
 addEventListener('resize', () => { Q.max = pixelCap(); if (Q.pr > Q.max) applyPR(Q.max); });
 function adapt(ms) {
@@ -913,11 +924,11 @@ function adapt(ms) {
   if (avg > 26) {                                            // 慢於約 38 fps
     Q.good = 0;
     if (Q.pr > 0.6) applyPR(Math.max(0.6, +(Q.pr * 0.8).toFixed(2)));
-    else if (Q.shadows) { Q.shadows = false; sun.castShadow = false; }
+    else if (Q.shadows) setShadowPass(false);
     else if (!Q.warned) { Q.warned = true; toast('畫面仍然很慢：請確認瀏覽器已開啟「硬體加速」，並關閉其他分頁或程式。', 8000); }
   } else if (avg < 14 && ++Q.good >= 4) {                     // 連續約 3 秒很順才調回
     Q.good = 0;
-    if (!Q.shadows && !Q.soft) { Q.shadows = true; sun.castShadow = true; }
+    if (!Q.shadows && !Q.soft) setShadowPass(true);
     else if (Q.pr < Q.max) applyPR(Math.min(Q.max, +(Q.pr * 1.15).toFixed(2)));
   }
 }
@@ -926,7 +937,7 @@ function adapt(ms) {
 let last = performance.now();
 const tmpQ = new THREE.Quaternion();
 function tick(now) {
-  adapt(now - last);
+  adapt(now - last); refreshShadow();
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now; clock += dt;
   const ch = CHAPTERS[S.i];
   if (S.playing) {
@@ -989,4 +1000,4 @@ syncBtns(); showCaption(); applyState(0, 0);
 if (REC) document.body.classList.add('rec');
 // 逐格算圖：設定章節與進度後立刻算一格並回傳 JPEG（不依賴實際時間，所以不會掉幀）
 const frame = (i, t, c) => { S.i = i; S.t = t; S.playing = false; S.free = false; clock = c; tick(last); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
-window.__vr = { setNav, NAV, SPEED, U, Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
+window.__vr = { F, setShadowPass, setNav, NAV, SPEED, U, Q, renderer, frame, CHAPTERS, exportGlb, S, go, setPlaying, N, applyState, XR, world, setClock: v => { clock = v; } };          // 供自動化測試使用
