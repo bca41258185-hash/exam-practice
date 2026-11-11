@@ -785,7 +785,12 @@ async function enterXR() {
   if (S.nav) setNav(S.nav);                                  // 進 VR 前先離開走路／飛行
   try {
     if (!navigator.xr) throw new Error('這個瀏覽器不支援 WebXR');
-    const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
+    let s;
+    try { s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] }); }
+    catch (e1) {                                            // 有些執行環境不接受額外選項：不帶選項再試一次
+      if (e1.name !== 'NotSupportedError') throw e1;
+      s = await navigator.xr.requestSession('immersive-vr');
+    }
     // 有些執行環境沒有「地板」座標，就改用以頭部為原點的座標，並把模型往下移一個身高
     let type = 'local-floor';
     try { await s.requestReferenceSpace('local-floor'); } catch (e) { type = 'local'; }
@@ -805,9 +810,38 @@ async function enterXR() {
     });
     $('start')?.remove(); syncBtns();
     go(S.i, true);
-  } catch (e) { toast('無法進入 VR（' + (e.message || e.name) + '）。' + XR_HELP, 14000); checkXR(); }
+  } catch (e) { xrDiag(e); checkXR(); }
 }
 $('bXR').onclick = enterXR;
+// 進不去 VR 時顯示診斷畫面：錯誤代碼、瀏覽器、偵測結果、顯示卡，並依錯誤給對應做法（請使用者截圖回報）
+async function xrDiag(e) {
+  const ua = navigator.userAgent;
+  const br = /OculusBrowser/.test(ua) ? 'Meta Quest 瀏覽器' : /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '其他';
+  let sup = '無 WebXR';
+  try { if (navigator.xr) sup = (await navigator.xr.isSessionSupported('immersive-vr')) ? '支援' : '不支援'; } catch (_) { sup = '偵測失敗'; }
+  let gpu = '';
+  try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); gpu = x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : ''; } catch (_) { }
+  const n = e && e.name || '', m = (e && e.message) || String(e);
+  const quest = /OculusBrowser/.test(ua);
+  const tip = /makeXRCompatible|compatible|context/i.test(m)
+    ? '瀏覽器用的顯示卡和頭戴裝置接的不是同一張（筆電常見）。Windows「設定 → 系統 → 顯示器 → 圖形」把 Chrome／Edge 設為「高效能」，重開瀏覽器再試。'
+    : n === 'NotSupportedError' ? (quest ? 'Quest 瀏覽器回報不支援：請確認是用「Meta Quest 瀏覽器」開啟，並更新頭戴裝置系統。' : '瀏覽器找不到 VR 裝置。' + XR_HELP)
+    : n === 'SecurityError' || n === 'NotAllowedError' ? '瀏覽器拒絕進入 VR：請直接點按鈕（不要從其他程式自動開啟），若跳出權限詢問請選「允許」；Quest 請在網址列左邊的鎖頭裡允許「虛擬實境」。'
+    : n === 'InvalidStateError' ? '已有其他 VR 程式或分頁正在使用頭戴裝置：關掉其他 VR 遊戲、SteamVR 首頁以外的程式和其他分頁後再試。'
+    : XR_HELP;
+  let d = $('xrDiag');
+  if (!d) { d = document.createElement('div'); d.id = 'xrDiag'; document.body.appendChild(d); }
+  d.innerHTML = `<div class="dx"><h3>無法進入 VR</h3>
+    <p class="tip">${tip}</p>
+    <table><tr><th>錯誤</th><td>${(n || '-') + '：' + m.replace(/</g, '&lt;')}</td></tr>
+    <tr><th>瀏覽器</th><td>${br}</td></tr><tr><th>VR 偵測</th><td>${sup}</td></tr>
+    <tr><th>https</th><td>${window.isSecureContext ? '是' : '否'}</td></tr><tr><th>顯示卡</th><td>${(gpu || '-').replace(/</g, '&lt;')}</td></tr></table>
+    <p class="sm">還是不行的話，請把這個畫面截圖傳給我。</p>
+    <div class="bt"><button id="dxRetry">再試一次</button><button id="dxClose">關閉</button></div></div>`;
+  d.hidden = false;
+  $('dxRetry').onclick = () => { d.hidden = true; enterXR(); };
+  $('dxClose').onclick = () => { d.hidden = true; };
+}
 function setLabelScale(k) { for (const l of labels) l.scale.set(l.userData.base[0] * k, l.userData.base[1] * k, 1); }
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _d = new THREE.Vector3();
 function xrTick(ps, dt) {
