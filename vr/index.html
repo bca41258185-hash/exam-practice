@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VR 設計講解｜114年 鄉公所行政大樓</title>
+<style>
+[hidden]{display:none!important;}
+:root{--ink:#1f2430;--muted:#6b7280;--line:#e4e7ec;--brand:#2563eb;--brand-d:#1d4ed8;--card:rgba(255,255,255,.94);}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:#dfe7ee;color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.55;}
+#gl{position:fixed;inset:0;}
+#gl canvas{display:block;width:100%;height:100%;touch-action:none;}
+button{font:inherit;color:inherit;cursor:pointer;}
+.top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+  padding:calc(8px + env(safe-area-inset-top)) 10px 0;pointer-events:none;z-index:3;}
+.top>*{pointer-events:auto;}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px;
+  text-decoration:none;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08);white-space:nowrap;}
+.pill.on{background:var(--brand);color:#fff;border-color:var(--brand);}
+.tools{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;}
+.bottom{position:fixed;left:0;right:0;bottom:0;padding:0 10px calc(10px + env(safe-area-inset-bottom));z-index:3;pointer-events:none;}
+.cap{pointer-events:auto;max-width:760px;margin:0 auto;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:12px 14px 10px;box-shadow:0 2px 10px rgba(0,0,0,.1);}
+.cap h2{margin:0 0 4px;font-size:16px;}
+.cap h2 .n{color:var(--brand-d);font-variant-numeric:tabular-nums;margin-right:6px;}
+.cap p{margin:0;font-size:14px;max-height:9.4em;overflow:auto;}
+.tip{margin-top:6px;font-size:13px;font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:5px 9px;}
+.ver{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;}
+.keys{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.keys span{font-size:12px;font-weight:700;background:#eef2ff;color:var(--brand-d);border-radius:999px;padding:3px 9px;}
+.checks{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;max-height:28vh;overflow:auto;}
+.checks li{padding:3px 0;border-top:1px dashed var(--line);}
+.checks b{display:inline-block;min-width:4.6em;margin-right:6px;color:#15803d;}
+details{margin-top:8px;font-size:13px;}
+summary{cursor:pointer;font-weight:700;color:var(--brand-d);}
+.ctl{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.ctl button{border:1px solid var(--line);background:#fff;border-radius:10px;min-width:42px;height:38px;font-size:16px;}
+.ctl button.main{background:var(--brand);border-color:var(--brand);color:#fff;min-width:56px;}
+.seg{flex:1;display:flex;gap:3px;height:38px;align-items:center;}
+.seg i{flex:1;height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden;cursor:pointer;position:relative;}
+.seg i::before{content:"";position:absolute;inset:-14px 0;}
+.seg i b{display:block;height:100%;width:0;background:var(--brand);}
+#start{position:fixed;inset:0;z-index:9;background:rgba(243,244,246,.96);display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto;}
+.sbox{max-width:520px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 4px 18px rgba(0,0,0,.08);}
+.sbox h1{font-size:20px;margin:0 0 2px;}
+.sbox .sub{color:var(--muted);font-size:13px;margin:0 0 12px;}
+.sbox ul{padding-left:18px;margin:8px 0;font-size:13.5px;}
+.note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:9px 11px;font-size:12.5px;color:#9a3412;margin:10px 0;}
+.big{display:block;width:100%;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;background:var(--brand);color:#fff;margin-top:10px;}
+.refs{font-size:12.5px;color:var(--muted);margin-top:12px;}
+.refs a{color:var(--brand-d);}
+body.clean .top,body.clean .ctl,body.clean details{display:none;}
+body.stereo .top,body.stereo .bottom,body.rec .top,body.rec .bottom,body.rec #start{display:none;}
+#exitStereo{display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:5;opacity:.6;}
+body.stereo #exitStereo{display:block;}
+#err{position:fixed;inset:auto 10px 50% 10px;z-index:10;background:#fdeaea;color:#b91c1c;border-radius:10px;padding:12px;font-size:14px;display:none;}
+@media (max-height:520px){.cap p{max-height:2.9em}.cap h2{font-size:14px}.keys{display:none}}
+</style>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+</head>
+<body>
+<div id="gl"></div>
+
+<div class="top">
+  <a class="pill" href="../index.html">← 題庫</a>
+  <div class="tools">
+    <button class="pill" id="bClean" title="隱藏按鈕，方便螢幕錄影（按 H 切換）">🎬 錄影</button>
+    <button class="pill" id="bGlb" title="匯出 3D 模型供專業渲染軟體使用">⬇ 模型</button>
+    <button class="pill" id="bReal" title="寫實渲染（最後一段自動開啟）">🎨 寫實</button>
+    <button class="pill" id="bVoice" title="語音旁白">🔊 旁白</button>
+    <button class="pill" id="bGyro" title="轉動手機環視">📱 環視</button>
+    <button class="pill" id="bStereo" title="手機放入 Cardboard 眼鏡">👓 雙眼</button>
+    <button class="pill" id="bXR" hidden>🥽 進入 VR</button>
+  </div>
+</div>
+<button class="pill" id="exitStereo">✕ 離開雙眼模式</button>
+
+<div class="bottom">
+  <div class="cap">
+    <h2><span class="n" id="cN"></span><span id="cT"></span></h2>
+    <p id="cP"></p>
+    <div class="tip" id="cTip" hidden></div>
+    <div class="keys" id="cK"></div>
+    <details id="cD" hidden><summary>法規檢核表（點開）</summary><ul class="checks" id="cC"></ul></details>
+    <div class="ctl">
+      <button id="bPrev" aria-label="上一段">⏮</button>
+      <button id="bPlay" class="main" aria-label="播放／暫停">▶</button>
+      <button id="bNext" aria-label="下一段">⏭</button>
+      <div class="seg" id="seg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="start">
+  <div class="sbox">
+    <h1 id="sTitle"></h1>
+    <p class="sub" id="sSub"></p>
+    <ul>
+      <li id="sList"></li>
+      <li>拖曳可自由轉視角（會暫停），按 ▶ 回到導覽</li>
+      <li>🎬 錄影：隱藏按鈕只留字幕，方便螢幕錄影；按 H 切換、空白鍵播放／暫停</li>
+      <li>📱 環視：轉動手機看四周　👓 雙眼：放進 Cardboard</li>
+      <li>🥽 PC VR：扳機下一段、握把上一段、A/X 切換桌面模型⇄1:1 走進基地、右搖桿旋轉縮放、左搖桿行走</li>
+    </ul>
+    <div class="ver"><a class="pill" id="vA" href="?case=a">版本 A｜示範方案</a><a class="pill" id="vB" href="?case=b">版本 B｜手繪解題圖</a></div>
+    <div class="note" id="sNote"></div>
+    <button class="big" id="bStartXR" hidden style="background:#111827">🥽 以 VR 頭戴裝置觀看（PC VR／Quest）</button>
+    <button class="big" id="bStart">▶ 開始播放（含語音旁白）</button>
+    <button class="big" id="bStartMute" style="background:#eef2ff;color:#1d4ed8">靜音播放（只看字幕）</button>
+    <p class="sub" id="sXR" style="margin:10px 0 0"></p>
+    <div class="refs" id="sRefs"></div>
+  </div>
+</div>
+<div id="err"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
