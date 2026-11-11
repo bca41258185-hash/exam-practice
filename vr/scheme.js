@@ -5,7 +5,7 @@ export const META = {
   source: '示範方案：依考選部原題條件推導，非他人作品、非官方解答',
   examUrl: 'https://wwwq.moex.gov.tw/exam/wHandExamQandA_File.ashx?t=Q&code=114180&c=801&s=0106&q=1',
   refs: [
-    { name: '114年建築師考試大小設計題解【精華版】（YouTube 影片）', url: 'https://youtu.be/bJnGzKcZEps' },
+    { name: '【精華版】題解114年建築師考試大小設計（建築師之路／葉宣德建築師，YouTube 影片）', url: 'https://youtu.be/bJnGzKcZEps' },
     { name: '歷屆設計考題索引 81–114 年（施明宏建築師）', url: 'https://vocus.cc/article/66d08494fd89780001ee494f' },
   ],
 };
