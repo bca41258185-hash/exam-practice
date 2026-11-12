@@ -192,10 +192,203 @@ input[type=range]{width:100%;accent-color:var(--blue)}
 }
 @media print{.top,.rail,.navrow,.tbtn{display:none!important}.wrap{display:block}.view{max-width:none}}
 </style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@700&display=swap">
+<style>
+/* 第二層：藍圖視覺。圖桌（方格底）＋藍曬圖看板（標題、遊戲）＋紅色印章 */
+:root{
+  --bp:#12407f; --bp-deep:#0c2d5c; --bp-ink:#eef4ff; --bp-mut:#b4c9ea; --bp-line:#3b64a4; --bp-hi:#ffd84d;
+  --seal:#c8372d; --grid:rgba(27,79,156,.07);
+  --f-hand:"LXGW WenKai TC","Noto Sans TC","PingFang TC","Microsoft JhengHei",serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bp:#103768; --bp-deep:#0a2548; --grid:rgba(132,180,247,.05); --seal:#ff7b6e } }
+:root[data-theme="dark"]{ --bp:#103768; --bp-deep:#0a2548; --grid:rgba(132,180,247,.05); --seal:#ff7b6e }
+body{background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:24px 24px}
+h1,.h-hand{font-family:var(--f-hand);font-weight:700;letter-spacing:.01em}
+h2.h{font-family:var(--f-hand);font-size:25px;border-top:0;padding-top:0;margin-top:52px;display:flex;align-items:baseline;gap:10px}
+h2.h::before{content:"";flex:none;width:26px;height:12px;border-left:2px solid var(--blue);border-right:2px solid var(--blue);background:linear-gradient(var(--blue),var(--blue)) center/100% 2px no-repeat}
+
+/* 頂列等級 */
+.lv{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;font-size:13px;white-space:nowrap;background:var(--sheet)}
+.lv i{font:600 12px var(--f-data);font-style:normal;background:var(--bp);color:var(--bp-ink);border-radius:999px;padding:3px 9px}
+.lv b{font-family:var(--f-hand);font-size:15px}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translate(-50%,20px);background:var(--bp);color:var(--bp-ink);font:600 15px var(--f-data);padding:10px 18px;border-radius:999px;opacity:0;transition:opacity .25s,transform .25s;z-index:20;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* 藍圖看板：首頁主視覺、單元標題 */
+.bp{background:var(--bp);color:var(--bp-ink);border-radius:10px;position:relative;overflow:hidden;
+  background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:20px 20px}
+.bp::after{content:"";position:absolute;inset:8px;border:1px solid rgba(255,255,255,.35);border-radius:4px;pointer-events:none}
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:8px;align-items:center;padding:34px 30px 30px}
+.hero h1{font-size:clamp(30px,5.2vw,50px);line-height:1.2;margin:8px 0 12px;color:var(--bp-ink)}
+.hero h1 em{font-style:normal;color:var(--bp-hi)}
+.hero p{color:var(--bp-mut);margin:0 0 18px;font-size:16.5px;max-width:30em}
+.hero .eyebrow{color:var(--bp-hi)}
+.hero svg{width:100%;height:auto;display:block}
+.hero .ln{stroke:var(--bp-ink);fill:none;stroke-width:2;stroke-dasharray:1;stroke-dashoffset:0;animation:draw 2.4s ease-out both}
+.hero .ln.t2{animation-delay:.5s}.hero .ln.t3{animation-delay:1s}.hero .ln.thin{stroke-width:1;stroke:var(--bp-mut)}
+.hero .fl{fill:rgba(255,255,255,.12)}.hero text{fill:var(--bp-ink);font-family:var(--f-data);font-size:11px}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+.cta{display:inline-flex;align-items:center;gap:8px;background:var(--bp-hi);color:#1b2330;border:0;border-radius:6px;padding:12px 20px;font-weight:900;font-size:16px;min-height:46px}
+.stats{display:flex;flex-wrap:wrap;gap:8px 26px;margin:20px 0 0;padding:0;list-style:none}
+.stats li{display:flex;flex-direction:column;line-height:1.2}
+.stats b{font:600 30px var(--f-data);color:var(--bp-ink)}
+.stats span{font-size:12.5px;color:var(--bp-mut)}
+.mhead{padding:22px 24px 20px;margin-bottom:22px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 20px;align-items:center}
+.mhead .big{grid-row:1/4;font:600 clamp(54px,11vw,92px)/.9 var(--f-data);color:transparent;-webkit-text-stroke:2px var(--bp-hi)}
+.mhead .eyebrow{color:var(--bp-hi)}
+.mhead h1{margin:0;color:var(--bp-ink);font-size:clamp(24px,4.4vw,36px)}
+.mhead .goal{margin:2px 0 0;color:var(--bp-mut)}.mhead .goal b{color:var(--bp-ink)}
+
+/* 首頁課表卡：像一張張圖紙 */
+.home-grid{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.home-grid button{position:relative;padding:16px 16px 14px;border-radius:4px;border:1px solid var(--line);box-shadow:3px 3px 0 var(--line);transition:transform .12s,box-shadow .12s}
+.home-grid button:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--blue)}
+.home-grid .no{font:600 34px/1 var(--f-data);color:var(--blue)}
+.home-grid .ttl{font-family:var(--f-hand);font-size:20px}
+.home-grid .k{color:var(--mut)}
+.home-grid .done .k::after{content:""}
+.home-grid .done button::after,.seal{content:"完成";position:absolute;right:12px;top:10px;font-family:var(--f-hand);font-size:17px;color:var(--seal);border:2.5px solid var(--seal);border-radius:6px;padding:0 7px;transform:rotate(-9deg);letter-spacing:.1em}
+.home-grid .tag{align-self:flex-start;font:600 11px var(--f-data);background:var(--bp);color:var(--bp-ink);border-radius:3px;padding:2px 7px;margin-top:4px}
+
+/* 遊戲看板：區域內改用藍圖配色，沿用所有元件樣式 */
+.game{--sheet:#12407f;--paper:#0e3468;--ink:#eef4ff;--mut:#b4c9ea;--line:#3b64a4;--blue:#a8cbff;--blue-soft:#1c5199;
+  --ok:#86e3b6;--okbg:#1b5a4c;--bad:#ffaaa0;--badbg:#6c2c38;--warn:#ffdc85;--warnbg:#6a5a1e;--mark:#ffd84d;--mark-ink:#1b2330;
+  background:var(--sheet);color:var(--ink);border-radius:10px;padding:18px 18px 20px;margin:26px 0;position:relative;color-scheme:dark;
+  background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:20px 20px;box-shadow:0 10px 30px rgba(12,45,92,.25)}
+.ghead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.gno{font:600 11px var(--f-data);letter-spacing:.14em;background:var(--bp-hi);color:#1b2330;border-radius:3px;padding:3px 8px}
+.ghead h3{font-family:var(--f-hand);font-size:23px;margin:0;flex:1;min-width:0}
+.hud{font-family:var(--f-data);display:flex;align-items:baseline;gap:4px}
+.hud b{font-size:34px;font-weight:600;color:var(--bp-hi);line-height:1}
+.hud small{color:var(--mut);font-size:13px}
+.gdesc{color:var(--mut);font-size:14.5px;margin:0 0 12px;max-width:44em}
+.game figure svg{background:var(--paper);border-color:var(--line)}
+.game .go{background:var(--bp-hi);color:#1b2330}
+.game .ghost{border-color:var(--line);color:var(--ink)}
+.game .drag{cursor:grab;touch-action:none}.game .drag:active{cursor:grabbing}
+.rules{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 14px;font-size:14px}
+.rules li{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:start}
+.rules li i{font-style:normal;font-weight:900;color:var(--bad)}
+.rules li.ok i{color:var(--ok)}
+.rules li span.pt{font-family:var(--f-data);color:var(--mut);font-size:12px}
+.stamp{position:absolute;right:96px;top:-18px;font-family:var(--f-hand);font-size:44px;line-height:1;color:var(--seal);border:5px solid var(--seal);border-radius:10px;padding:6px 12px;transform:rotate(-12deg);background:rgba(255,255,255,.92);animation:stamp .35s cubic-bezier(.2,1.6,.4,1) both;pointer-events:none;z-index:3;letter-spacing:.08em}
+.game .stamp{--seal:#c8372d}
+@keyframes stamp{from{transform:rotate(-12deg) scale(2.4);opacity:0}to{transform:rotate(-12deg) scale(1);opacity:1}}
+/* 平面拼圖 */
+.pal{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+.pal button{border:2px solid transparent;border-radius:6px;padding:6px 10px;font-size:14px;min-height:40px;color:#1b2330;font-weight:700}
+.pal button[aria-pressed="true"]{border-color:var(--bp-hi);box-shadow:0 0 0 2px var(--bp-hi)}
+.pgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;width:100%;max-width:330px;touch-action:none;user-select:none;-webkit-user-select:none;background:var(--line);border:3px solid var(--ink);padding:2px}
+.pgrid div{aspect-ratio:1;display:grid;place-items:center;font-size:11px;font-weight:700;color:#1b2330;cursor:pointer}
+.pwrap{display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:18px;align-items:start}
+.game .t-st{background:#c9d2dc}.game .t-wc{background:#9fd3e6}.game .t-ev{background:#f2a7a0}.game .t-co{background:#ffe9a8}.game .t-cl{background:#b9cdf5}.game .t-kid{background:#b6e8c8}.game .t-st2{background:#e3c7f5}.game .t-x{background:var(--paper);color:var(--ink)}.pal .t-x{border-color:var(--line)}
+.tally{font-size:14px;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.tally li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding:2px 0}
+.tally b{font-family:var(--f-data);font-weight:600}
+/* 找碴 */
+.spot{cursor:crosshair}
+.spot .hit{fill:transparent;stroke:none}
+.spot .hit.found{fill:rgba(255,216,77,.18);stroke:var(--bp-hi);stroke-width:3}
+.finds{list-style:none;margin:10px 0 0;padding:0;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.finds li{padding-left:1.4em;position:relative}.finds li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:900}
+/* 考場模擬 */
+.exbar{height:26px;border:1px solid var(--line);border-radius:4px;position:relative;background:var(--paper);overflow:hidden;margin:6px 0 2px}
+.exbar i{position:absolute;left:0;top:0;bottom:0;background:var(--bp-hi);transition:width .5s}
+.exbar i.over{background:var(--bad)}
+.exbar span{position:absolute;right:8px;top:2px;font:600 13px var(--f-data)}
+.exlog{font-size:14px;color:var(--mut);margin:10px 0 0;padding-left:1.2em}
+.exlog li{margin:3px 0}
+/* 快答 */
+.fq{font-family:var(--f-hand);font-size:24px;margin:10px 0;min-height:2.6em}
+.fopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.fopts button{border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:14px 8px;font:600 18px var(--f-data);min-height:58px}
+.fopts button.right{background:var(--okbg);border-color:var(--ok)}.fopts button.wrong{background:var(--badbg);border-color:var(--bad)}
+.ftime{height:8px;background:var(--paper);border-radius:4px;overflow:hidden;margin:8px 0}.ftime i{display:block;height:100%;background:var(--bp-hi);width:100%}
+.play-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:18px 0;padding:0;list-style:none}
+.play-grid button{width:100%;height:100%;text-align:left;border:0;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:6px;color:var(--bp-ink);background:var(--bp)}
+.play-grid button:hover{background:var(--bp-deep)}
+.play-grid .ttl{font-family:var(--f-hand);font-size:21px}
+.play-grid .ds{font-size:13.5px;color:var(--bp-mut);line-height:1.5}
+.play-grid .best{font:600 13px var(--f-data);color:var(--bp-hi);margin-top:auto}
+@media (max-width:860px){ .hero{grid-template-columns:minmax(0,1fr);padding:26px 20px 22px} .lv b{display:none} .pwrap{grid-template-columns:minmax(0,1fr)} .mhead{padding:18px 18px 16px;gap:2px 14px} .stamp{font-size:30px;top:-16px;right:84px} }
+@media (prefers-reduced-motion:reduce){.hero .ln,.stamp{animation:none}.home-grid button{transition:none}}
+</style>
+<style>
+/* 第三層：遊戲優先。任務卡在上、講義收在下、AI 閱卷委員與教練 */
+.brief{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 6px}
+.mission{font-family:var(--f-hand);font-size:clamp(20px,3.4vw,26px);line-height:1.4;margin:0}
+.mission small{display:block;font:600 12px var(--f-data);letter-spacing:.14em;color:var(--blue);margin-bottom:2px}
+.tips{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.tips li{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--bp);border-radius:4px;padding:10px 12px;font-size:14.5px;line-height:1.55}
+.tips li b{display:block;font:600 11px var(--f-data);letter-spacing:.1em;color:var(--mut);margin-bottom:2px}
+details.notes{margin-top:34px;border:1px dashed var(--line);border-radius:8px;background:var(--sheet)}
+details.notes>summary{cursor:pointer;padding:14px 16px;font-weight:700;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center}
+details.notes>summary::-webkit-details-marker{display:none}
+details.notes>summary::after{content:"展開 ＋";font:600 12px var(--f-data);color:var(--blue)}
+details.notes[open]>summary::after{content:"收合 −"}
+details.notes>summary small{font-weight:400;color:var(--mut);font-size:13px}
+details.notes>.nin{padding:0 16px 18px}
+.game.box{border:0}
+.game.box>h4{font-family:var(--f-hand);font-size:22px;margin-bottom:6px}
+.game.box>h4 em{background:var(--bp-hi);color:#1b2330;border-radius:3px;padding:3px 8px;vertical-align:middle}
+.game .qtext,.game .box{background:var(--paper);border-color:var(--line)}
+.game .hint{color:var(--mut)}
+.game input[type=number],.game input[type=text],.game textarea{background:var(--paper);color:var(--ink);border-color:var(--line)}
+textarea{font:16px/1.6 var(--f-text);width:100%;min-height:86px;border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--paper);color:var(--ink);resize:vertical}
+.game .pill{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.game .pill[aria-pressed="true"]{background:var(--bp-hi);color:#1b2330;border-color:var(--bp-hi)}
+.game .pill.c-hard{background:var(--badbg)}.game .pill.c-room{background:var(--blue-soft)}.game .pill.c-issue{background:var(--okbg)}.game .pill.c-draw{background:var(--warnbg)}
+.game .bucket{background:var(--paper);border-color:var(--line);color:var(--ink)}
+.game .bucket span.in{background:var(--blue-soft);border-color:var(--line)}
+.game .opts button{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.game .out div{background:var(--paper)}
+/* 閱卷卡 */
+.jcard{background:#fdfdf8;color:#1b2330;border-radius:6px;padding:22px 20px;min-height:150px;font-size:18px;line-height:1.6;box-shadow:4px 5px 0 rgba(0,0,0,.25);position:relative;display:flex;flex-direction:column;justify-content:center;font-family:var(--f-hand)}
+.jcard small{font:600 11px var(--f-data);letter-spacing:.12em;color:#56646f;margin-bottom:6px}
+.jbtns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.jbtns button{border:0;border-radius:8px;padding:16px 8px;font-family:var(--f-hand);font-size:22px;min-height:60px;color:#1b2330}
+.jbtns .no{background:#ffaaa0}.jbtns .yes{background:#86e3b6}
+.dots{display:flex;gap:5px;margin:12px 0 0;flex-wrap:wrap}
+.dots i{width:14px;height:14px;border-radius:50%;background:var(--paper);border:1px solid var(--line)}
+.dots i.r{background:var(--ok)}.dots i.w{background:var(--bad)}
+/* 量體蓋樓 */
+.mwrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center}
+.mspec{list-style:none;margin:0;padding:0;font-size:16px;display:flex;flex-direction:column;gap:4px}
+.mspec b{font:600 20px var(--f-data);color:var(--bp-hi)}
+.stepper{display:flex;align-items:center;gap:12px;margin:12px 0}
+.stepper button{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:var(--paper);color:var(--ink);font-size:26px;line-height:1}
+.stepper b{font:600 40px var(--f-data);min-width:2ch;text-align:center}
+/* 剖面搶時間 */
+.picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin:10px 0}
+.picks button{display:flex;justify-content:space-between;gap:8px;align-items:center;border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:9px 12px;min-height:46px;text-align:left;font-size:14.5px}
+.picks button[aria-pressed="true"]{border-color:var(--bp-hi);background:var(--blue-soft)}
+.picks button span{font:600 12px var(--f-data);color:var(--bp-hi);white-space:nowrap}
+.picks button:disabled{opacity:.45}
+/* AI */
+.ai-out{white-space:pre-wrap;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-top:12px;font-size:15px;line-height:1.7}
+.ai-tag{font:600 11px var(--f-data);letter-spacing:.12em;background:#fff;color:#12407f;border-radius:3px;padding:3px 8px}
+.photo{display:block;max-height:240px;border-radius:6px;margin:10px 0;border:1px solid var(--line)}
+.filebtn{display:inline-flex;align-items:center;min-height:42px;border:2px dashed var(--line);border-radius:6px;padding:8px 14px;cursor:pointer}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.filebtn:focus-within{outline:3px solid var(--bp-hi)}
+.coach-fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 16px);z-index:15;background:var(--bp);color:var(--bp-ink);border:2px solid var(--bp-hi);border-radius:999px;padding:12px 18px;font-family:var(--f-hand);font-size:17px;box-shadow:0 6px 18px rgba(0,0,0,.3);min-height:48px}
+.coach{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 76px);z-index:15;width:min(380px,calc(100vw - 24px));max-height:min(70vh,560px);display:flex;flex-direction:column;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);padding:0;margin:0}
+.coach header{padding:12px 14px;font-family:var(--f-hand);font-size:18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.coach .log{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:14.5px;min-height:120px}
+.coach .log p{margin:0;padding:8px 11px;border-radius:10px;max-width:90%;white-space:pre-wrap;line-height:1.6}
+.coach .log .u{align-self:flex-end;background:var(--bp-hi);color:#1b2330}
+.coach .log .a{align-self:flex-start;background:var(--paper)}
+.coach form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+.coach form input{flex:1;min-width:0;width:auto;font:15px var(--f-text);background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+.sugg{display:flex;flex-wrap:wrap;gap:6px}
+.sugg button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:5px 11px;font-size:13px}
+@media (max-width:860px){.mwrap{grid-template-columns:minmax(0,1fr)}}
+</style>
 <header class="top"><div class="top-in">
   <button class="tbtn" id="menuBtn" type="button" aria-controls="rail" aria-expanded="false">課表</button>
   <button class="brand" type="button" data-go="home">建築師考試急救<small>4 小時．建築計畫與設計</small></button>
   <div class="meter" aria-label="課程進度"><div class="bar"><i id="barFill"></i></div><span id="barTxt">0 / 240 分</span></div>
+  <div class="lv" id="lvChip" title="經驗值與等級"><i id="lvXp">0 XP</i><b id="lvName">小白</b></div>
   <button class="tbtn" id="sayBtn" type="button" aria-pressed="false" title="朗讀目前這一頁">朗讀</button>
 </div></header>
 <div class="scrim" id="scrim" hidden></div>
@@ -205,6 +398,7 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   <ol id="railList"></ol>
   <h2>隨時查</h2>
   <ol>
+    <li><button type="button" data-go="play"><span class="dot">★</span><span>遊戲場</span><span class="min"></span></button></li>
     <li><button type="button" data-go="cheat"><span class="dot">≡</span><span>考場小抄</span><span class="min"></span></button></li>
     <li><button type="button" data-go="home"><span class="dot">⌂</span><span>課程首頁</span><span class="min"></span></button></li>
   </ol>
@@ -213,27 +407,45 @@ input[type=range]{width:100%;accent-color:var(--blue)}
 
 <!-- ================= 首頁 ================= -->
 <article class="view" id="v-home">
-  <p class="eyebrow">CRASH COURSE · 240 MIN</p>
-  <h1>四小時，從零到能把一張大設計畫完</h1>
-  <p class="lead">給第一次接觸建築師考試的人。這堂課只教一件事：拿到「建築計畫與設計」的題目後，照著固定流程，在時間內交出一張不違規、畫得完的圖。</p>
-  <div class="key"><b>你需要準備：</b>A3 白紙 5 張、鉛筆或代針筆、一支螢光筆、比例尺（沒有就用直尺）、計算機。課程中有 6 次要你停下來動手畫。</div>
+  <div class="bp hero">
+    <div>
+      <p class="eyebrow">CRASH COURSE · 240 MIN</p>
+      <h1>四小時，從零到<em>畫完一張大設計</em></h1>
+      <p>給第一次碰建築師考試、又很容易無聊的人。九個關卡全部用玩的：拖建築、拼平面、抓別人的錯，畫完還能拍照給 AI 閱卷委員講評。</p>
+      <button class="cta" type="button" data-go="m0" id="heroGo">開始第一關 →</button>
+      <ul class="stats"><li><b>240</b><span>分鐘</span></li><li><b>9</b><span>關卡</span></li><li><b>14</b><span>遊戲</span></li><li><b>7</b><span>次動手畫</span></li></ul>
+    </div>
+    <svg viewBox="0 0 360 300" role="img" aria-label="自動描繪的配置圖">
+      <path class="ln thin" pathLength="1" d="M10 250 H350 M10 290 H350 M40 10 V250 M80 10 V250"/>
+      <path class="ln" pathLength="1" d="M80 20 H300 V250 H80 Z"/>
+      <path class="ln thin t2" pathLength="1" stroke-dasharray="none" d="M100 36 H284 V232 H100 Z" style="stroke-dasharray:.012 .012"/>
+      <rect class="fl" x="100" y="58" width="124" height="150"/>
+      <path class="ln t2" pathLength="1" d="M100 58 H224 V208 H100 Z M141 58 V208 M182 58 V208 M100 108 H224 M100 158 H224"/>
+      <path class="ln t3" pathLength="1" d="M162 226 L172 210 L182 226 Z M80 44 H190 M262 232 a22 22 0 1 0 .1 0"/>
+      <path class="ln thin t3" pathLength="1" d="M236 70 V200 M250 70 V200 M264 70 V200"/>
+      <text x="162" y="136" text-anchor="middle">3F</text><text x="190" y="274" text-anchor="middle">15 m 道路</text><text x="318" y="34">N↑</text>
+      <text x="262" y="214" text-anchor="middle">樹</text><text x="60" y="140" text-anchor="middle" transform="rotate(-90 60 140)">8 m</text>
+    </svg>
+  </div>
+  <div class="key" style="margin-top:20px"><b>你需要準備：</b>A3 白紙 5 張、鉛筆或代針筆、一支螢光筆、直尺、計算機。課程中有 7 次要你停下來動手畫。</div>
 
-  <h2 class="h">課表</h2>
+  <h2 class="h">九個關卡</h2>
   <ul class="home-grid" id="homeGrid"></ul>
   <p class="hint">進度存在這台裝置的瀏覽器裡。中途關掉再開，會回到上次的位置。</p>
 
   <h2 class="h">這堂課怎麼上</h2>
   <ol class="t">
-    <li><b>照順序上。</b>每個單元都用到前一個單元的結果，同一道例題從頭用到尾。</li>
-    <li><b>看到「動手」就真的畫。</b>大設計考的是手，不是懂不懂。只看不畫，四小時後還是畫不出來。</li>
-    <li><b>每單元右上有建議時間。</b>超過沒關係，但不要在單一單元卡超過 1.5 倍時間，先往下走。</li>
+    <li><b>每一關一進去就是遊戲。</b>先玩，玩錯了系統會告訴你為什麼。想看完整解釋，再打開最下面的「完整說明與圖解」。</li>
+    <li><b>照順序過關。</b>同一道例題從第 1 關用到第 7 關，後面的關卡會用到前面的結果。</li>
+    <li><b>卡住就按右下角的「問教練」。</b>那是 AI，什麼都可以問。（需要在 Claude 的頁面裡開啟才會出現。）</li>
+    <li><b>說明裡的「動手」請真的畫在紙上。</b>大設計考的是手。第 8 關畫完可以拍照給 AI 講評。</li>
     <li><b>上完後</b>去「術科模擬考場」用真正的歷屆試題計時練習，這堂課給你的是流程，手感要靠那裡練。</li>
   </ol>
 
   <h2 class="h">這堂課不教什麼</h2>
   <p>四小時教不完六科。這裡沒有結構計算、構造細部、環控公式和法規條文背誦，也不教畫得漂亮。這堂課的目標是「及格線的流程」：畫完、不違規、有回應題目。表現法和設計深度，是之後幾個月的事。</p>
   <div class="warnbox"><b>數字的使用方式：</b>課程裡的法規數字（樓梯、走廊、停車位等）是考場常用的速記值，足夠畫圖使用。正式條文與每年考試規定，以現行《建築技術規則》和考選部當年公告為準。</div>
-  <div class="navrow"><span></span><button class="go" type="button" data-go="m0">開始第一單元 →</button></div>
+  <div class="navrow"><span></span><button class="go" type="button" data-go="m0">開始第一關 →</button></div>
 </article>
 <!-- ================= M0 考試全貌 ================= -->
 <article class="view mod" id="v-m0" data-min="10" data-title="考試全貌" data-ds="六科怎麼考、大設計在評什麼、新手為什麼不及格" hidden>
@@ -686,6 +898,16 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     </div>
   </div>
 
+
+  <h2 class="h">換你擺：把建築放到基地上</h2>
+  <section class="game" id="gSite">
+    <header class="ghead"><span class="gno">GAME 01</span><h3>配置拖拉</h3><div class="hud"><b data-score>0</b><small>/100</small></div></header>
+    <p class="gdesc">用手指或滑鼠拖動三樣東西：藍色的建築、紅色的車道口、黃色的主入口。右下的規則會即時打勾。拿到 85 分蓋章合格。</p>
+    <figure><svg id="gsSvg" viewBox="0 0 720 340" role="application" aria-label="可拖拉的基地配置"></svg></figure>
+    <div class="frow"><button class="ghost" type="button" id="gsRot">建築轉 90°</button><button class="ghost" type="button" id="gsReset">重來</button></div>
+    <ul class="rules" id="gsRules"></ul>
+  </section>
+
   <h2 class="h">量體形狀：四種基本型</h2>
   <figure>
     <svg viewBox="0 0 720 150" role="img" aria-label="一字型、L 型、ㄇ 字型、口字型">
@@ -786,6 +1008,19 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     </svg>
     <figcaption>例題二樓，24 × 32 m。西側第一跨切成 5.6 m 服務帶和 2.4 m 走廊。</figcaption>
   </figure>
+
+
+  <h2 class="h">換你排：把二樓平面拼出來</h2>
+  <section class="game" id="gPlan">
+    <header class="ghead"><span class="gno">GAME 02</span><h3>平面拼圖</h3><div class="hud"><b data-score>0</b><small>/100</small></div></header>
+    <p class="gdesc">這是例題二樓，24 × 32 m，每一格 4 × 4 m ＝ 16 ㎡。先選一種空間，再在格子上點或拖來塗。左邊是西，右邊面向公園。六條規則全過就合格。</p>
+    <div class="pal" id="gpPal" role="group" aria-label="空間種類"></div>
+    <div class="pwrap">
+      <div class="pgrid" id="gpGrid" aria-label="平面格子"></div>
+      <div><ul class="tally" id="gpTally"></ul><ul class="rules" id="gpRules" style="grid-template-columns:minmax(0,1fr)"></ul></div>
+    </div>
+    <div class="frow"><button class="ghost" type="button" id="gpClear">清空</button><button class="ghost" type="button" id="gpDemo">看一種解法</button></div>
+  </section>
 
   <h2 class="h">樓梯怎麼算</h2>
   <p>樓梯是新手最容易畫錯的地方，閱卷者也一定會看。記三個數字：<mark>級高不超過 16 cm、級深至少 26 cm、梯寬至少 1.4 m</mark>。這組數字同時滿足一般公共建築和無障礙樓梯的要求。</p>
@@ -994,6 +1229,18 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   </ol>
   <div class="key"><b>原則：</b>每一張被要求的圖都要存在。寧可六張圖都有七成，不要三張十成、三張空白。</div>
 
+
+  <h2 class="h">模擬：八小時裡的六個決定</h2>
+  <section class="game" id="gExam">
+    <header class="ghead"><span class="gno">GAME 03</span><h3>考場決策</h3><div class="hud"><b data-score>0</b><small>分</small></div></header>
+    <p class="gdesc">你坐在考場裡。每個決定都會花掉時間，也會影響分數。走完六個關卡，看你能不能在 8 小時內交出一張及格的圖。</p>
+    <div class="exbar"><i id="exFill" style="width:0"></i><span id="exClock">0:00 / 8:00</span></div>
+    <p class="fq" id="exQ"></p>
+    <div class="opts" id="exOpts"></div>
+    <ol class="exlog" id="exLog"></ol>
+    <div class="frow"><button class="ghost" type="button" id="exReset" hidden>再考一次</button></div>
+  </section>
+
   <h2 class="h">圖紙版面</h2>
   <p>動筆畫正圖之前，先用鉛筆在圖紙上輕輕框出每張圖的位置。確認每張圖都放得下，再開始畫。實際的圖紙大小和張數以當年試場規定為準，以下是一張橫式大圖紙的常見排法：</p>
   <figure>
@@ -1037,6 +1284,17 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <li><label><input type="checkbox" id="c78"><span>建蔽率、容積率的檢討算式寫在圖上</span></label></li>
     <li><label><input type="checkbox" id="c79"><span>准考證號碼、座號等依試場規定填寫；圖面上不留任何可辨識身分的記號</span></label></li>
   </ul>
+
+
+  <h2 class="h">找碴：這張圖哪裡會被扣分</h2>
+  <section class="game" id="gSpot">
+    <header class="ghead"><span class="gno">GAME 04</span><h3>圖面找碴</h3><div class="hud"><b data-score>0</b><small>/8 處</small></div></header>
+    <p class="gdesc">這是一位考生畫的例題「配置暨一樓平面」，裡面有 8 個會被扣分的錯。直接點圖上你覺得有問題的地方。點錯三次會扣分。</p>
+    <figure><svg id="spSvg" class="spot" viewBox="0 0 720 340" role="application" aria-label="有錯誤的配置圖，點選錯誤處"></svg></figure>
+    <p class="verdict mid" id="spMsg">已找到 0 / 8，誤點 0 次。</p>
+    <ul class="finds" id="spFinds"></ul>
+    <div class="frow"><button class="ghost" type="button" id="spHint">給我一個提示</button><button class="ghost" type="button" id="spReset">重來</button></div>
+  </section>
 
   <div class="box quiz" data-ans="a">
     <h4><em>確認</em>開考 2 小時 40 分，你的配置有兩個版本，各有優缺點，還決定不了。該怎麼做？</h4>
@@ -1194,15 +1452,42 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   <p class="hint">數字是考場速記值。正式條文以現行《建築技術規則》、無障礙設施設計規範及考選部當年公告為準。</p>
 </article>
 
+
+<!-- ================= 遊戲場 ================= -->
+<article class="view" id="v-play" hidden>
+  <p class="eyebrow">ARCADE</p>
+  <h1>遊戲場</h1>
+  <p class="lead">所有遊戲都可以重複玩，系統會記住最高紀錄。點卡片就會跳到那個遊戲。</p>
+  <ul class="play-grid" id="playGrid"></ul>
+  <section class="game" id="gFlash">
+    <header class="ghead"><span class="gno">GAME 05</span><h3>數字快答</h3><div class="hud"><b data-score>0</b><small>分</small></div></header>
+    <p class="gdesc">60 秒內答越多越好。連續答對有加成：連對 3 題起每題 2 分，連對 6 題起每題 3 分。題目都來自考場小抄。</p>
+    <div class="ftime"><i id="flBar"></i></div>
+    <p class="fq" id="flQ">準備好就按開始。</p>
+    <div class="fopts" id="flOpts"></div>
+    <p class="verdict mid" id="flMsg" hidden></p>
+    <div class="frow"><button class="go" type="button" id="flStart">開始 60 秒</button></div>
+  </section>
+</article>
+
 </main>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 (function(){
 "use strict";
 var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
-var KEY='kyujo-course-v1', st={done:{},last:'home',t:{}};
-try{var raw=localStorage.getItem(KEY); if(raw){var o=JSON.parse(raw); if(o&&typeof o==='object'){st.done=o.done||{};st.last=o.last||'home';st.t=o.t||{}}}}catch(e){}
+var KEY='kyujo-course-v1', st={done:{},last:'home',t:{},xp:{}};
+try{var raw=localStorage.getItem(KEY); if(raw){var o=JSON.parse(raw); if(o&&typeof o==='object'){st.done=o.done||{};st.last=o.last||'home';st.t=o.t||{};st.xp=o.xp||{}}}}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+var LV=[[0,'小白'],[120,'描圖員'],[300,'繪圖員'],[500,'設計師'],[750,'準建築師']];
+function xpTotal(){var t=0;for(var k in st.xp)t+=st.xp[k]||0;return t}
+function lvOf(x){var n=LV[0][1];LV.forEach(function(l){if(x>=l[0])n=l[1]});return n}
+var toastT=null;
+function toast(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('on')},1900)}
+function award(key,pts){pts=Math.max(0,Math.round(pts));var old=st.xp[key]||0;if(pts<=old)return false;var b=lvOf(xpTotal());st.xp[key]=pts;save();refresh();var a=lvOf(xpTotal());toast(a!==b?'升級：'+a+'！':'+'+(pts-old)+' XP');return true}
+function stampOff(box){var o=box.querySelector('.stamp');if(o)o.parentNode.removeChild(o)}
+function stampOn(box,txt){stampOff(box);var d=document.createElement('div');d.className='stamp';d.textContent=txt||'合格';box.appendChild(d)}
 function fmt(n){return Math.round(n).toLocaleString('en-US')}
 function mmss(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2)}
 function el(tag,attrs,html){var e=document.createElement(tag);if(attrs)for(var k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e}
@@ -1216,7 +1501,10 @@ mods.forEach(function(m,i){
   li.appendChild(el('button',{type:'button','data-go':m.id},'<span class="dot"></span><span>'+i+'　'+m.title+'</span><span class="min">'+m.min+'′</span>'));
   railList.appendChild(li);
   var hi=el('li',{'data-id':m.id});
-  hi.appendChild(el('button',{type:'button','data-go':m.id},'<span class="k">單元 '+i+' · '+m.min+' 分</span><span class="ttl">'+m.title+'</span><span class="ds">'+m.ds+'</span>'));
+  var hasGame=!!m.node.querySelector('.game');
+  hi.appendChild(el('button',{type:'button','data-go':m.id},'<span class="no">0'+i+'</span><span class="ttl">'+m.title+'</span><span class="ds">'+m.ds+'</span><span class="k">'+m.min+' 分鐘</span>'+(hasGame?'<span class="tag">內含遊戲</span>':'')));
+  var mh=el('div',{'class':'bp mhead'}); mh.appendChild(el('div',{'class':'big','aria-hidden':'true'},'0'+i));
+  var ebn=$('.eyebrow',m.node), h1n=$('h1',m.node), gl=$('.goal',m.node); m.node.insertBefore(mh,m.node.firstChild); mh.appendChild(ebn); mh.appendChild(h1n); if(gl)mh.appendChild(gl);
   homeGrid.appendChild(hi);
   // 計時顯示
   var eb=$('.eyebrow',m.node); eb.appendChild(el('span',{'data-clock':m.id},''));
@@ -1224,7 +1512,7 @@ mods.forEach(function(m,i){
   var prev=i>0?mods[i-1].id:'home', next=i<mods.length-1?mods[i+1].id:'cheat';
   var nav=el('div',{'class':'navrow'});
   nav.appendChild(el('button',{type:'button','class':'ghost','data-go':prev},'← 上一頁'));
-  nav.appendChild(el('button',{type:'button','class':'go','data-done':m.id,'data-next':next}, i<mods.length-1?'完成本單元，前往下一單元 →':'完成課程，打開考場小抄 →'));
+  nav.appendChild(el('button',{type:'button','class':'go','data-done':m.id,'data-next':next}, i<mods.length-1?'過關，前往下一關 →':'全部過關，打開考場小抄 →'));
   m.node.appendChild(nav);
 });
 function refresh(){
@@ -1232,6 +1520,8 @@ function refresh(){
   mods.forEach(function(m){var d=!!st.done[m.id]; if(d)got+=m.min;
     $$('[data-id="'+m.id+'"]').forEach(function(li){li.classList.toggle('done',d); var dot=$('.dot',li); if(dot)dot.textContent=d?'✓':''})});
   $('#barFill').style.width=(got/TOTAL*100)+'%'; $('#barTxt').textContent=got+' / '+TOTAL+' 分';
+  var x=xpTotal(); $('#lvXp').textContent=x+' XP'; $('#lvName').textContent=lvOf(x);
+  if(window.KYplay)window.KYplay();
 }
 var cur='home';
 function show(id,noScroll){
@@ -1244,8 +1534,8 @@ function show(id,noScroll){
 }
 function go(id){ if(('#'+id)!==location.hash){ try{location.hash=id}catch(e){} } show(id) }
 document.addEventListener('click',function(e){
-  var b=e.target.closest('[data-go]'); if(b){go(b.dataset.go);return}
-  var d=e.target.closest('[data-done]'); if(d){st.done[d.dataset.done]=true;save();refresh();go(d.dataset.next)}
+  var b=e.target.closest('[data-go]'); if(b){go(b.dataset.go); if(b.dataset.anchor){var t=document.getElementById(b.dataset.anchor); if(t)t.scrollIntoView({block:'start'})} return}
+  var d=e.target.closest('[data-done]'); if(d){st.done[d.dataset.done]=true;save();award('mod:'+d.dataset.done,20);refresh();go(d.dataset.next)}
 });
 window.addEventListener('hashchange',function(){var h=location.hash.slice(1); if(h&&h!==cur)show(h)});
 /* 抽屜 */
@@ -1273,19 +1563,19 @@ else sayBtn.addEventListener('click',function(){
 });
 
 /* ---------- 選擇題、數字題 ---------- */
-$$('.quiz').forEach(function(q){
+$$('.quiz').forEach(function(q,qi){
   $$('.opts button',q).forEach(function(b){b.addEventListener('click',function(){
     var ok=b.dataset.k===q.dataset.ans; $$('.opts button',q).forEach(function(x){x.classList.remove('wrong')});
     b.classList.add(ok?'right':'wrong'); var w=$('.why',q);
-    if(ok){$$('.opts button',q).forEach(function(x){x.disabled=true}); w.hidden=false; w.className='why ok'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>對。</b>'+w.dataset.o}
+    if(ok){award('quiz:'+qi,10);$$('.opts button',q).forEach(function(x){x.disabled=true}); w.hidden=false; w.className='why ok'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>對。</b>'+w.dataset.o}
     else{w.hidden=false; w.className='why no'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>再想一下。</b>想想哪個選項最能保證「畫完、不違規、有回應題目」。'}
   })});
 });
 function gradeNum(inp,ans,tol){var v=parseFloat(inp.value); return isFinite(v)&&Math.abs(v-ans)<=tol+1e-9}
-$$('.numq').forEach(function(q){
+$$('.numq').forEach(function(q,qi){
   var inp=$('input',q), btn=$('button',q), w=$('.why',q), base=w.innerHTML;
   function chk(){ if(inp.value===''){return} var ok=gradeNum(inp,+q.dataset.ans,+q.dataset.tol);
-    w.hidden=false; w.className='why '+(ok?'ok':'no'); w.innerHTML=(ok?'<b>對。</b>':'<b>不對，算法是：</b>')+base }
+    if(ok)award('num:'+qi,10); w.hidden=false; w.className='why '+(ok?'ok':'no'); w.innerHTML=(ok?'<b>對。</b>':'<b>不對，算法是：</b>')+base }
   btn.addEventListener('click',chk); inp.addEventListener('keydown',function(e){if(e.key==='Enter')chk()});
 });
 
@@ -1304,7 +1594,7 @@ $$('.numq').forEach(function(q){
     phs.forEach(function(b){b.classList.remove('miss'); if(b.dataset.u===b.dataset.a)ok++; else if(b.dataset.u){b.classList.add('miss'); miss.push(b)}});
     out.hidden=false;
     if(un){out.className='verdict mid'; out.textContent='還有 '+un+' 處沒標。標完的 '+(phs.length-un)+' 處裡，對了 '+ok+' 處。'; return}
-    if(ok===phs.length){out.className='verdict ok'; out.innerHTML='<b>'+ok+' / '+phs.length+' 全對。</b>注意硬條件有 8 處，是四類裡最多的。這 8 條就是你交卷前要逐條檢查的清單。'}
+    if(ok===phs.length){award('tagger',40);out.className='verdict ok'; out.innerHTML='<b>'+ok+' / '+phs.length+' 全對。</b>注意硬條件有 8 處，是四類裡最多的。這 8 條就是你交卷前要逐條檢查的清單。'}
     else{out.className='verdict no'; out.innerHTML='<b>對了 '+ok+' / '+phs.length+'。</b>畫波浪底線的是標錯的，再點一次可以改。判斷方法：有數字或「應、須、不得」的是硬條件；空間名稱加面積是空間需求；描述希望達成的效果是議題；圖名加比例是圖面要求。'}
   });
   $('#tagReset').addEventListener('click',function(){phs.forEach(function(b){paint(b,'');}); $('#tagOut').hidden=true});
@@ -1379,7 +1669,7 @@ var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半
   $('#znCheck').addEventListener('click',function(){var out=$('#znOut'),n=0,msg=[]; out.hidden=false;
     var un=items.filter(function(_,i){return place[i]==null}).length; if(un){out.className='verdict mid';out.textContent='還有 '+un+' 個空間沒放。';return}
     items.forEach(function(it,i){var ok=it[2].indexOf(place[i])>=0; var s=$('#znBuckets .in[data-i="'+i+'"]'); if(s)s.classList.toggle('no',!ok); if(ok)n++; else msg.push('<b>'+it[0]+'</b>：'+it[3])});
-    if(n===items.length){out.className='verdict ok';out.innerHTML='<b>全部合理。</b>一樓是熱鬧的街道層，二樓讓小孩和長者相遇，三樓安靜閱讀。這個分層本身就回應了題目的兩個議題。'}
+    if(n===items.length){award('zoner',30);out.className='verdict ok';out.innerHTML='<b>全部合理。</b>一樓是熱鬧的街道層，二樓讓小孩和長者相遇，三樓安靜閱讀。這個分層本身就回應了題目的兩個議題。'}
     else{out.className='verdict no';out.innerHTML='<b>'+n+' / '+items.length+' 合理。</b>紅框的再想一下：<br>'+msg.join('<br>')}
   });
   $('#znReset').addEventListener('click',function(){place={};sel=null;render();$('#znOut').hidden=true});
@@ -1436,7 +1726,7 @@ var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半
     $$('rect[data-k]',svg).forEach(function(r){r.style.display=r.dataset.k===k?'':'none'});
     $$('#sqOpts button').forEach(function(b){b.classList.remove('wrong'); if(b.dataset.k===k)b.classList.add(p.ok?'right':'wrong')});
     w.hidden=false; w.className='why '+(p.ok?'ok':'no'); w.innerHTML=(p.ok?'<b>對。</b>':'<b>不理想。</b>')+p.why;
-    if(p.ok){done=true; $$('#sqOpts button').forEach(function(b){b.disabled=true}); var n=$('#sqNext'); n.hidden=false; n.textContent=qi<Q.length-1?'下一個決定 →':'再做一次'}
+    if(p.ok){award('sq:'+qi,10);done=true; $$('#sqOpts button').forEach(function(b){b.disabled=true}); var n=$('#sqNext'); n.hidden=false; n.textContent=qi<Q.length-1?'下一個決定 →':'再做一次'}
   }
   $('#sqNext').addEventListener('click',function(){qi=(qi+1)%Q.length;render()});
   render();
@@ -1509,7 +1799,7 @@ var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半
     timer=setInterval(function(){left--; clock.textContent=mmss(left); if(left<=0){clearInterval(timer);timer=null;clock.textContent='時間到';clock.style.color='var(--bad)'}},1000)});
   $('#drReveal').addEventListener('click',function(){ clearInterval(timer); timer=null; var s=steps[i], a=$('#drAnswer'); a.appendChild(tpl(s.a)); a.hidden=false; $('#drReveal').hidden=true;
     $$('#drBody input[data-ans]').forEach(function(inp){var ok=gradeNum(inp,+inp.dataset.ans,+inp.dataset.tol); inp.style.borderColor=ok?'var(--ok)':'var(--bad)'; inp.style.background=ok?'var(--okbg)':'var(--badbg)'});
-    var sc=$('#drScore',a); if(sc)sc.addEventListener('click',function(){var n=$$('#drRubric input:checked',a).length, o=$('#drScoreOut',a); o.hidden=false;
+    var sc=$('#drScore',a); if(sc)sc.addEventListener('click',function(){var n=$$('#drRubric input:checked',a).length, o=$('#drScoreOut',a); o.hidden=false; award('drill',n*5);
       if(n>=7){o.className='verdict ok';o.innerHTML='<b>'+n+' / 8。</b>流程已經會了。接下來是把它練快，並把後半段（平面、剖面、立面、透視）接上去。'}
       else if(n>=5){o.className='verdict mid';o.innerHTML='<b>'+n+' / 8。</b>大方向對了。沒勾到的項目，回單元 4 的「配置圖上一定要標的東西」再看一次。'}
       else{o.className='verdict no';o.innerHTML='<b>'+n+' / 8。</b>先別灰心，第一次都是這樣。回到單元 4 把示範播放再看一遍，然後重畫這一關。'}});
@@ -1519,10 +1809,497 @@ var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半
 })();
 
 /* ---------- 啟動 ---------- */
+window.KY={$:$,$$:$$,el:el,st:st,save:save,award:award,stampOn:stampOn,stampOff:stampOff,toast:toast,mmss:mmss,fmt:fmt,go:go};
 refresh();
 var h0=location.hash.slice(1);
 show(h0&&document.getElementById('v-'+h0)?h0:'home',true);
-if(!h0&&st.last&&st.last!=='home'){ var hint=$('#v-home .navrow .go'); var lm=mods.filter(function(m){return m.id===st.last})[0]; if(hint&&lm){hint.dataset.go=lm.id; hint.textContent='回到上次的位置：'+lm.title+' →'} }
+if(!h0&&st.last&&st.last!=='home'){ var hint=$('#heroGo'); var lm=mods.filter(function(m){return m.id===st.last})[0]; if(hint&&lm){hint.dataset.go=lm.id; hint.textContent='回到上次的位置：'+lm.title+' →'} }
+})();
+</script>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return; var $=K.$, $$=K.$$, el=K.el;
+function hud(box,v){var b=$('[data-score]',box); if(b)b.textContent=v}
+function svgPt(svg,e){var p=svg.createSVGPoint(); p.x=e.clientX; p.y=e.clientY; var m=svg.getScreenCTM(); return m?p.matrixTransform(m.inverse()):{x:0,y:0}}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+
+/* ============ GAME 01 配置拖拉 ============ */
+(function(){
+  var box=$('#gSite'), svg=$('#gsSvg'); if(!svg)return;
+  var S=5.2, OX=220, OY=10, W=40, H=50, TREE={x:34.6,y:44.2,r:5.5};
+  var init=function(){return {b:{x:9,y:12,w:24,h:32}, d:{edge:'S',t:12}, e:{face:'N',t:.5}}}, g=init(), drag=null, passed=false;
+  function px(x){return OX+x*S} function py(y){return OY+y*S}
+  function dPos(){var d=g.d; return d.edge==='W'?{x:0,y:d.t}:d.edge==='E'?{x:W,y:d.t}:d.edge==='N'?{x:d.t,y:0}:{x:d.t,y:H}}
+  function ePos(){var b=g.b,e=g.e; return e.face==='N'?{x:b.x+b.w*e.t,y:b.y}:e.face==='S'?{x:b.x+b.w*e.t,y:b.y+b.h}:e.face==='W'?{x:b.x,y:b.y+b.h*e.t}:{x:b.x+b.w,y:b.y+b.h*e.t}}
+  function rules(){
+    var b=g.b, east=W-(b.x+b.w), south=H-(b.y+b.h);
+    var cx=clamp(TREE.x,b.x,b.x+b.w), cy=clamp(TREE.y,b.y,b.y+b.h), dt=Math.sqrt((cx-TREE.x)*(cx-TREE.x)+(cy-TREE.y)*(cy-TREE.y));
+    return [
+      ['建築在退縮線內（南西退 4 m、北東退 3 m）', b.x>=4&&b.y>=3&&east>=3&&south>=4, 20],
+      ['避開老榕樹的樹冠', dt>=TREE.r, 15],
+      ['北側退讓住宅至少 6 m（現在 '+b.y+' m）', b.y>=6, 15],
+      ['東側留給公園的綠帶至少 8 m 寬（現在 '+east+' m）', east>=8, 15],
+      ['南側入口廣場至少 8 m 深（現在 '+south+' m）', south>=8, 10],
+      ['車道口在西側 8 m 道路，離西南路口 20 m 以上', g.d.edge==='W'&&g.d.t<=30, 15],
+      ['主入口開在建築南面，面向主要道路', g.e.face==='S', 10]
+    ];
+  }
+  function draw(){
+    var b=g.b, d=dPos(), e=ePos(), h='';
+    h+='<rect x="0" y="270" width="720" height="70" class="f-line"/><text x="560" y="312" text-anchor="middle" font-size="13">15 m 道路（主要）</text>'
+     +'<rect x="170" y="0" width="50" height="270" class="f-line"/><text x="195" y="150" text-anchor="middle" font-size="12" transform="rotate(-90 195 150)">8 m 道路（次要）</text>'
+     +'<rect x="428" y="10" width="160" height="260" class="f-ok"/><text x="520" y="60" text-anchor="middle" font-size="13">社區公園</text>'
+     +'<text x="85" y="24" text-anchor="middle" font-size="12" class="t-mut">北側：4 層住宅</text>'
+     +'<rect x="220" y="10" width="208" height="260" class="f-paper s-ink" stroke-width="2.5"/>'
+     +'<rect x="240.8" y="25.6" width="171.6" height="223.6" class="s-blue" stroke-dasharray="6 4" stroke-width="1.2"/>'
+     +'<rect x="470" y="278" width="54" height="18" class="f-paper s-ink"/><text x="497" y="291" text-anchor="middle" font-size="11">公車站</text>'
+     +'<text x="640" y="30" font-size="13" font-weight="700">N ↑</text>';
+    var bad=!rules()[0][1]||!rules()[1][1];
+    h+='<g class="drag" data-d="b" tabindex="0" role="button" aria-label="建築，可拖動；方向鍵每次移動 1 公尺"><rect x="'+px(b.x)+'" y="'+py(b.y)+'" width="'+b.w*S+'" height="'+b.h*S+'" class="'+(bad?'f-bad s-bad':'f-soft s-ink')+'" stroke-width="2.5"/>'
+     +'<text x="'+px(b.x+b.w/2)+'" y="'+py(b.y+b.h/2)+'" text-anchor="middle" font-size="14" font-weight="700">3F 建築</text><text x="'+px(b.x+b.w/2)+'" y="'+(py(b.y+b.h/2)+17)+'" text-anchor="middle" class="dim">'+b.w+' × '+b.h+' m　拖我</text></g>';
+    h+='<circle cx="'+px(TREE.x)+'" cy="'+py(TREE.y)+'" r="22" class="f-ok s-ok" stroke-width="1.5" style="pointer-events:none" opacity=".9"/><text x="'+px(TREE.x)+'" y="'+(py(TREE.y)+4)+'" text-anchor="middle" font-size="11" style="pointer-events:none">老樹</text>';
+    h+='<g class="drag" data-d="d" role="button" aria-label="車道口，可拖動"><circle cx="'+px(d.x)+'" cy="'+py(d.y)+'" r="15" style="fill:#e5484d;stroke:#fff;stroke-width:2"/><text x="'+px(d.x)+'" y="'+(py(d.y)+5)+'" text-anchor="middle" font-size="13" font-weight="700" style="fill:#fff">車</text></g>';
+    h+='<g class="drag" data-d="e" role="button" aria-label="主入口，可拖動"><circle cx="'+px(e.x)+'" cy="'+py(e.y)+'" r="15" style="fill:#ffd84d;stroke:#1b2330;stroke-width:2"/><text x="'+px(e.x)+'" y="'+(py(e.y)+5)+'" text-anchor="middle" font-size="13" font-weight="700" style="fill:#1b2330">入</text></g>';
+    svg.innerHTML=h;
+    var rs=rules(), sc=0, ul=$('#gsRules'); ul.innerHTML='';
+    rs.forEach(function(r){ if(r[1])sc+=r[2]; var li=el('li',r[1]?{'class':'ok'}:null,'<i>'+(r[1]?'✓':'✗')+'</i><span>'+r[0]+'</span><span class="pt">'+r[2]+'</span>'); ul.appendChild(li) });
+    hud(box,sc);
+    if(sc>=85){ if(!passed){passed=true; K.stampOn(box,sc===100?'滿分':'合格')} } else if(passed){passed=false; K.stampOff(box)}
+    return sc;
+  }
+  function move(e){
+    if(!drag)return; var p=svgPt(svg,e), mx=(p.x-OX)/S, my=(p.y-OY)/S, b=g.b;
+    if(drag.k==='b'){ b.x=clamp(Math.round(mx-drag.dx),0,W-b.w); b.y=clamp(Math.round(my-drag.dy),0,H-b.h) }
+    else if(drag.k==='d'){ var x=clamp(mx,0,W), y=clamp(my,0,H), ds=[['W',x],['E',W-x],['N',y],['S',H-y]].sort(function(a,c){return a[1]-c[1]})[0][0];
+      g.d={edge:ds,t:Math.round(ds==='W'||ds==='E'?y:x)} }
+    else { var cx=clamp(mx,b.x,b.x+b.w), cy=clamp(my,b.y,b.y+b.h), fs=[['W',Math.abs(mx-b.x)],['E',Math.abs(mx-(b.x+b.w))],['N',Math.abs(my-b.y)],['S',Math.abs(my-(b.y+b.h))]].sort(function(a,c){return a[1]-c[1]})[0][0];
+      g.e={face:fs,t:fs==='N'||fs==='S'?(cx-b.x)/b.w:(cy-b.y)/b.h} }
+    draw();
+  }
+  svg.addEventListener('pointerdown',function(e){ var t=e.target.closest('[data-d]'); if(!t)return; e.preventDefault(); var p=svgPt(svg,e);
+    drag={k:t.dataset.d,dx:(p.x-OX)/S-g.b.x,dy:(p.y-OY)/S-g.b.y}; try{svg.setPointerCapture(e.pointerId)}catch(x){} });
+  svg.addEventListener('pointermove',move);
+  function end(){ if(!drag)return; drag=null; var sc=draw(); K.award('g:site',sc) }
+  svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
+  svg.addEventListener('keydown',function(e){ var t=e.target.closest('[data-d="b"]'); if(!t)return; var m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key]; if(!m)return; e.preventDefault();
+    g.b.x=clamp(g.b.x+m[0],0,W-g.b.w); g.b.y=clamp(g.b.y+m[1],0,H-g.b.h); K.award('g:site',draw()); var n=$('[data-d="b"]',svg); if(n)n.focus() });
+  $('#gsRot').addEventListener('click',function(){var b=g.b,t=b.w; b.w=b.h; b.h=t; b.x=clamp(b.x,0,W-b.w); b.y=clamp(b.y,0,H-b.h); K.award('g:site',draw())});
+  $('#gsReset').addEventListener('click',function(){g=init(); passed=false; K.stampOff(box); draw()});
+  draw();
+})();
+
+/* ============ GAME 02 平面拼圖 ============ */
+(function(){
+  var box=$('#gPlan'), grid=$('#gpGrid'); if(!grid)return;
+  var C=6, R=8, T=[['st','樓梯','梯'],['wc','廁所','廁'],['ev','電梯','電'],['co','走廊','廊'],['cl','樂齡教室','教'],['kid','兒童閱覽','童'],['st2','故事角','故'],['x','橡皮擦','']];
+  var cells=[], pick='co', painting=false, passed=false, i;
+  for(i=0;i<C*R;i++)cells.push('x');
+  var pal=$('#gpPal');
+  T.forEach(function(t){var b=el('button',{type:'button','class':'t-'+t[0],'aria-pressed':t[0]===pick?'true':'false','data-t':t[0]},t[1]); pal.appendChild(b);
+    b.addEventListener('click',function(){pick=t[0]; $$('button',pal).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')})})});
+  for(i=0;i<C*R;i++){grid.appendChild(el('div',{'data-i':i,'class':'t-x'}))}
+  function lab(t){for(var j=0;j<T.length;j++)if(T[j][0]===t)return T[j][2];return ''}
+  function nb(i){var r=Math.floor(i/C),c=i%C,o=[]; if(r>0)o.push(i-C); if(r<R-1)o.push(i+C); if(c>0)o.push(i-1); if(c<C-1)o.push(i+1); return o}
+  function comps(test){var seen={},out=[]; for(var i=0;i<cells.length;i++){ if(seen[i]||!test(cells[i]))continue; var q=[i],cp=[]; seen[i]=1; while(q.length){var k=q.pop(); cp.push(k); nb(k).forEach(function(n){if(!seen[n]&&test(cells[n])){seen[n]=1;q.push(n)}})} out.push(cp)} return out}
+  function count(t){return cells.filter(function(c){return c===t}).length}
+  function dist(a,b){var m=99; a.forEach(function(i){b.forEach(function(j){var d=Math.abs(Math.floor(i/C)-Math.floor(j/C))+Math.abs(i%C-j%C); if(d<m)m=d})}); return m}
+  function rules(){
+    var st=comps(function(c){return c==='st'}), circ=comps(function(c){return c==='co'||c==='st2'}), isCirc=function(i){return cells[i]==='co'||cells[i]==='st2'};
+    var stOk=st.length===2&&st[0].length>=2&&st[1].length>=2&&dist(st[0],st[1])>=4;
+    var others=comps(function(c){return c==='st'}).concat(comps(function(c){return c==='wc'}),comps(function(c){return c==='ev'}),comps(function(c){return c==='cl'}),comps(function(c){return c==='kid'}));
+    var linked=circ.length===1&&others.length>0&&others.every(function(cp){return cp.some(function(i){return nb(i).some(isCirc)})});
+    var eastOk=true; for(var r=0;r<R;r++){var c=cells[r*C+C-1]; if(c==='st'||c==='wc'||c==='ev')eastOk=false}
+    var cl=count('cl'), kid=count('kid'), wc=count('wc'), ev=count('ev');
+    return [
+      ['48 格全部填滿，沒有空白', count('x')===0, 10],
+      ['樓梯剛好兩座（每座至少 2 格），而且相隔 4 格以上', stOk, 20],
+      ['廁所至少 2 格、電梯 1 到 2 格', wc>=2&&ev>=1&&ev<=2, 10],
+      ['樂齡教室 14 到 16 格、兒童閱覽 11 到 14 格', cl>=14&&cl<=16&&kid>=11&&kid<=14, 20],
+      ['走廊和故事角連成一條動線，每個空間和每座樓梯都碰得到它', linked, 25],
+      ['面向公園的最右一排沒有樓梯、廁所、電梯', eastOk&&count('x')<48, 15]
+    ];
+  }
+  function draw(){
+    $$('div',grid).forEach(function(d,i){d.className='t-'+cells[i]; d.textContent=lab(cells[i])});
+    var tl=$('#gpTally'); tl.innerHTML='';
+    [['cl','樂齡教室','目標 240'],['kid','兒童閱覽','目標 200'],['st','樓梯',''],['wc','廁所',''],['co','走廊',''],['st2','故事角','']].forEach(function(t){var n=count(t[0]); tl.appendChild(el('li',null,'<span>'+t[1]+'</span><b>'+n+' 格 · '+n*16+' ㎡'+(t[2]?'（'+t[2]+'）':'')+'</b>'))});
+    var rs=rules(), sc=0, ul=$('#gpRules'); ul.innerHTML='';
+    rs.forEach(function(r){ if(r[1])sc+=r[2]; ul.appendChild(el('li',r[1]?{'class':'ok'}:null,'<i>'+(r[1]?'✓':'✗')+'</i><span>'+r[0]+'</span><span class="pt">'+r[2]+'</span>')) });
+    if(count('x')===48)sc=0;
+    hud(box,sc);
+    if(sc===100){ if(!passed){passed=true;K.stampOn(box,'合格')} } else if(passed){passed=false;K.stampOff(box)}
+    return sc;
+  }
+  function paintAt(x,y){var n=document.elementFromPoint(x,y); if(!n||n.parentNode!==grid)return; var i=+n.dataset.i; if(cells[i]!==pick){cells[i]=pick; draw()}}
+  var demoUsed=false;
+  grid.addEventListener('pointerdown',function(e){e.preventDefault(); painting=true; demoUsed=false; paintAt(e.clientX,e.clientY)});
+  grid.addEventListener('pointermove',function(e){if(painting)paintAt(e.clientX,e.clientY)});
+  function end(){ if(!painting)return; painting=false; if(!demoUsed)K.award('g:plan',draw()) }
+  window.addEventListener('pointerup',end); window.addEventListener('pointercancel',end);
+  $('#gpClear').addEventListener('click',function(){for(var i=0;i<cells.length;i++)cells[i]='x'; passed=false; K.stampOff(box); draw()});
+  $('#gpDemo').addEventListener('click',function(){
+    var col0=['st','st','wc','wc','wc','ev','st','st']; demoUsed=true;
+    for(var r=0;r<R;r++)for(var c=0;c<C;c++){cells[r*C+c]=c===0?col0[r]:c===1?'co':r<4?'cl':r===4?'st2':'kid'}
+    passed=true; draw(); K.stampOff(box); K.toast('這是其中一種解法。清空後自己排一次才算分。');
+  });
+  draw();
+})();
+
+/* ============ GAME 03 考場決策 ============ */
+(function(){
+  var box=$('#gExam'); if(!box)return;
+  var ST=[
+   {at:'開考。題目發下來，三頁文字加一張基地圖。',o:[
+     ['立刻動筆畫配置，邊畫邊看題目',0,0,'你直接開畫，省下了讀題時間。',{late:1}],
+     ['花 30 分鐘用四種標記讀題，抄出硬條件清單',30,10,'30 分鐘讀題。你手上有一張 8 條的硬條件清單。'],
+     ['花 60 分鐘把題目逐字讀三遍',60,5,'讀了 60 分鐘，很熟，但時間用掉一倍。']]},
+   {at:'接下來是建築計畫（30 分）。',o:[
+     ['先跳過，最後有時間再補',0,0,'計畫先空著。',{noPlan:1}],
+     ['用對策表、定量表、泡泡圖，55 分鐘完成',55,25,'55 分鐘完成計畫說明，表格清楚。'],
+     ['寫一篇完整的設計理念文章',90,14,'寫了 90 分鐘、600 字。閱卷者很難在段落裡找到重點。']]},
+   {at:'草圖階段。你有兩個配置方案，各有優缺點。',o:[
+     ['選比較單純的那個，定案上正圖',60,10,'60 分鐘定案。方案普通，但你確定畫得完。'],
+     ['再花時間把兩案融合成更好的第三案',110,14,'多花了 50 分鐘，方案好了一點。'],
+     ['不畫草圖了，直接在正圖上邊畫邊想',15,2,'跳過草圖。畫到一半發現房間排不下，擦掉重來。',{redo:1}]]},
+   {at:'平面正圖畫到一半，發現二樓的樓梯放不下。',o:[
+     ['把整層擦掉重排',70,8,'重排花了 70 分鐘，圖紙也擦髒了。'],
+     ['縮小旁邊的儲藏室，局部調整',15,6,'15 分鐘解決。儲藏室小了一點，沒有人在意。'],
+     ['把樓梯畫小一點塞進去',0,-12,'樓梯尺寸不合法規。閱卷者一眼就看到。']]},
+   {at:'平面的牆和柱都畫完了，家具和鋪面還沒畫。剖面、立面、透視都還是空白。',o:[
+     ['先把平面的家具、鋪面畫完整，再畫剖立面',110,16,'平面很完整，剖立面只能草草畫完。'],
+     ['平面先停，立刻去畫剖面和立面',60,18,'60 分鐘補上剖面和立面，每張都有標樓高和圖名。'],
+     ['剖面放棄，把時間留給透視',0,-15,'缺一張題目要求的圖，重扣。']]},
+   {at:'最後一張：透視圖。',o:[
+     ['畫一張精緻的街角透視，加人、樹、陰影',70,12,'透視很漂亮，花了 70 分鐘。'],
+     ['畫量體透視，30 分鐘結束',30,9,'30 分鐘畫完量體透視，有樓層線和入口。'],
+     ['不畫了，回去加強平面',20,-15,'缺透視圖，重扣。']]}
+  ];
+  var i, clock, score, flags, log;
+  function clk(m){return Math.floor(m/60)+':'+('0'+m%60).slice(-2)}
+  function bar(){var f=$('#exFill'); f.style.width=Math.min(100,clock/480*100)+'%'; f.className=clock>480?'over':''; $('#exClock').textContent=clk(clock)+' / 8:00'; hud(box,Math.max(0,score))}
+  function say(t){log.push(t); var ol=$('#exLog'); ol.innerHTML=''; log.forEach(function(x){ol.appendChild(el('li',null,x))})}
+  function ask(){ var s=ST[i], o=$('#exOpts'); $('#exQ').textContent='第 '+(i+1)+' 關（'+clk(clock)+'）：'+s.at; o.innerHTML='';
+    s.o.forEach(function(op){var b=el('button',{type:'button'},op[0]); o.appendChild(b); b.addEventListener('click',function(){choose(op)})}); bar() }
+  function choose(op){
+    clock+=op[1]; score+=op[2]; say(op[3]+'（＋'+op[1]+' 分鐘，'+(op[2]>=0?'＋':'')+op[2]+' 分）'); if(op[4])for(var k in op[4])flags[k]=1;
+    if(i===2){ if(flags.late){clock+=30;score-=15;say('畫到這裡才發現題目要求「多功能廳夜間獨立開放」，配置要改。（＋30 分鐘，−15 分）')}
+      if(flags.redo){clock+=40;say('重畫。（＋40 分鐘）')}
+      clock+=150; score+=15; say('畫配置圖和各層平面正圖。（＋150 分鐘，＋15 分）') }
+    i++; if(i<ST.length){ask()} else finish();
+  }
+  function finish(){
+    clock+=40; say('補圖名、比例、尺寸、空間名稱。（＋40 分鐘）');
+    if(flags.noPlan){ if(clock<=430){clock+=50;score+=12;say('回頭補計畫說明，趕出一個簡版。（＋50 分鐘，＋12 分）')} else {score-=20;say('沒有時間補計畫說明了，30 分的區塊是空白。（−20 分）')} }
+    var over=clock-480;
+    if(over>0){var pen=Math.ceil(over/10)*3; score-=pen; say('超時 '+over+' 分鐘。鈴響時後面的圖還沒畫完。（−'+pen+' 分）')}
+    else if(480-clock>=30){score+=10; say('還剩 '+(480-clock)+' 分鐘，逐條檢查硬條件，補上漏掉的指北針。（＋10 分）')}
+    else say('剩 '+(480-clock)+' 分鐘，來不及完整檢查。');
+    score=Math.max(0,Math.min(100,score)); bar();
+    var pass=score>=60&&over<=0; $('#exOpts').innerHTML='';
+    $('#exQ').textContent=pass?'交卷。預估 '+score+' 分，及格。你把時間花在讓每張圖都存在。':(over>0?'交卷。預估 '+score+' 分。主要問題是超時：前面的決定吃掉了後面畫圖的時間。':'交卷。預估 '+score+' 分。時間夠，但有缺圖或違規被重扣。');
+    if(pass)K.stampOn(box,'及格'); K.award('g:exam',over>0?Math.round(score/2):score); $('#exReset').hidden=false;
+  }
+  function reset(){i=0;clock=0;score=0;flags={};log=[];$('#exLog').innerHTML='';$('#exReset').hidden=true;K.stampOff(box);ask()}
+  $('#exReset').addEventListener('click',reset); reset();
+})();
+
+/* ============ GAME 04 圖面找碴 ============ */
+(function(){
+  var box=$('#gSpot'), svg=$('#spSvg'); if(!svg)return;
+  var Z=[
+   {c:[235,256,17],m:'車道口開在西南角路口。路口 5 m 內不能設車道出入口，應移到西側道路的北端。',h:'看看車從哪裡進來。'},
+   {c:[400,240,22],m:'建築壓到題目要求保留的老榕樹。',h:'題目說要保留的東西還在嗎？'},
+   {r:[300,100,60,40],m:'兩座樓梯緊鄰在一起，等於只有一個逃生方向，應分別放在兩端。',h:'數一數樓梯，再看它們的位置。'},
+   {r:[250,137,150,18],m:'走廊只有 1.0 m 寬。公共建築畫 2.4 m。',h:'有一個尺寸標註太小了。'},
+   {r:[250,2,150,20],m:'建築貼著北側地界，沒有退縮，也違反「降低對北側住宅的壓迫」。',h:'看看建築和北邊鄰居的距離。'},
+   {r:[254,247,124,18],m:'建築超出南側 4 m 退縮線，蓋到人行步道上了。',h:'虛線是退縮線，建築有沒有越線？'},
+   {r:[322,156,56,70],m:'這個房間沒有寫名稱。每個空間都要標示。',h:'每個房間都有名字嗎？'},
+   {r:[528,180,170,34],m:'圖名沒有寫比例。每張圖都要有圖名和比例。',h:'看看圖名那一行。'}
+  ];
+  var found, miss;
+  function inZ(z,p){ if(z.c){var dx=p.x-z.c[0],dy=p.y-z.c[1]; return dx*dx+dy*dy<=z.c[2]*z.c[2]} return p.x>=z.r[0]&&p.x<=z.r[0]+z.r[2]&&p.y>=z.r[1]&&p.y<=z.r[1]+z.r[3] }
+  function draw(){
+    var h='<rect x="0" y="270" width="720" height="70" class="f-line"/><text x="600" y="312" text-anchor="middle" font-size="13">15 m 道路</text>'
+     +'<rect x="170" y="0" width="50" height="270" class="f-line"/><text x="195" y="130" text-anchor="middle" font-size="12" transform="rotate(-90 195 130)">8 m 道路</text>'
+     +'<rect x="428" y="10" width="90" height="260" class="f-ok"/><text x="473" y="60" text-anchor="middle" font-size="12">公園</text>'
+     +'<text x="85" y="24" text-anchor="middle" font-size="12" class="t-mut">北側：4 層住宅</text>'
+     +'<rect x="220" y="10" width="208" height="260" class="f-paper s-ink" stroke-width="2"/>'
+     +'<rect x="240.8" y="25.6" width="171.6" height="223.6" class="s-blue" stroke-dasharray="6 4" stroke-width="1.2"/>'
+     +'<rect x="250" y="10" width="150" height="252" class="f-soft s-ink" stroke-width="3"/>'
+     +'<path d="M250 140 H400 M250 152 H400 M300 10 V140 M300 100 H400 M360 100 V140 M330 100 V140 M320 152 V262" class="s-ink" stroke-width="1.5"/>'
+     +'<path d="M305 108 H325 M305 116 H325 M305 124 H325 M305 132 H325 M335 108 H355 M335 116 H355 M335 124 H355 M335 132 H355" class="s-ink" stroke-width="1"/>'
+     +'<text x="275" y="80" text-anchor="middle" font-size="12">多功能廳</text><text x="350" y="60" text-anchor="middle" font-size="12">共餐</text><text x="380" y="124" text-anchor="middle" font-size="10">廁所</text>'
+     +'<text x="315" y="98" text-anchor="middle" font-size="9">梯</text><text x="345" y="98" text-anchor="middle" font-size="9">梯</text>'
+     +'<text x="285" y="210" text-anchor="middle" font-size="12">咖啡</text><text x="325" y="149" text-anchor="middle" font-size="9">走廊 1.0 m</text>'
+     +'<rect x="220" y="244" width="30" height="24" class="f-line s-ink"/><text x="235" y="260" text-anchor="middle" font-size="10">車道</text>'
+     +'<path d="M277 276 L285 264 L293 276 Z" class="f-ink"/><text x="285" y="290" text-anchor="middle" font-size="11">主入口</text>'
+     +'<circle cx="400" cy="240" r="22" class="f-ok s-ok" stroke-width="1.5" opacity=".85"/><text x="400" y="244" text-anchor="middle" font-size="11">老樹</text>'
+     +'<text x="640" y="30" font-size="13" font-weight="700">N ↑</text>'
+     +'<text x="612" y="202" text-anchor="middle" font-size="14" font-weight="700">配置暨一樓平面圖</text><line x1="540" y1="208" x2="684" y2="208" class="s-ink" stroke-width="1.5"/>';
+    Z.forEach(function(z,i){ if(!found[i])return; h+=z.c?'<circle class="hit found" cx="'+z.c[0]+'" cy="'+z.c[1]+'" r="'+z.c[2]+'"/>':'<rect class="hit found" x="'+z.r[0]+'" y="'+z.r[1]+'" width="'+z.r[2]+'" height="'+z.r[3]+'" rx="6"/>' });
+    svg.innerHTML=h;
+    var n=found.filter(Boolean).length; hud(box,n);
+    var ul=$('#spFinds'); ul.innerHTML=''; Z.forEach(function(z,i){if(found[i])ul.appendChild(el('li',null,z.m))});
+    return n;
+  }
+  function msg(t,cls){var m=$('#spMsg'); m.className='verdict '+(cls||'mid'); m.textContent=t}
+  svg.addEventListener('click',function(e){
+    var p=svgPt(svg,e), n=found.filter(Boolean).length; if(n===Z.length)return;
+    for(var i=0;i<Z.length;i++){ if(inZ(Z[i],p)){ if(found[i]){msg('這一處已經找到了。已找到 '+n+' / 8，誤點 '+miss+' 次。');return}
+        found[i]=true; n=draw(); var xp=Math.max(0,Math.round(n/8*100)-Math.max(0,miss-2)*5); K.award('g:spot',xp);
+        if(n===Z.length){msg('8 處全部找到，誤點 '+miss+' 次。這 8 項就是交卷前檢查表要抓的東西。','ok'); K.stampOn(box,miss<=2?'火眼':'合格')}
+        else msg('找到了。已找到 '+n+' / 8，誤點 '+miss+' 次。','ok'); return } }
+    miss++; msg('這裡沒有問題。已找到 '+n+' / 8，誤點 '+miss+' 次。','no');
+  });
+  $('#spHint').addEventListener('click',function(){for(var i=0;i<Z.length;i++)if(!found[i]){msg('提示：'+Z[i].h);return}});
+  function reset(){found=Z.map(function(){return false}); miss=0; K.stampOff(box); draw(); msg('已找到 0 / 8，誤點 0 次。')}
+  $('#spReset').addEventListener('click',reset); reset();
+})();
+
+/* ============ GAME 05 數字快答 ============ */
+(function(){
+  var box=$('#gFlash'); if(!box)return;
+  var P=[['汽車停車位的尺寸','2.5 × 5.5 m','2 × 5 m','3 × 6 m'],['無障礙汽車位的尺寸','3.5 × 6 m','2.5 × 5.5 m','3 × 5 m'],['機車位的尺寸','1 × 2 m','0.5 × 1.5 m','1.5 × 2.5 m'],
+   ['車道坡道最陡','1：6','1：12','1：4'],['無障礙坡道最陡','1：12','1：6','1：20'],['雙向車道寬','5.5 m','3.5 m','7 m'],['單向車道寬','3.5 m','2.5 m','5.5 m'],
+   ['樓梯級高上限（考場用）','16 cm','20 cm','12 cm'],['樓梯級深下限','26 cm','20 cm','32 cm'],['公共建築梯寬至少','1.4 m','0.9 m','2.4 m'],['樓高 3.6 m、每級 15 cm，共幾級','24 級','18 級','30 級'],
+   ['考場萬用柱距','8 m','5 m','12 m'],['8 × 8 m 一格的面積','64 ㎡','48 ㎡','80 ㎡'],['8 m 跨的梁深約','70～80 cm','30～40 cm','120 cm'],['走廊畫多寬不會錯','2.4 m','1.0 m','4 m'],
+   ['每層至少幾座樓梯','2 座','1 座','4 座'],['輪椅迴轉直徑','1.5 m','1.0 m','2.5 m'],['女兒牆至少多高','1.1 m','0.6 m','1.8 m'],['標準層樓高常用','3.6 m','2.4 m','5 m'],['一樓樓高常用','4.2～4.5 m','3 m','6 m'],
+   ['基地 2,000 ㎡、建蔽率 50%，最大建築面積','1,000 ㎡','500 ㎡','4,000 ㎡'],['基地 1,000 ㎡、容積率 200%，最大樓地板','2,000 ㎡','200 ㎡','5,000 ㎡'],['一般公共建築的面積係數','1.4','1.0','2.0'],
+   ['每部汽車連車道約需','40 ㎡','14 ㎡','80 ㎡'],['讀題應該花多久','30 分鐘','5 分鐘','90 分鐘'],['草圖最晚幾點定案','2:30','4:30','1:00'],['最後留多久檢查','30 分鐘','5 分鐘','90 分鐘'],
+   ['建築計畫常見配分','30 分','10 分','70 分'],['車道口離路口至少','5 m','1 m','50 m'],['到樓梯的步行距離抓','30 m 內','80 m 內','5 m 內']];
+  var deck, score, streak, left, timer=null, lock=false, right, total;
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a}
+  function next(){ if(!deck.length)deck=shuffle(P.slice()); var q=deck.pop(), o=$('#flOpts'); $('#flQ').textContent=q[0]; o.innerHTML=''; lock=false;
+    shuffle([q[1],q[2],q[3]]).forEach(function(a){var b=el('button',{type:'button'},a); o.appendChild(b); b.addEventListener('click',function(){ if(lock||!timer)return; lock=true; total++;
+      if(a===q[1]){streak++; right++; score+=streak>=6?3:streak>=3?2:1; b.classList.add('right')} else {streak=0; b.classList.add('wrong'); $$('button',o).forEach(function(x){if(x.textContent===q[1])x.classList.add('right')})}
+      hud(box,score); setTimeout(function(){if(timer)next()},a===q[1]?220:900) })}) }
+  function stop(){ clearInterval(timer); timer=null; $('#flOpts').innerHTML=''; $('#flQ').textContent='時間到。'; var m=$('#flMsg'); m.hidden=false;
+    var xp=Math.min(100,score*4); m.className='verdict '+(score>=20?'ok':'mid'); m.textContent='答對 '+right+' / '+total+' 題，得 '+score+' 分。'+(score>=20?'這些數字你已經反射了。':'20 分以上算過關。答錯的數字回考場小抄再看一眼。');
+    if(score>=20)K.stampOn(box,'過關'); K.award('g:flash',xp); $('#flStart').hidden=false; $('#flStart').textContent='再來 60 秒' }
+  $('#flStart').addEventListener('click',function(){ deck=[]; score=0; streak=0; right=0; total=0; left=600; hud(box,0); K.stampOff(box); $('#flMsg').hidden=true; $('#flStart').hidden=true; next();
+    timer=setInterval(function(){left--; $('#flBar').style.width=(left/6)+'%'; if(left<=0)stop()},100) });
+})();
+
+/* ============ 遊戲場卡片 ============ */
+(function(){
+  var g=$('#playGrid'); if(!g)return;
+  var L=[['配置拖拉','拖動建築、車道口、主入口，七條規則即時打勾。','m4','gSite','g:site'],['平面拼圖','在 48 個格子上塗出一層合法的平面。','m5','gPlan','g:plan'],
+    ['考場決策','六個決定，看你能不能在 8 小時內交卷及格。','m7','gExam','g:exam'],['圖面找碴','一張有 8 個錯的配置圖，把它們全點出來。','m7','gSpot','g:spot'],['數字快答','60 秒連續答題，連對有加成。','play','gFlash','g:flash']];
+  L.forEach(function(x){var li=el('li'); li.appendChild(el('button',{type:'button','data-go':x[2],'data-anchor':x[3]},'<span class="ttl">'+x[0]+'</span><span class="ds">'+x[1]+'</span><span class="best" data-best="'+x[4]+'"></span>')); g.appendChild(li)});
+  window.KYplay=function(){$$('[data-best]',g).forEach(function(n){var v=K.st.xp[n.dataset.best]||0; n.textContent=v?'最高 '+v+' XP':'還沒玩過'})};
+  window.KYplay();
+})();
+})();
+</script>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return; var $=K.$, $$=K.$$, el=K.el;
+function hud(box,v){var b=$('[data-score]',box); if(b)b.textContent=v}
+function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a}
+function gameBox(id,no,title,unit,desc){var s=el('section',{'class':'game',id:id});
+  s.innerHTML='<header class="ghead"><span class="gno">'+no+'</span><h3>'+title+'</h3><div class="hud"><b data-score>0</b><small>'+unit+'</small></div></header><p class="gdesc">'+desc+'</p>'; return s}
+var view=function(id){return document.getElementById('v-'+id)};
+
+/* ---------- AI：頁面內的 Claude（沒有就自動隱藏或改用本機規則） ---------- */
+var aiReady=(window.claude&&typeof window.claude.use==='function')?window.claude.use('sample').catch(function(){return null}):Promise.resolve(null);
+var AIERR={not_granted:'你沒有允許這個頁面使用 Claude，AI 功能已關閉。',rate_limited:'用量到上限了，晚一點再試。',session_expired:'登入過期了，重新登入後再試。',refused:'這個內容 AI 沒辦法評。換個說法再試。',sampling_disabled:'這個帳號目前不能使用 AI 功能。',cancelled:''};
+function aiMsg(e){return AIERR[e&&e.code]!=null?AIERR[e.code]:'AI 暫時連不上，請稍後再按一次。'}
+
+/* ============ GAME 閱卷委員（單元 0） ============ */
+var gJudge=gameBox('gJudge','GAME','你是閱卷委員','/10','十份考卷，每份只看五秒。按「及格」或「不及格」。你會很快發現閱卷者真正在意什麼。');
+(function(){
+  var D=[['六張圖都有，線條普通。建蔽率、容積率的算式寫在圖上，都合法。',1,'平凡但完整、合法。這就是及格圖。'],
+   ['透視畫得像競圖作品。平面只畫了一樓，二樓三樓是空白。',0,'缺圖。題目要求的每一張圖都要存在。'],
+   ['圖都有，也很漂亮。題目要求 20 部停車位，圖上找不到停車場。',0,'漏掉硬條件。題目裡的數字，閱卷者會一條一條對。'],
+   ['圖都有。建築超出退縮線 2 公尺。',0,'違規。超出退縮線等於蓋在不能蓋的地方。'],
+   ['圖都有、合法。計畫說明用表格列出三個議題和對策，圖上都找得到。',1,'有回應題目，而且找得到。這是高分的寫法。'],
+   ['平面非常精細，連地磚都畫了。沒有剖面圖。',0,'缺圖。把畫地磚的時間拿去畫剖面，就及格了。'],
+   ['圖都有、合法。造型就是一個方盒子，沒什麼特色，但動線清楚。',1,'方盒子沒有問題。及格線不考造型。'],
+   ['建築做成螺旋形，很有創意。整棟只有一座樓梯。',0,'逃生不合格。每層至少要兩座樓梯。'],
+   ['圖都有、合法。透視只畫了一個有樓層線的盒子，加兩棵樹和一個人。',1,'量體透視就夠了。透視「有」比「美」重要。'],
+   ['圖都有、合法。所有房間都沒寫名稱，看不出哪間是什麼。',0,'沒標空間名稱，閱卷者無法確認題目要求的空間是否都有。']];
+  var deck,i,right,body=el('div'); gJudge.appendChild(body);
+  function show(){ if(i>=deck.length){done();return} var c=deck[i];
+    body.innerHTML='<div class="jcard"><small>考卷 '+(i+1)+' / '+deck.length+'</small>'+c[0]+'</div><div class="jbtns"><button type="button" class="no">不及格</button><button type="button" class="yes">及格</button></div><p class="verdict mid" hidden></p><div class="dots">'+deck.map(function(d,k){return '<i class="'+(d.r===1?'r':d.r===0?'w':'')+'"></i>'}).join('')+'</div>';
+    $('.no',body).addEventListener('click',function(){ans(0)}); $('.yes',body).addEventListener('click',function(){ans(1)}) }
+  function ans(v){var c=deck[i],ok=v===c[1]; c.r=ok?1:0; if(ok)right++; hud(gJudge,right); var m=$('.verdict',body); m.hidden=false; m.className='verdict '+(ok?'ok':'no'); m.innerHTML='<b>'+(ok?'判對了。':'判錯了。')+'</b>這份'+(c[1]?'及格':'不及格')+'：'+c[2];
+    $$('.jbtns button',body).forEach(function(b){b.disabled=true}); var n=el('button',{type:'button','class':'go'},i<deck.length-1?'下一份 →':'看結果'); n.style.marginTop='10px'; body.appendChild(n); n.addEventListener('click',function(){i++;show()}); n.focus() }
+  function done(){ K.award('g:judge',right*10); if(right>=8)K.stampOn(gJudge,'合格');
+    body.innerHTML='<p class="fq">'+right+' / 10。'+(right>=8?'你已經有閱卷者的眼睛了。':'再判一次，注意：缺圖和違規一定不及格，普通但完整一定及格。')+'</p><div class="key" style="color:#15212c"><b>及格圖只有三個條件：</b>題目要的圖都有畫、題目給的數字都沒違反、看得出有回應題旨。漂亮不在裡面。</div><button type="button" class="go">再判一輪</button>';
+    $('.go',body).addEventListener('click',start) }
+  function start(){deck=shuffle(D.map(function(d){return d.slice()})); i=0; right=0; hud(gJudge,0); K.stampOff(gJudge); show()}
+  start();
+})();
+
+/* ============ GAME 蓋樓（單元 2） ============ */
+var gMass=gameBox('gMass','GAME','蓋到剛好合法','/100','五塊基地。用 ＋ − 決定蓋幾層，要用最少的層數把需要的面積蓋完，而且不能超過建蔽率、容積率和樓層限制。有些基地根本蓋不出來，那就按「蓋不出來」。');
+(function(){
+  var L=[{a:1000,b:60,f:180,n:1500,cap:0},{a:2000,b:50,f:160,n:2100,cap:4},{a:1500,b:40,f:150,n:2250,cap:0,note:'題目要求「設計至容積上限」'},{a:800,b:60,f:200,n:1700,cap:0},{a:3000,b:40,f:120,n:3300,cap:3}];
+  var i,fl,score,tries,body=el('div'); gMass.appendChild(body);
+  function sol(l){var fp=l.a*l.b/100,g=l.a*l.f/100; if(l.n>g+.5)return 0; var m=Math.ceil(l.n/fp-1e-9); if(l.cap&&m>l.cap)return 0; return m}
+  function tower(l){var fp=l.a*l.b/100,per=l.n/fl,ok=per<=fp+.5,w=Math.min(1.25,per/fp)*150,h=Math.min(26,170/fl),s='<svg viewBox="0 0 360 240" role="img" aria-label="量體"><line x1="20" y1="212" x2="340" y2="212" class="s-ink" stroke-width="3"/><rect x="105" y="14" width="150" height="198" class="s-blue" stroke-dasharray="5 4"/><text x="180" y="230" text-anchor="middle" class="dim">虛線＝建蔽率允許的最大寬度</text>';
+    for(var k=0;k<fl;k++)s+='<rect x="'+(180-w/2)+'" y="'+(212-(k+1)*h)+'" width="'+w+'" height="'+h+'" class="'+(ok?'f-soft s-ink':'f-bad s-bad')+'" stroke-width="1.5"/>';
+    return s+'<text x="180" y="'+(212-fl*h-8)+'" text-anchor="middle" font-size="13" font-weight="700">每層 '+K.fmt(per)+' ㎡</text></svg>'}
+  function show(){ if(i>=L.length){done();return} var l=L[i]; tries=0; fl=1;
+    body.innerHTML='<div class="mwrap"><div><ul class="mspec"><li>第 '+(i+1)+' / '+L.length+' 塊基地</li><li>基地面積 <b>'+K.fmt(l.a)+'</b> ㎡</li><li>建蔽率 <b>'+l.b+'%</b>　容積率 <b>'+l.f+'%</b></li><li>需要的樓地板 <b>'+K.fmt(l.n)+'</b> ㎡</li>'+(l.cap?'<li>地上不得超過 <b>'+l.cap+'</b> 層</li>':'')+(l.note?'<li>'+l.note+'</li>':'')+'</ul>'
+      +'<div class="stepper"><button type="button" data-d="-1" aria-label="少一層">−</button><b id="gmF">1</b><span>層</span><button type="button" data-d="1" aria-label="多一層">＋</button></div>'
+      +'<div class="frow"><button type="button" class="go" id="gmGo">蓋！</button><button type="button" class="ghost" id="gmNo">蓋不出來</button></div></div><figure id="gmFig"></figure></div><p class="verdict mid" id="gmMsg" hidden></p>';
+    $('#gmFig',body).innerHTML=tower(l);
+    $$('.stepper button',body).forEach(function(b){b.addEventListener('click',function(){fl=Math.max(1,Math.min(8,fl+(+b.dataset.d))); $('#gmF',body).textContent=fl; $('#gmFig',body).innerHTML=tower(l)})});
+    $('#gmGo',body).addEventListener('click',function(){judge(fl)}); $('#gmNo',body).addEventListener('click',function(){judge(0)}) }
+  function judge(v){var l=L[i],s=sol(l),fp=l.a*l.b/100,g=l.a*l.f/100,m=$('#gmMsg',body),why; m.hidden=false; tries++;
+    if(v===s){var pts=tries===1?20:10; score+=pts; hud(gMass,score); m.className='verdict ok';
+      m.innerHTML='<b>對，＋'+pts+'。</b>'+(s?'最大建築面積 '+K.fmt(fp)+' ㎡，'+K.fmt(l.n)+' ÷ '+K.fmt(fp)+' ＝ '+(l.n/fp).toFixed(2)+'，進位成 '+s+' 層。':(l.n>g?'容積上限只有 '+K.fmt(g)+' ㎡，需要 '+K.fmt(l.n)+' ㎡，加幾層都沒用。考場上遇到這種情況，回頭檢查係數是不是抓太大。':'需要的層數超過樓層限制。'));
+      $$('button',body).forEach(function(b){b.disabled=true}); var n=el('button',{type:'button','class':'go'},i<L.length-1?'下一塊基地 →':'看結果'); n.style.marginTop='10px'; body.appendChild(n); n.addEventListener('click',function(){i++;show()}); return}
+    if(v===0)why='這塊其實蓋得出來。先算最大建築面積和最大樓地板，再試試層數。';
+    else if(l.n>g+.5)why='需要 '+K.fmt(l.n)+' ㎡，但容積率只允許 '+K.fmt(g)+' ㎡。加層數解決不了容積率。';
+    else if(l.n/v>fp+.5)why='每層 '+K.fmt(l.n/v)+' ㎡，超過建蔽率允許的 '+K.fmt(fp)+' ㎡。層數太少。';
+    else if(l.cap&&v>l.cap)why='超過樓層限制 '+l.cap+' 層。';
+    else why='合法，但不是最少的層數。層數越多，樓梯電梯佔的比例越高。';
+    m.className='verdict no'; m.innerHTML='<b>再試一次。</b>'+why }
+  function done(){K.award('g:mass',score); if(score>=80)K.stampOn(gMass,'合格'); body.innerHTML='<p class="fq">'+score+' / 100。'+(score>=80?'三行算式你已經會了。':'再蓋一輪。每塊基地都先算兩個上限。')+'</p><button type="button" class="go">再蓋一輪</button>'; $('.go',body).addEventListener('click',start)}
+  function start(){i=0;score=0;hud(gMass,0);K.stampOff(gMass);show()} start();
+})();
+
+/* ============ GAME 剖面搶時間（單元 6） ============ */
+var gSec=gameBox('gSec','GAME','剖面搶時間','/100','考試剩 20 分鐘，剖面圖只有幾條線。下面每個項目都要花時間，你買不起全部。挑對的畫，然後交卷。');
+(function(){
+  var IT=[['g','地面線加粗，延伸到道路和鄰地',2,1],['h','每層樓高的尺寸線',3,1],['n','每個空間的名稱',3,1],['b','地下室',3,1],['p','屋頂女兒牆',2,1],['s','人和樹（看得出尺度）',3,1],['t','圖名和比例',1,1],['c','平面圖上標剖切位置',2,1],
+    ['f','室內家具細節',8,0],['m','外牆磁磚分割線',7,0],['k','天空漸層上色',6,0],['w','每扇窗的窗框',6,0]];
+  var on={}, body=el('div'); gSec.appendChild(body);
+  body.innerHTML='<figure><svg id="scSvg" viewBox="0 0 720 250" role="img" aria-label="剖面圖"></svg></figure><div class="exbar"><i id="scFill" style="width:0"></i><span id="scClock">已用 0 / 20 分鐘</span></div><div class="picks" id="scPicks"></div><div class="frow"><button type="button" class="go" id="scGo">交卷</button><button type="button" class="ghost" id="scReset">重來</button></div><p class="verdict mid" id="scMsg" hidden></p>';
+  var order=shuffle(IT.slice());
+  function used(){var t=0; IT.forEach(function(x){if(on[x[0]])t+=x[2]}); return t}
+  function draw(){
+    var h='<line x1="60" y1="180" x2="660" y2="180" class="s-ink" stroke-width="'+(on.g?5:1.2)+'"/>'+(on.g?'<text x="660" y="198" text-anchor="end" class="dim">15 m 道路</text><text x="60" y="198" class="dim">鄰地</text>':'');
+    h+='<rect x="200" y="132" width="320" height="48" class="s-ink" stroke-width="2"/><rect x="200" y="92" width="320" height="40" class="s-ink" stroke-width="2"/><rect x="280" y="52" width="240" height="40" class="s-ink" stroke-width="2"/>';
+    if(on.b)h+='<rect x="170" y="180" width="380" height="38" class="f-paper s-ink" stroke-width="2"/>'+(on.n?'<text x="360" y="204" text-anchor="middle" font-size="12">B1 停車場</text>':'');
+    if(on.p)h+='<path d="M280 52 v-11 M520 52 v-11 M200 92 v-11" class="s-ink" stroke-width="3"/>';
+    if(on.n)h+='<text x="360" y="161" text-anchor="middle" font-size="12">門廳、多功能廳</text><text x="360" y="117" text-anchor="middle" font-size="12">教室、兒童閱覽</text><text x="400" y="77" text-anchor="middle" font-size="12">一般閱覽</text>';
+    if(on.h)h+='<path d="M545 180 v-128 M540 180 h10 M540 132 h10 M540 92 h10 M540 52 h10" class="s-mut"/><text x="556" y="160" class="dim">4.5</text><text x="556" y="116" class="dim">3.6</text><text x="556" y="76" class="dim">3.6 m</text>';
+    if(on.s)h+='<circle cx="130" cy="150" r="16" class="f-ok s-ok"/><path d="M130 166 v14" class="s-ok" stroke-width="2"/><circle cx="600" cy="162" r="3" class="f-ink"/><path d="M600 165 v9 M600 174 l-3 6 M600 174 l3 6" class="s-ink" stroke-width="1.5"/>';
+    if(on.t)h+='<text x="360" y="240" text-anchor="middle" font-size="12" font-weight="700">A–A′ 剖面圖　S：1/200</text>';
+    if(on.c)h+='<text x="96" y="40" class="dim">平面圖上：A ┤────├ A′</text>';
+    if(on.f)h+='<path d="M215 172 h20 v8 M250 172 h20 v8 M300 172 h20 v8 M215 126 h14 v6 M240 126 h14 v6" class="s-mut"/>';
+    if(on.m)h+='<path d="M200 140 h320 M200 150 h320 M200 160 h320 M200 170 h320 M200 100 h320 M200 110 h320 M200 120 h320" class="s-line"/>';
+    if(on.k)h+='<rect x="0" y="0" width="720" height="50" class="f-soft" opacity=".7"/>';
+    if(on.w)h+='<path d="M210 140 h14 v20 h-14 z M240 140 h14 v20 h-14 z M470 140 h14 v20 h-14 z M210 100 h14 v20 h-14 z" class="s-mut"/>';
+    $('#scSvg',body).innerHTML=h; var u=used(); $('#scFill',body).style.width=(u/20*100)+'%'; $('#scClock',body).textContent='已用 '+u+' / 20 分鐘';
+    $$('#scPicks button',body).forEach(function(b){var k=b.dataset.k, it=IT.filter(function(x){return x[0]===k})[0]; b.setAttribute('aria-pressed',on[k]?'true':'false'); b.disabled=!on[k]&&u+it[2]>20});
+  }
+  order.forEach(function(x){var b=el('button',{type:'button','data-k':x[0],'aria-pressed':'false'},x[1]+'<span>'+x[2]+' 分</span>'); $('#scPicks',body).appendChild(b); b.addEventListener('click',function(){on[x[0]]=!on[x[0]]; draw()})});
+  $('#scGo',body).addEventListener('click',function(){var must=IT.filter(function(x){return x[3]}), got=must.filter(function(x){return on[x[0]]}), junk=IT.filter(function(x){return !x[3]&&on[x[0]]}), sc=Math.round(got.length/must.length*100), m=$('#scMsg',body); m.hidden=false; hud(gSec,sc); K.award('g:sec',sc);
+    var miss=must.filter(function(x){return !on[x[0]]}).map(function(x){return x[1]});
+    if(sc===100){m.className='verdict ok'; m.innerHTML='<b>滿分。</b>八項必備的都畫了，剛好 19 分鐘。這八項就是剖面的最低完成標準。'; K.stampOn(gSec,'合格')}
+    else{m.className='verdict no'; m.innerHTML='<b>'+got.length+' / 8 項必備。</b>'+(junk.length?'你把時間花在「'+junk.map(function(x){return x[1]}).join('、')+'」上，這些不會加分。':'')+'漏掉的：'+miss.join('、')+'。'} });
+  $('#scReset',body).addEventListener('click',function(){on={}; K.stampOff(gSec); hud(gSec,0); $('#scMsg',body).hidden=true; draw()});
+  draw();
+})();
+
+/* ============ GAME 對策評分（單元 3，AI） ============ */
+var gPol=gameBox('gPol','AI','AI 閱卷委員：批你的對策','/10','選一個議題，用「把＿＿放在＿＿，讓＿＿」寫一條對策。AI 閱卷委員會打分數，並告訴你怎麼改得更具體。');
+(function(){
+  var IS=['不同世代自然相遇','白天晚上都有人使用','與東側公園的活動相互延伸','降低對北側住宅的壓迫與干擾'], cur=0, body=el('div'); gPol.appendChild(body);
+  body.innerHTML='<div class="pills" id="plIs"></div><label for="plTx" class="hint">你的對策</label><textarea id="plTx" maxlength="200" placeholder="例如：把咖啡放在一樓西南角，讓公車站下車的人直接看到。"></textarea><div class="frow"><button type="button" class="go" id="plGo">送出評分</button><span class="ai-tag" id="plTag">本機規則</span></div><div class="ai-out" id="plOut" hidden></div>';
+  IS.forEach(function(t,k){var b=el('button',{type:'button','class':'pill','aria-pressed':k===0?'true':'false'},t); $('#plIs',body).appendChild(b); b.addEventListener('click',function(){cur=k; $$('#plIs .pill',body).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')})})});
+  function local(t){var pos=/(樓|側|角|臨|面向|朝|旁|南|北|東|西|中央|入口|屋頂|地下)/.test(t), why=/(讓|使|以便|使得|避免|減少)/.test(t), obj=/(把|將)/.test(t), s=Math.min(8,(pos?4:0)+(why?3:0)+(obj?1:0)+(t.length>=14?2:0));
+    return {score:s,good:pos?'有寫出位置。':'',fix:(pos?'':'沒有寫出具體位置（哪一層、哪一側）。')+(why?'':'沒有寫出這樣做的效果（讓誰怎麼樣）。')||'可以再加上尺寸或相鄰的空間，讓它更具體。'}}
+  function show(r,ai){var o=$('#plOut',body); o.hidden=false; var s=Math.max(0,Math.min(10,Math.round(+r.score||0))); hud(gPol,s); K.award('g:pol',s*5); if(s>=8)K.stampOn(gPol,'合格'); else K.stampOff(gPol);
+    o.textContent=s+' / 10\n'+(r.good?'好的地方：'+r.good+'\n':'')+(r.fix?'可以改：'+r.fix+'\n':'')+(r.better?'改寫示範：'+r.better:'')}
+  aiReady.then(function(sample){ if(sample)$('#plTag',body).textContent='AI 評分';
+    $('#plGo',body).addEventListener('click',function(){var t=$('#plTx',body).value.trim(), o=$('#plOut',body); if(t.length<6){o.hidden=false;o.textContent='先寫一句對策。';return}
+      if(!sample){show(local(t));return}
+      var btn=$('#plGo',body); btn.disabled=true; o.hidden=false; o.textContent='閱卷委員正在看……';
+      sample.json('你是台灣建築師考試「建築計畫與設計」的閱卷委員，正在批改考生寫的一條設計對策。\n題目：社區圖書分館暨樂齡學習中心。基地東西40m南北50m，南臨15m主要道路（有公車站），西臨8m道路，東鄰社區公園，北鄰4層住宅，東南角有老榕樹要保留。空間有一般閱覽、兒童閱覽、樂齡教室、多功能廳（夜間獨立開放）、共餐廚房、行政、咖啡。\n考生要回應的議題：「'+IS[cur]+'」\n考生寫的對策：「'+t.slice(0,200)+'」\n評分標準（0到10分）：有沒有指出具體位置（哪層、哪側、臨什麼）；能不能在圖上畫出來；有沒有說明效果；是否真的回應這個議題。空話（例如「營造友善氛圍」）給低分。\n只回覆一個 JSON 物件，欄位：score（整數0-10）、good（一句話，做得好的地方，沒有就空字串）、fix（一句話，最該改的地方）、better（一句改寫示範，用「把＿放在＿，讓＿」句型）。全部用繁體中文。例：{"score":6,"good":"有寫出樓層。","fix":"沒說放在哪一側。","better":"把兒童閱覽放在二樓東側，讓孩子看得到公園。"}',{modelTier:'quick'})
+       .then(function(r){ if(!r||typeof r!=='object')throw {code:'invalid_json'}; show(r,true)})
+       .catch(function(e){ if(e&&(e.code==='not_granted'||e.code==='sampling_disabled')){sample=null; $('#plTag',body).textContent='本機規則'; show(local(t))} else o.textContent=aiMsg(e)||'已取消。' })
+       .then(function(){btn.disabled=false}) }) });
+})();
+
+/* ============ AI 拍照講評（單元 8） ============ */
+var gRev=gameBox('gRev','AI','拍照給 AI 閱卷委員','','把你剛才在紙上畫的「社區托育暨親子館」配置草圖拍下來上傳。AI 閱卷委員會直接看你的圖，告訴你哪裡會被扣分、下一步先改什麼。');
+(function(){
+  var body=el('div'); gRev.appendChild(body); $('.hud',gRev).hidden=true;
+  body.innerHTML='<label class="filebtn" for="rvFile">選擇照片或拍照<input type="file" id="rvFile" accept="image/jpeg,image/png,image/webp"></label><img class="photo" id="rvImg" alt="你上傳的草圖" hidden><div class="frow"><button type="button" class="go" id="rvGo" disabled>請 AI 講評</button><button type="button" class="ghost" id="rvStop" hidden>停止</button></div><div class="ai-out" id="rvOut" hidden></div>';
+  var file=null, ctl=null, url=null;
+  $('#rvFile',body).addEventListener('change',function(e){file=e.target.files&&e.target.files[0]||null; var im=$('#rvImg',body); if(url)URL.revokeObjectURL(url); if(file){url=URL.createObjectURL(file); im.src=url; im.hidden=false} else im.hidden=true; $('#rvGo',body).disabled=!file});
+  aiReady.then(function(sample){
+    if(!sample){body.innerHTML='<p class="verdict mid">這個功能需要在 Claude 的頁面裡開啟才能使用。現在請改用上面第 4 關的檢查表自評。</p>';return}
+    $('#rvStop',body).addEventListener('click',function(){if(ctl)ctl.abort()});
+    $('#rvGo',body).addEventListener('click',function(){ if(!file)return; var o=$('#rvOut',body), go=$('#rvGo',body), st=$('#rvStop',body); ctl=new AbortController(); go.disabled=true; st.hidden=false; o.hidden=false; o.textContent='閱卷委員正在看你的圖……（大約需要半分鐘）';
+      sample('你是台灣建築師考試「建築計畫與設計」的閱卷委員，同時也是耐心的老師。附上的照片是一位第一次練習的新手手繪的配置草圖。\n\n題目：社區托育暨親子館。基地矩形，東西向30m、南北向40m，1200㎡。南側臨12m道路，東側臨6m巷道，西側緊鄰國小操場，北側為3層透天住宅。建蔽率60%（最大建築面積720㎡）、容積率180%。臨道路側退縮3m。地上不超過3層。托嬰室須在地面層。須設戶外遊戲庭。法定空地設汽車6部（含無障礙1部）與家長接送臨停。合理解法是蓋2層、每層約450㎡。\n\n請依序檢查並用繁體中文回覆，語氣直接、具體、鼓勵，總長不超過350字，不要用 Markdown 符號：\n第一行：給一個 0 到 100 的分數，格式「分數：72」。\n「做對的」：最多三點，指出圖上實際看得到的優點。\n「會被扣分的」：最多三點，依嚴重程度排序。檢查：建築是否在退縮線內、車道或停車是否從6m巷道進出且遠離路口、人車入口是否分開、遊戲庭是否完整且不必穿越車道、6部車與接送臨停是否畫出、是否有指北針、道路名稱與寬度、入口符號、樓層數標示。\n「下一步」：一句話，說明重畫時最先要改的一件事。\n如果照片不是配置圖或看不清楚，直接說明看不出來，並請對方重拍，不要硬評。',
+        {images:[file],signal:ctl.signal,cache:false,onText:function(u){o.textContent=u.text}})
+       .then(function(r){o.textContent=r.text; var m=/分數[:：]\s*(\d{1,3})/.exec(r.text); if(m){var s=Math.min(100,+m[1]); K.award('g:rev',Math.round(s/2)); if(s>=60)K.stampOn(gRev,'及格')}})
+       .catch(function(e){o.textContent=(e&&e.text?e.text+'\n\n':'')+(e&&e.code==='images_unavailable'?'這個檢視畫面不能傳圖片給 AI。':aiMsg(e)||'已停止。')})
+       .then(function(){go.disabled=false; st.hidden=true}) }) });
+})();
+
+/* ============ GAME 無限出題（單元 8） ============ */
+var gGen=gameBox('gGen','GAME','無限出題','連對','每按一次就出一塊新基地。算出四個數字，連續答對越多越好。係數一律用 1.4。');
+(function(){
+  var body=el('div'), q=null, streak=0; gGen.appendChild(body);
+  var TY=[['社區活動中心',['多功能廳',240],['教室 ×3',180],['里辦公室',80],['社區廚房',100],['圖書角',120]],['青年創業基地',['共同工作區',300],['會議室 ×4',160],['展示廳',200],['咖啡輕食',100],['管理室',60]],
+    ['樂齡日照中心',['日間活動室',240],['午休室',120],['復健室',100],['共餐廚房',120],['行政護理',80]],['兒童美術館',['常設展',320],['特展',200],['工作坊 ×2',160],['賣店',60],['行政典藏',120]],['市場暨社區客廳',['市場攤位區',400],['熟食區',160],['社區客廳',160],['管理室',60],['公廁',60]]];
+  function make(){var t=TY[Math.floor(Math.random()*TY.length)], a=[900,1200,1500,1800,2400,3000][Math.floor(Math.random()*6)], b=[40,50,60][Math.floor(Math.random()*3)], n=3+Math.floor(Math.random()*3), rooms=shuffle(t.slice(1)).slice(0,n), net=rooms.reduce(function(s,r){return s+r[1]},0), need=net*1.4, fp=a*b/100, fl=Math.ceil(need/fp-1e-9), f=[120,160,180,200,240].filter(function(x){return a*x/100>=need})[0]||240;
+    return {t:t[0],a:a,b:b,f:f,rooms:rooms,net:net,need:need,fp:fp,gfa:a*f/100,fl:fl}}
+  function show(){q=make();
+    body.innerHTML='<div class="qtext"><b>'+q.t+'</b>　基地 '+K.fmt(q.a)+' ㎡，建蔽率 '+q.b+'%，容積率 '+q.f+'%。<br>空間需求：'+q.rooms.map(function(r){return r[0]+' '+r[1]+' ㎡'}).join('、')+'。</div><div class="frow"><label for="gg1">最大建築面積 ㎡<input type="number" id="gg1" inputmode="decimal"></label><label for="gg2">最大容積樓地板 ㎡<input type="number" id="gg2" inputmode="decimal"></label><label for="gg3">需要的樓地板 ㎡<input type="number" id="gg3" inputmode="decimal"></label><label for="gg4">最少幾層<input type="number" id="gg4" inputmode="numeric"></label></div><div class="frow"><button type="button" class="go" id="ggGo">對答案</button><button type="button" class="ghost" id="ggNew">換一題</button></div><p class="verdict mid" id="ggMsg" hidden></p>';
+    $('#ggGo',body).addEventListener('click',check); $('#ggNew',body).addEventListener('click',function(){streak=0;hud(gGen,0);show()}) }
+  function check(){var A=[[q.fp,1],[q.gfa,1],[q.need,q.need*.04],[q.fl,0]], ok=0; A.forEach(function(x,k){var i=$('#gg'+(k+1),body), v=parseFloat(i.value), r=isFinite(v)&&Math.abs(v-x[0])<=x[1]+1e-9; if(r)ok++; i.style.borderColor=r?'var(--ok)':'var(--bad)'; i.style.background=r?'var(--okbg)':'var(--badbg)'});
+    var m=$('#ggMsg',body); m.hidden=false;
+    if(ok===4){streak++; hud(gGen,streak); K.award('g:gen',Math.min(100,streak*20)); if(streak>=3)K.stampOn(gGen,'連勝'); m.className='verdict ok'; m.innerHTML='<b>四個都對，連對 '+streak+' 題。</b>'; $('#ggGo',body).textContent='下一題 →'; $('#ggGo',body).onclick=function(){show()} }
+    else{streak=0; hud(gGen,0); K.stampOff(gGen); m.className='verdict no'; m.innerHTML='<b>對了 '+ok+' / 4。</b>答案：'+K.fmt(q.a)+' × '+q.b+'% ＝ '+K.fmt(q.fp)+'；'+K.fmt(q.a)+' × '+q.f+'% ＝ '+K.fmt(q.gfa)+'；淨面積 '+K.fmt(q.net)+' × 1.4 ＝ '+K.fmt(q.need)+'；'+K.fmt(q.need)+' ÷ '+K.fmt(q.fp)+' 進位 ＝ '+q.fl+' 層。'} }
+  show();
+})();
+
+/* ============ 重新編排：遊戲在上、講義收在下 ============ */
+var PLAN={
+ m0:{mission:'你是閱卷委員。十份考卷，決定誰及格。',tips:['及格＝圖都有、沒違規、有回應題目','缺圖扣得最重','漂亮是加分，不是門檻'],games:[gJudge]},
+ m1:{mission:'拿起螢光筆，把一份題目拆成四種顏色。',tips:['有數字或「應、須、不得」的是硬條件','空間名稱加面積是空間需求','形容詞和願景是議題，圖上要看得到做法'],games:['#tagger']},
+ m2:{mission:'五塊基地，五個盒子。蓋到剛好合法。',tips:['最大建築面積＝基地 × 建蔽率','最大樓地板＝基地 × 容積率','層數＝需要的樓地板 ÷ 最大建築面積，無條件進位'],games:[gMass]},
+ m3:{mission:'幫七個空間找樓層，再讓 AI 閱卷委員批你的對策。',tips:['公共、吵、人多放低樓層；安靜的放高樓層','對策句型：把＿＿放在＿＿，讓＿＿','每條對策都要能在圖上指出位置'],games:['#zoner',gPol]},
+ m4:{mission:'把建築放上基地，拿到 85 分蓋章。',tips:['順序：車道 → 量體 → 入口 → 空地','車道開在次要道路，離路口越遠越好','空地要集中成有名字的地方，例如入口廣場'],games:['#siteQuiz','#gSite']},
+ m5:{mission:'用 48 個格子，拼出一層合法的平面。',tips:['順序：柱格 → 服務核 → 走廊 → 房間','樓梯兩座，分別放在兩端','8 m 柱格，一格 64 ㎡，用數格子算面積'],games:['#gPlan']},
+ m6:{mission:'只剩 20 分鐘。剖面圖要先畫哪些東西？',tips:['剖面必備：粗地面線、樓高、空間名稱','每張圖都要有圖名和比例','三張圖都先求有，再求好'],games:[gSec]},
+ m7:{mission:'模擬一場 8 小時的考試，再去抓別人圖上的錯。',tips:['0:30 讀完題、2:30 草圖定案、5:00 平面畫完','落後時放棄細節，不放棄任何一張圖','最後 30 分鐘只做檢查'],games:['#gExam','#gSpot']},
+ m8:{mission:'一道新題目，計時四關。畫完拍照給 AI 講評。',tips:['流程：讀題 → 計算 → 分層與對策 → 配置','每一關時間到就往下走','畫完用檢查表或 AI 講評找出漏掉的東西'],games:['#v-m8 .box:not(.drill)','#drill',gRev,gGen]}
+};
+Object.keys(PLAN).forEach(function(id){
+  var v=view(id), p=PLAN[id]; if(!v)return; var head=$('.mhead',v), nav=$('.navrow',v);
+  var games=p.games.map(function(g){return typeof g==='string'?$(g,document):g}).filter(Boolean);
+  games.forEach(function(g){var pr=g.previousElementSibling; if(pr&&pr.tagName==='H2'&&g.parentNode===v)pr.parentNode.removeChild(pr); g.classList.add('game')});
+  var brief=el('div',{'class':'brief'}); brief.innerHTML='<p class="mission"><small>任務</small>'+p.mission+'</p><ul class="tips">'+p.tips.map(function(t,i){return '<li><b>重點 '+(i+1)+'</b>'+t+'</li>'}).join('')+'</ul>';
+  var notes=el('details',{'class':'notes'}); notes.innerHTML='<summary><span>完整說明與圖解 <small>想知道為什麼，或卡關時再打開</small></span></summary>'; var nin=el('div',{'class':'nin'}); notes.appendChild(nin);
+  Array.prototype.slice.call(v.children).forEach(function(c){ if(c===head||c===nav||games.indexOf(c)>=0||c.tagName==='TEMPLATE')return; nin.appendChild(c) });
+  var ref=head.nextSibling; v.insertBefore(brief,ref); games.forEach(function(g){v.insertBefore(g,nav)}); v.insertBefore(notes,nav);
+});
+$$('.home-grid .tag').forEach(function(n){n.parentNode.removeChild(n)});
+/* 遊戲場補上新遊戲 */
+(function(){var g=$('#playGrid'); if(!g)return;
+  [['閱卷委員','十份考卷，判斷誰及格。','m0','gJudge','g:judge'],['蓋到剛好合法','五塊基地，算出最少要蓋幾層。','m2','gMass','g:mass'],['剖面搶時間','20 分鐘預算，挑對的東西畫。','m6','gSec','g:sec'],['無限出題','隨機基地，連續答對四個數字。','m8','gGen','g:gen'],['AI 閱卷委員','寫對策或上傳草圖，讓 AI 講評。','m3','gPol','g:pol']].forEach(function(x){var li=el('li'); li.appendChild(el('button',{type:'button','data-go':x[2],'data-anchor':x[3]},'<span class="ttl">'+x[0]+'</span><span class="ds">'+x[1]+'</span><span class="best" data-best="'+x[4]+'"></span>')); g.appendChild(li)});
+  if(window.KYplay)window.KYplay();
+})();
+
+/* ============ AI 教練（右下角） ============ */
+aiReady.then(function(sample){ if(!sample)return;
+  var fab=el('button',{type:'button','class':'coach-fab','aria-expanded':'false'},'問教練'), pan=el('section',{'class':'coach game','aria-label':'AI 教練',hidden:''}); document.body.appendChild(fab); document.body.appendChild(pan);
+  pan.innerHTML='<header><span>AI 教練</span><button type="button" class="ghost" id="coX" aria-label="關閉">✕</button></header><div class="log" id="coLog"><p class="a">卡住了就問我。建築師考試、這堂課的任何一關、或是「為什麼要這樣做」都可以問。</p><div class="sugg"><button type="button">容積率到底是什麼？</button><button type="button">我畫圖很慢怎麼辦？</button><button type="button">樓梯為什麼要兩座？</button></div></div><form id="coF"><label for="coI" hidden>問題</label><input type="text" id="coI" autocomplete="off" placeholder="輸入問題" maxlength="300"><button type="submit" class="go">送出</button></form>';
+  var RULES='你是台灣建築師考試「建築計畫與設計」（大設計）的教練，學生是完全的新手，而且很容易覺得無聊。用繁體中文回答，口語、直接、不說教，每次回答不超過 120 字，能用一個具體數字或例子就不要講道理，不用 Markdown 符號。這堂課教的速記值：及格圖＝圖都有、沒違規、有回應題目；最大建築面積＝基地×建蔽率；最大樓地板＝基地×容積率；需要樓地板＝淨面積×1.3到1.5；柱格8×8m；走廊2.4m；樓梯兩座分兩端、級高≤16cm、級深≥26cm、寬≥1.4m；樓高一樓4.2到4.5m、標準層3.6m；汽車位2.5×5.5m、無障礙3.5×6m、坡道1:6、無障礙坡道1:12；配速：0:30讀題、1:30計畫、2:30草圖、5:00平面、6:00剖立面、6:40透視、7:30標註、8:00檢查。法規細節不確定時，直接說「以現行建築技術規則為準」，不要編造條號。與考試無關的問題，簡短帶回主題。';
+  var turns=[], busy=false, log=$('#coLog',pan);
+  function add(c,t){var p=el('p',{'class':c}); p.textContent=t; log.appendChild(p); log.scrollTop=log.scrollHeight; return p}
+  function ask(t){ if(busy||!t)return; busy=true; var sg=$('.sugg',log); if(sg)sg.parentNode.removeChild(sg); add('u',t); turns.push({role:'user',content:t}); if(turns.length>12)turns=turns.slice(-12); if(turns[0].role!=='user')turns.shift();
+    var b=add('a','想一下……');
+    sample([{role:'user',content:RULES}].concat(turns),{modelTier:'quick',cache:false,onText:function(u){b.textContent=u.text; log.scrollTop=log.scrollHeight}})
+     .then(function(r){b.textContent=r.text; turns.push({role:'assistant',content:r.text})})
+     .catch(function(e){turns.pop(); b.textContent=aiMsg(e)||'已取消。'; if(e&&(e.code==='not_granted'||e.code==='sampling_disabled')){fab.hidden=true; pan.hidden=true}})
+     .then(function(){busy=false}) }
+  function toggle(o){pan.hidden=!o; fab.setAttribute('aria-expanded',o?'true':'false'); if(o)$('#coI',pan).focus()}
+  fab.addEventListener('click',function(){toggle(pan.hidden)}); $('#coX',pan).addEventListener('click',function(){toggle(false)});
+  $('#coF',pan).addEventListener('submit',function(e){e.preventDefault(); var i=$('#coI',pan), t=i.value.trim(); i.value=''; ask(t)});
+  $$('.sugg button',pan).forEach(function(b){b.addEventListener('click',function(){ask(b.textContent)})});
+});
 })();
 </script>
 
