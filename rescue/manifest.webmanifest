@@ -1,0 +1,15 @@
+{
+ "name": "建築師考試急救",
+ "short_name": "考試急救",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "any",
+ "background_color": "#f3f6f9",
+ "theme_color": "#1b4f9c",
+ "lang": "zh-Hant",
+ "icons": [
+  {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+  {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}
+ ]
+}
