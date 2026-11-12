@@ -1,0 +1,161 @@
+<style>
+/* 製圖線寬：剖到的最粗、輪廓次之、可見線中等、標註最細 */
+.lw-cut{stroke:var(--ink);stroke-width:3.2;fill:none;stroke-linejoin:miter;stroke-linecap:square}
+.lw-out{stroke:var(--ink);stroke-width:2;fill:none;stroke-linejoin:miter}
+.lw-vis{stroke:var(--ink);stroke-width:1.2;fill:none}
+.lw-thin{stroke:var(--ink);stroke-width:.6;fill:none}
+.lw-hid{stroke:var(--ink);stroke-width:.8;fill:none;stroke-dasharray:5 3}
+.lw-axis{stroke:var(--mut);stroke-width:.6;fill:none;stroke-dasharray:10 3 2 3}
+.lw-site{stroke:var(--ink);stroke-width:1.6;fill:none;stroke-dasharray:14 4 3 4}
+.lw-setb{stroke:var(--blue);stroke-width:1;fill:none;stroke-dasharray:6 4}
+.poche{fill:var(--ink);stroke:none}
+.f-void{fill:var(--sheet)}
+svg .t-dim{font-family:var(--f-data);font-size:9.5px;fill:var(--ink)}
+svg .t-room{font-family:var(--f-text);font-size:11px;font-weight:700;fill:var(--ink)}
+svg .t-area{font-family:var(--f-data);font-size:9px;fill:var(--mut)}
+svg .t-ttl{font-family:var(--f-text);font-size:13px;font-weight:900;fill:var(--ink);letter-spacing:.08em}
+svg .t-axis{font-family:var(--f-data);font-size:9px;font-weight:600;fill:var(--ink)}
+/* 小關選擇列 */
+.lvbar{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.lvbar button{display:flex;align-items:center;gap:8px;border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:999px;padding:6px 14px 6px 6px;font-size:14px;min-height:40px}
+.lvbar button i{font:600 13px var(--f-data);font-style:normal;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--ink)}
+.lvbar button[aria-pressed="true"]{border-color:var(--bp-hi)}
+.lvbar button[aria-pressed="true"] i{background:var(--bp-hi);color:#1b2330}
+.lvbar button.done i{background:var(--ok);color:#10301f}
+.lvbar button.done i::after{content:"✓"}
+.lvbar button.done i span{display:none}
+</style>
+<script>
+/* 共用工具：遊戲外框、多小關框架、專業製圖元件。所有遊戲檔都從 window.KY 取用。 */
+(function(){
+"use strict";
+var K=window.KY; if(!K)return; var $=K.$, $$=K.$$, el=K.el;
+K.hud=function(box,v){var b=$('[data-score]',box); if(b)b.textContent=v};
+K.svgPt=function(svg,e){var p=svg.createSVGPoint(); p.x=e.clientX; p.y=e.clientY; var m=svg.getScreenCTM(); return m?p.matrixTransform(m.inverse()):{x:0,y:0}};
+K.clamp=function(v,a,b){return Math.max(a,Math.min(b,v))};
+K.shuffle=function(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a};
+K.view=function(id){return document.getElementById('v-'+id)};
+var stage=el('div',{id:'gStage',hidden:''}); document.body.appendChild(stage);
+/* 建立遊戲外框並先放進暫存區；98-layout 會依 PLAN 把它搬到關卡裡 */
+K.gameBox=function(id,no,title,unit,desc){var s=el('section',{'class':'game',id:id});
+  s.innerHTML='<header class="ghead"><span class="gno">'+no+'</span><h3>'+title+'</h3><div class="hud"><b data-score>0</b><small>'+unit+'</small></div></header><p class="gdesc">'+desc+'</p>'; stage.appendChild(s); return s};
+/* AI */
+K.aiReady=(window.claude&&typeof window.claude.use==='function')?window.claude.use('sample').catch(function(){return null}):Promise.resolve(null);
+var AIERR={not_granted:'你沒有允許這個頁面使用 Claude，AI 功能已關閉。',rate_limited:'用量到上限了，晚一點再試。',session_expired:'登入過期了，重新登入後再試。',refused:'這個內容 AI 沒辦法評。換個說法再試。',sampling_disabled:'這個帳號目前不能使用 AI 功能。',cancelled:''};
+K.aiMsg=function(e){return AIERR[e&&e.code]!=null?AIERR[e.code]:'AI 暫時連不上，請稍後再按一次。'};
+
+/* ---------- 多小關框架 ----------
+   var L=K.levels(box,{key:'g:site',names:['基本','老樹','街角'],pass:85,start:function(i){...重畫第 i 小關...}});
+   過關或得分時呼叫 L.done(i,score0to100)；框架會記錄最高分、打勾、蓋章、給 XP（整個遊戲合計 100）。
+   L.current() 取得目前小關；L.next() 跳到下一小關。 */
+K.levels=function(box,o){
+  var n=o.names.length, pass=o.pass==null?80:o.pass, cur=0, bar=el('div',{'class':'lvbar',role:'group','aria-label':'小關'});
+  var anchor=$('.gdesc',box)||$('.ghead',box)||box.firstChild; anchor.parentNode.insertBefore(bar,anchor.nextSibling);
+  var best=function(i){return (K.st.sc&&K.st.sc[o.key+':'+i])||0};
+  function paint(){ $$('button',bar).forEach(function(b,i){b.setAttribute('aria-pressed',i===cur?'true':'false'); b.classList.toggle('done',best(i)>=pass)}) }
+  o.names.forEach(function(nm,i){var b=el('button',{type:'button'},'<i><span>'+(i+1)+'</span></i>'+nm); bar.appendChild(b); b.addEventListener('click',function(){api.select(i)})});
+  var api={
+    current:function(){return cur},
+    count:n,
+    best:best,
+    select:function(i){cur=K.clamp(i,0,n-1); K.stampOff(box); paint(); o.start(cur)},
+    next:function(){ if(cur<n-1)api.select(cur+1) },
+    done:function(i,score){ score=Math.round(K.clamp(score,0,100)); K.st.sc=K.st.sc||{}; var k=o.key+':'+i;
+      if(score>(K.st.sc[k]||0)){K.st.sc[k]=score; K.save()}
+      K.award(k,score/n); paint(); if(score>=pass)K.stampOn(box,score>=100?'滿分':'合格'); return score>=pass }
+  };
+  var first=0; for(var i=0;i<n;i++){ if(best(i)<pass){first=i;break} first=i }
+  cur=first; paint(); o.start(cur); return api;
+};
+/* 某個遊戲（含所有小關）的 XP 合計，給遊戲場顯示用 */
+K.xpOf=function(key){var t=0; for(var k in K.st.xp){ if(k===key||k.indexOf(key+':')===0)t+=K.st.xp[k]||0 } return Math.round(t)};
+
+/* ---------- 專業製圖元件 ----------
+   var D=K.draw(inGame)；inGame=true 用於 .game 藍圖看板內（填充圖樣會跟著配色）。
+   所有函式回傳 SVG 字串，座標單位是 px。配合上面的 .lw-* 線寬 class 使用。 */
+(function(){
+  function pats(p){return ''
+   +'<pattern id="'+p+'hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--ink);stroke-width:.7"/></pattern>'
+   +'<pattern id="'+p+'earth" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 2 H14 M0 5 H14 M0 8 H14" style="stroke:var(--mut);stroke-width:.7;fill:none"/></pattern>'
+   +'<pattern id="'+p+'grass" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r=".8" style="fill:var(--ok)"/><circle cx="9" cy="8" r=".8" style="fill:var(--ok)"/></pattern>'
+   +'<pattern id="'+p+'conc" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r=".7" style="fill:var(--mut)"/><circle cx="11" cy="2" r=".5" style="fill:var(--mut)"/><circle cx="7" cy="11" r=".8" style="fill:var(--mut)"/><path d="M12 12 l2 1 l-1 2 z" style="fill:none;stroke:var(--mut);stroke-width:.5"/></pattern>'
+   +'<pattern id="'+p+'tile" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0 V12 H0" style="stroke:var(--line);stroke-width:.7;fill:none"/></pattern>'
+   +'<pattern id="'+p+'road" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".5" style="fill:var(--mut);opacity:.5"/></pattern>'}
+  var host=el('div',{'aria-hidden':'true',style:'position:absolute;width:0;height:0;overflow:hidden'});
+  host.innerHTML='<svg width="0" height="0"><defs>'+pats('p-')+'</defs></svg><div class="game" style="padding:0;margin:0;width:0;height:0;box-shadow:none"><svg width="0" height="0"><defs>'+pats('pg-')+'</defs></svg></div>';
+  document.body.appendChild(host);
+  function r(n){return Math.round(n*100)/100}
+  K.draw=function(inGame){
+    var P=inGame?'pg-':'p-', D={};
+    D.fill=function(kind){return 'url(#'+P+kind+')'};
+    /* 填充矩形：kind = hatch（剖面斜線）、earth（土壤）、grass（草地）、conc（混凝土）、tile（鋪面）、road（道路） */
+    D.hatch=function(x,y,w,h,kind,cls){return '<rect x="'+r(x)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(h)+'" fill="'+D.fill(kind||'hatch')+'"'+(cls?' class="'+cls+'"':' stroke="none"')+'/>'};
+    /* 指北針 */
+    D.north=function(x,y,rad){rad=rad||14; return '<g transform="translate('+r(x)+','+r(y)+')"><circle r="'+rad+'" class="lw-vis"/><path d="M0 '+(-rad)+' L'+(rad*.42)+' '+(rad*.7)+' L0 '+(rad*.3)+' Z" class="poche"/><path d="M0 '+(-rad)+' L'+(-rad*.42)+' '+(rad*.7)+' L0 '+(rad*.3)+' Z" class="lw-thin"/><text y="'+(-rad-4)+'" text-anchor="middle" class="t-axis">N</text></g>'};
+    /* 圖解比例尺：ticks 例如 [0,5,10,20]（公尺） */
+    D.scale=function(x,y,pxPerM,ticks){ticks=ticks||[0,5,10,20]; var s='<g transform="translate('+r(x)+','+r(y)+')">';
+      for(var i=0;i<ticks.length-1;i++){var a=ticks[i]*pxPerM,b=ticks[i+1]*pxPerM; s+='<rect x="'+r(a)+'" y="0" width="'+r(b-a)+'" height="5" class="'+(i%2?'lw-thin':'poche')+'"'+(i%2?'':' ')+'/>'+(i%2?'':'')}
+      s+='<rect x="0" y="0" width="'+r(ticks[ticks.length-1]*pxPerM)+'" height="5" class="lw-thin"/>';
+      ticks.forEach(function(t){s+='<text x="'+r(t*pxPerM)+'" y="16" text-anchor="middle" class="t-dim">'+t+'</text>'}); return s+'<text x="'+r(ticks[ticks.length-1]*pxPerM+8)+'" y="16" class="t-dim">m</text></g>'};
+    /* 尺寸線：兩端斜撇、延伸線、文字在線上方。off 為往法線方向的偏移量（px，可為負） */
+    D.dim=function(x1,y1,x2,y2,text,off){off=off||0; var dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)||1,nx=-dy/len,ny=dx/len,ax=x1+nx*off,ay=y1+ny*off,bx=x2+nx*off,by=y2+ny*off,ang=Math.atan2(dy,dx)*180/Math.PI,flip=(ang>90||ang<-90);
+      function tick(x,y){return '<path d="M'+r(x-3)+' '+r(y+3)+' L'+r(x+3)+' '+r(y-3)+'" class="lw-vis"/>'}
+      var s='<g>'; if(off){var e=off>0?3:-3; s+='<path d="M'+r(x1+nx*e)+' '+r(y1+ny*e)+' L'+r(ax+nx*e)+' '+r(ay+ny*e)+' M'+r(x2+nx*e)+' '+r(y2+ny*e)+' L'+r(bx+nx*e)+' '+r(by+ny*e)+'" class="lw-thin"/>'}
+      s+='<path d="M'+r(ax)+' '+r(ay)+' L'+r(bx)+' '+r(by)+'" class="lw-thin"/>'+tick(ax,ay)+tick(bx,by);
+      var mx=(ax+bx)/2,my=(ay+by)/2; s+='<text x="'+r(mx)+'" y="'+r(my)+'" dy="-3" text-anchor="middle" class="t-dim" transform="rotate('+r(flip?ang+180:ang)+' '+r(mx)+' '+r(my)+')">'+text+'</text>'; return s+'</g>'};
+    /* 連續尺寸鏈：pts 為沿線的座標陣列（水平時是 x、垂直時是 y），labels 為每一段的文字 */
+    D.dimChain=function(pts,at,labels,vertical,off){var s=''; for(var i=0;i<pts.length-1;i++){ s+=vertical?D.dim(at,pts[i],at,pts[i+1],labels[i],off||0):D.dim(pts[i],at,pts[i+1],at,labels[i],off||0)} return s};
+    /* 柱位軸線與軸線編號圓圈。xs、ys 為軸線位置；box=[x0,y0,x1,y1] 是軸線延伸的範圍 */
+    D.grid=function(xs,ys,box,lx,ly){var s='',R=8; lx=lx||xs.map(function(_,i){return String(i+1)}); ly=ly||ys.map(function(_,i){return String.fromCharCode(65+i)});
+      xs.forEach(function(x,i){s+='<path d="M'+r(x)+' '+r(box[1])+' V'+r(box[3])+'" class="lw-axis"/><circle cx="'+r(x)+'" cy="'+r(box[1]-R)+'" r="'+R+'" class="lw-vis f-void"/><text x="'+r(x)+'" y="'+r(box[1]-R+3.2)+'" text-anchor="middle" class="t-axis">'+lx[i]+'</text>'});
+      ys.forEach(function(y,i){s+='<path d="M'+r(box[0])+' '+r(y)+' H'+r(box[2])+'" class="lw-axis"/><circle cx="'+r(box[0]-R)+'" cy="'+r(y)+'" r="'+R+'" class="lw-vis f-void"/><text x="'+r(box[0]-R)+'" y="'+r(y+3.2)+'" text-anchor="middle" class="t-axis">'+ly[i]+'</text>'}); return s};
+    /* 柱：塗黑方塊，(x,y) 是柱心 */
+    D.col=function(x,y,s){s=s||6; return '<rect x="'+r(x-s/2)+'" y="'+r(y-s/2)+'" width="'+s+'" height="'+s+'" class="poche"/>'};
+    /* 牆：剖到的牆用塗黑（poché）。兩點必須水平或垂直，t 是牆厚 */
+    D.wall=function(x1,y1,x2,y2,t){t=t||3.5; var x=Math.min(x1,x2),y=Math.min(y1,y2),w=Math.abs(x2-x1),h=Math.abs(y2-y1); return y1===y2?'<rect x="'+r(x)+'" y="'+r(y-t/2)+'" width="'+r(w)+'" height="'+t+'" class="poche"/>':'<rect x="'+r(x-t/2)+'" y="'+r(y)+'" width="'+t+'" height="'+r(h)+'" class="poche"/>'};
+    /* 門：在牆上開口並畫門扇與開啟弧線。(x,y) 是門軸位置，w 是門寬，dir 是牆的方向 'h' 或 'v'，
+       sx、sy 為 1 或 -1：sx 決定開口往哪一側延伸，sy 決定門往哪一側開 */
+    D.door=function(x,y,w,dir,sx,sy,t){t=t||3.5; sx=sx||1; sy=sy||1; var s='';
+      if(dir==='h'){ s+='<rect x="'+r(Math.min(x,x+w*sx))+'" y="'+r(y-t/2-.5)+'" width="'+r(w)+'" height="'+(t+1)+'" class="f-void"/><path d="M'+r(x)+' '+r(y)+' V'+r(y+w*sy)+'" class="lw-vis"/><path d="M'+r(x)+' '+r(y+w*sy)+' A'+w+' '+w+' 0 0 '+((sx*sy>0)?0:1)+' '+r(x+w*sx)+' '+r(y)+'" class="lw-thin"/>' }
+      else{ s+='<rect x="'+r(x-t/2-.5)+'" y="'+r(Math.min(y,y+w*sy))+'" width="'+(t+1)+'" height="'+r(w)+'" class="f-void"/><path d="M'+r(x)+' '+r(y)+' H'+r(x+w*sx)+'" class="lw-vis"/><path d="M'+r(x+w*sx)+' '+r(y)+' A'+w+' '+w+' 0 0 '+((sx*sy>0)?1:0)+' '+r(x)+' '+r(y+w*sy)+'" class="lw-thin"/>' }
+      return s};
+    /* 窗：在牆上開口並畫三條細線。兩點必須水平或垂直 */
+    D.win=function(x1,y1,x2,y2,t){t=t||3.5; var h=y1===y2, s=h?'<rect x="'+r(Math.min(x1,x2))+'" y="'+r(y1-t/2-.5)+'" width="'+r(Math.abs(x2-x1))+'" height="'+(t+1)+'" class="f-void"/>':'<rect x="'+r(x1-t/2-.5)+'" y="'+r(Math.min(y1,y2))+'" width="'+(t+1)+'" height="'+r(Math.abs(y2-y1))+'" class="f-void"/>';
+      [-t/2,0,t/2].forEach(function(o){s+=h?'<path d="M'+r(x1)+' '+r(y1+o)+' H'+r(x2)+'" class="lw-thin"/>':'<path d="M'+r(x1+o)+' '+r(y1)+' V'+r(y2)+'" class="lw-thin"/>'}); return s};
+    /* 折返梯平面：(x,y,w,h) 是梯間內框，long='v' 表示梯段沿垂直方向。畫踏步、中間扶手、上行箭頭、折斷線 */
+    D.stair=function(x,y,w,h,long,n){n=n||10; var s='<rect x="'+r(x)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(h)+'" class="lw-vis"/>', i;
+      if(long==='v'){var land=w/2*0.9, y0=y+land, y1=y+h-land*0.4, st=(y1-y0)/n; for(i=0;i<=n;i++)s+='<path d="M'+r(x)+' '+r(y0+i*st)+' H'+r(x+w)+'" class="lw-thin"/>';
+        s+='<path d="M'+r(x+w/2)+' '+r(y0)+' V'+r(y1)+'" class="lw-vis"/><path d="M'+r(x+w*.25)+' '+r(y1)+' V'+r(y+land*.5)+' H'+r(x+w*.75)+' V'+r(y1-st)+'" class="lw-thin"/><circle cx="'+r(x+w*.25)+'" cy="'+r(y1)+'" r="1.6" class="poche"/><path d="M'+r(x+w*.75-3)+' '+r(y1-st-5)+' L'+r(x+w*.75)+' '+r(y1-st)+' L'+r(x+w*.75+3)+' '+r(y1-st-5)+'" class="lw-thin"/><path d="M'+r(x+w/2)+' '+r(y0+(y1-y0)*.55)+' l'+r(w/4)+' -4 l-3 8 l'+r(w/4)+' -4" class="lw-vis"/><text x="'+r(x+w*.25)+'" y="'+r(y1+9)+'" text-anchor="middle" class="t-dim">UP</text>'}
+      else{var landh=h/2*0.9, x0=x+landh, x1=x+w-landh*0.4, sw=(x1-x0)/n; for(i=0;i<=n;i++)s+='<path d="M'+r(x0+i*sw)+' '+r(y)+' V'+r(y+h)+'" class="lw-thin"/>';
+        s+='<path d="M'+r(x0)+' '+r(y+h/2)+' H'+r(x1)+'" class="lw-vis"/><path d="M'+r(x1)+' '+r(y+h*.75)+' H'+r(x+landh*.5)+' V'+r(y+h*.25)+' H'+r(x1-sw)+'" class="lw-thin"/><circle cx="'+r(x1)+'" cy="'+r(y+h*.75)+'" r="1.6" class="poche"/><path d="M'+r(x1-sw-5)+' '+r(y+h*.25-3)+' L'+r(x1-sw)+' '+r(y+h*.25)+' L'+r(x1-sw-5)+' '+r(y+h*.25+3)+'" class="lw-thin"/><text x="'+r(x1+2)+'" y="'+r(y+h*.75+10)+'" text-anchor="end" class="t-dim">UP</text>'}
+      return s};
+    /* 電梯：方框加對角線 */
+    D.elev=function(x,y,w,h){return '<rect x="'+r(x)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(h)+'" class="lw-vis"/><path d="M'+r(x)+' '+r(y)+' L'+r(x+w)+' '+r(y+h)+' M'+r(x+w)+' '+r(y)+' L'+r(x)+' '+r(y+h)+'" class="lw-thin"/>'};
+    /* 平面樹：外圈不規則樹冠加樹心 */
+    D.tree=function(x,y,rad){rad=rad||12; var s='<g transform="translate('+r(x)+','+r(y)+')">', k=16, d='', i; for(i=0;i<=k;i++){var a=i/k*Math.PI*2, rr=rad*(i%2?1:.88); d+=(i?'L':'M')+r(Math.cos(a)*rr)+' '+r(Math.sin(a)*rr)+' '}
+      return s+'<path d="'+d+'Z" style="fill:var(--okbg);stroke:var(--ok);stroke-width:1.1"/><circle r="'+r(rad*.55)+'" style="fill:none;stroke:var(--ok);stroke-width:.6"/><path d="M-2.5 0 H2.5 M0 -2.5 V2.5" style="stroke:var(--ok);stroke-width:1"/></g>'};
+    /* 立面或剖面的樹：(x,yb) 是樹幹底部 */
+    D.treeE=function(x,yb,h){h=h||34; var c=h*.42; return '<g><path d="M'+r(x)+' '+r(yb)+' V'+r(yb-h*.55)+' M'+r(x)+' '+r(yb-h*.4)+' l'+r(-c*.5)+' '+r(-c*.5)+' M'+r(x)+' '+r(yb-h*.48)+' l'+r(c*.5)+' '+r(-c*.45)+'" style="stroke:var(--ok);stroke-width:1.3;fill:none"/><circle cx="'+r(x)+'" cy="'+r(yb-h*.68)+'" r="'+r(c)+'" style="fill:var(--okbg);stroke:var(--ok);stroke-width:1.1"/></g>'};
+    /* 人（尺度人）：(x,yb) 是腳底，h 是身高的 px */
+    D.person=function(x,yb,h){h=h||20; var hr=h*.09; return '<g><circle cx="'+r(x)+'" cy="'+r(yb-h+hr)+'" r="'+r(hr)+'" class="poche"/><path d="M'+r(x)+' '+r(yb-h+hr*2)+' V'+r(yb-h*.42)+' M'+r(x)+' '+r(yb-h*.42)+' L'+r(x-h*.12)+' '+r(yb)+' M'+r(x)+' '+r(yb-h*.42)+' L'+r(x+h*.12)+' '+r(yb)+' M'+r(x-h*.14)+' '+r(yb-h*.62)+' H'+r(x+h*.14)+'" class="lw-vis"/></g>'};
+    /* 圖名：文字、雙底線、比例 */
+    D.title=function(x,y,name,scale){var w=name.length*14+(scale?70:10); return '<g><text x="'+r(x)+'" y="'+r(y)+'" text-anchor="middle" class="t-ttl">'+name+(scale?'<tspan class="t-dim" dx="10">S＝'+scale+'</tspan>':'')+'</text><path d="M'+r(x-w/2)+' '+r(y+5)+' H'+r(x+w/2)+'" class="lw-out"/><path d="M'+r(x-w/2)+' '+r(y+8)+' H'+r(x+w/2)+'" class="lw-thin"/></g>'};
+    /* 高程標記：倒三角加文字，例如 2FL +4500 */
+    D.level=function(x,y,text){return '<g><path d="M'+r(x-5)+' '+r(y-7)+' H'+r(x+5)+' L'+r(x)+' '+r(y)+' Z" class="lw-vis"/><path d="M'+r(x-9)+' '+r(y)+' H'+r(x+34)+'" class="lw-thin"/><text x="'+r(x+8)+'" y="'+r(y-3)+'" class="t-dim">'+text+'</text></g>'};
+    /* 剖切線記號：兩端粗短線加箭頭與字母 */
+    D.cut=function(x1,y1,x2,y2,label,nx,ny){nx=nx||0; ny=ny==null?-1:ny; function end(x,y,lab){return '<path d="M'+r(x)+' '+r(y)+' l'+r(nx*12)+' '+r(ny*12)+'" class="lw-out"/><path d="M'+r(x+nx*12-ny*3)+' '+r(y+ny*12+nx*3)+' l'+r(nx*6+ny*3)+' '+r(ny*6-nx*3)+' l'+r(-nx*6+ny*3)+' '+r(-ny*6-nx*3)+' z" class="poche"/><text x="'+r(x+nx*26)+'" y="'+r(y+ny*26+3)+'" text-anchor="middle" class="t-axis">'+lab+'</text>'}
+      return '<g><path d="M'+r(x1)+' '+r(y1)+' L'+r(x2)+' '+r(y2)+'" class="lw-axis"/>'+end(x1,y1,label)+end(x2,y2,label+'′')+'</g>'};
+    /* 入口三角形：rot 為角度，0 表示尖端朝上 */
+    D.entry=function(x,y,rot,label,lx,ly){return '<g><path d="M0 -7 L6 5 L-6 5 Z" class="poche" transform="translate('+r(x)+','+r(y)+') rotate('+(rot||0)+')"/>'+(label?'<text x="'+r(x+(lx||0))+'" y="'+r(y+(ly==null?18:ly))+'" text-anchor="middle" class="t-dim">'+label+'</text>':'')+'</g>'};
+    /* 道路：鋪面底色、中心線、路名。vertical=true 表示南北向 */
+    D.road=function(x,y,w,h,label,vertical){var s='<rect x="'+r(x)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(h)+'" class="f-line"/>'+D.hatch(x,y,w,h,'road');
+      s+=vertical?'<path d="M'+r(x+w/2)+' '+r(y)+' V'+r(y+h)+'" class="lw-axis"/><text x="'+r(x+w/2-5)+'" y="'+r(y+h/2)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 '+r(x+w/2-5)+' '+r(y+h/2)+')">'+label+'</text>':'<path d="M'+r(x)+' '+r(y+h/2)+' H'+r(x+w)+'" class="lw-axis"/><text x="'+r(x+w/2)+'" y="'+r(y+h/2-5)+'" text-anchor="middle" class="t-dim">'+label+'</text>'; return s};
+    /* 停車格：n 格並排，每格 bw×bd，along='h' 表示沿水平方向排列 */
+    D.park=function(x,y,n,bw,bd,along){var s='',i; for(i=0;i<n;i++){ s+=along==='h'?'<rect x="'+r(x+i*bw)+'" y="'+r(y)+'" width="'+r(bw)+'" height="'+r(bd)+'" class="lw-thin"/>':'<rect x="'+r(x)+'" y="'+r(y+i*bw)+'" width="'+r(bd)+'" height="'+r(bw)+'" class="lw-thin"/>' } return s};
+    /* 房間標註：名稱加面積 */
+    D.room=function(x,y,name,area){return '<text x="'+r(x)+'" y="'+r(y)+'" text-anchor="middle" class="t-room">'+name+'</text>'+(area?'<text x="'+r(x)+'" y="'+r(y+12)+'" text-anchor="middle" class="t-area">'+area+'</text>':'')};
+    return D;
+  };
+})();
+})();
+</script>

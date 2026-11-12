@@ -1,0 +1,21 @@
+
+<!-- ================= 遊戲場 ================= -->
+<article class="view" id="v-play" hidden>
+  <p class="eyebrow">ARCADE</p>
+  <h1>遊戲場</h1>
+  <p class="lead">所有遊戲都可以重複玩，系統會記住最高紀錄。點卡片就會跳到那個遊戲。</p>
+  <ul class="play-grid" id="playGrid"></ul>
+  <section class="game" id="gFlash">
+    <header class="ghead"><span class="gno">GAME 05</span><h3>數字快答</h3><div class="hud"><b data-score>0</b><small>分</small></div></header>
+    <p class="gdesc">60 秒內答越多越好。連續答對有加成：連對 3 題起每題 2 分，連對 6 題起每題 3 分。題目都來自考場小抄。</p>
+    <div class="ftime"><i id="flBar"></i></div>
+    <p class="fq" id="flQ">準備好就按開始。</p>
+    <div class="fopts" id="flOpts"></div>
+    <p class="verdict mid" id="flMsg" hidden></p>
+    <div class="frow"><button class="go" type="button" id="flStart">開始 60 秒</button></div>
+  </section>
+</article>
+
+</main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>

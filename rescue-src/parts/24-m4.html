@@ -1,0 +1,82 @@
+<!-- ================= M4 基地配置 ================= -->
+<article class="view mod" id="v-m4" data-min="35" data-title="基地配置" data-ds="盒子放哪、人從哪進、車從哪進、空地留哪" hidden>
+  <p class="eyebrow">單元 4 · 35 分鐘</p>
+  <h1>基地配置：四個決定，順序不能亂</h1>
+  <ul class="goal"><li><b>學完你會：</b>依序決定車道、量體位置、入口、開放空間，畫出一張配置草圖</li></ul>
+
+  <p>配置圖是閱卷者第一眼看的圖，也最能看出你有沒有讀懂基地。它其實只是四個決定的結果。先做基地分析，再依序做決定。</p>
+
+  <h2 class="h">基地分析：看五樣東西，各下一個結論</h2>
+  <div class="tw"><table>
+    <tr><th>看什麼</th><th>要下的結論</th><th>例題</th></tr>
+    <tr><td>道路</td><td>哪條是主要道路（人從這裡來），哪條是次要道路（車從這裡進）</td><td>南 15 m 有公車站是主要；西 8 m 是次要</td></tr>
+    <tr><td>鄰地</td><td>哪一側要連接，哪一側要退讓</td><td>東側公園要連接；北側住宅要退讓</td></tr>
+    <tr><td>方位</td><td>哪面怕西曬，哪面採光好</td><td>西面臨路又西曬，放樓梯廁所擋熱</td></tr>
+    <tr><td>既有物</td><td>樹、舊建物、高差，哪些不能動</td><td>東南角老榕樹，周圍留空</td></tr>
+    <tr><td>人流</td><td>主要使用者從哪個方向走過來</td><td>公車站在南、社區居民從西和北、公園遊客從東</td></tr>
+  </table></div>
+  <div class="key"><b>臺灣的方位常識：</b>太陽從東邊升起、西邊落下，下午的西曬最熱。夏天吹南風或西南風，冬天吹東北季風。建築長邊朝南北最理想；做不到時，西面少開窗，改放樓梯、廁所、儲藏這類服務空間。</div>
+
+  <h2 class="h">四個決定</h2>
+  <ol class="t">
+    <li><b>車道出入口</b>：開在次要道路上，離路口越遠越好（至少 5 m 以上），避開公車站、學校和公園的出入口。</li>
+    <li><b>量體位置</b>：建築退讓需要安靜的鄰居，把空地留給想連接的那一側。</li>
+    <li><b>人的入口</b>：主入口面向主要人流。人和車的入口分開，行人不需要穿越車道。</li>
+    <li><b>開放空間</b>：空地要集中成一兩塊有用途的地方（入口廣場、連接公園的綠帶），不要變成繞建築一圈的剩餘空間。</li>
+  </ol>
+  <p>先決定車道，是因為它的限制最多、位置選擇最少。車道定了，其他三項才有依據。</p>
+
+  <div class="box" id="siteQuiz">
+    <h4><em>動手 5</em>在例題基地上做這四個決定</h4>
+    <p class="hint" id="sqPrompt"></p>
+    <figure><svg id="sqSvg" viewBox="0 0 720 340" role="group" aria-label="例題基地，點選圖上的字母"></svg></figure>
+    <div class="opts row" id="sqOpts"></div>
+    <p class="why" id="sqWhy" hidden></p>
+    <div class="frow"><button class="go" type="button" id="sqNext" hidden>下一個決定 →</button></div>
+  </div>
+
+  <h2 class="h">示範：配置是怎麼一步一步長出來的</h2>
+  <div class="box anim" id="siteAnim">
+    <h4><em>示範</em>例題配置，七個步驟</h4>
+    <figure>
+      <svg id="fbSite" class="fbx" viewBox="0 0 720 530" role="img" aria-label="配置圖生成步驟">
+        <g data-fb="base"></g>
+        <g data-s="7"></g><g data-s="2"></g><g data-s="4"></g><g data-s="5"></g><g data-s="6"></g><g data-s="3"></g>
+      </svg>
+    </figure>
+    <div class="player">
+      <button class="go" type="button" data-act="play">▶ 播放</button>
+      <button class="ghost" type="button" data-act="prev" aria-label="上一步">←</button>
+      <button class="ghost" type="button" data-act="next" aria-label="下一步">→</button>
+      <p class="cap" aria-live="polite"><b data-n>1/7</b><span data-cap></span></p>
+    </div>
+  </div>
+
+
+  <h2 class="h">換你擺：把建築放到基地上</h2>
+  <section class="game" id="gSite">
+    <header class="ghead"><span class="gno">GAME 01</span><h3>配置拖拉</h3><div class="hud"><b data-score>0</b><small>/100</small></div></header>
+    <p class="gdesc">用手指或滑鼠拖動三樣東西：藍色的建築、紅色的車道口、黃色的主入口。右下的規則會即時打勾。拿到 85 分蓋章合格。</p>
+    <figure><svg id="gsSvg" viewBox="0 0 720 340" role="application" aria-label="可拖拉的基地配置"></svg></figure>
+    <div class="frow"><button class="ghost" type="button" id="gsRot">建築轉 90°</button><button class="ghost" type="button" id="gsReset">重來</button></div>
+    <ul class="rules" id="gsRules"></ul>
+  </section>
+
+  <h2 class="h">量體形狀：四種基本型</h2>
+  <figure>
+    <svg id="fbMass" class="fbx" viewBox="0 0 720 210" role="img" aria-label="一字型、L 型、ㄇ 字型、口字型"></svg>
+    <figcaption>一字型：最好畫、結構最單純，新手首選。L 型：轉角圍出一個廣場。ㄇ 字型：圍出一個朝某方向開口的庭院，適合學校、長照。口字型：有中庭，基地夠大時才用。</figcaption>
+  </figure>
+  <div class="key"><b>給新手的建議：</b>前十次練習都用一字型或 L 型。形狀單純，柱子才排得整齊，平面才畫得完。量體的變化留給及格之後。</div>
+
+  <h2 class="h">配置圖上一定要標的東西</h2>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c41"><span>指北針、圖名與比例</span></label></li>
+    <li><label><input type="checkbox" id="c42"><span>周邊道路名稱與寬度、鄰地是什麼</span></label></li>
+    <li><label><input type="checkbox" id="c43"><span>建築輪廓（粗線）與樓層數，例如「3F」</span></label></li>
+    <li><label><input type="checkbox" id="c44"><span>入口三角形 ▲：主入口、次入口、車道入口</span></label></li>
+    <li><label><input type="checkbox" id="c45"><span>退縮線與退縮尺寸</span></label></li>
+    <li><label><input type="checkbox" id="c46"><span>鋪面、植栽、保留的樹、自行車位、無障礙通路</span></label></li>
+  </ul>
+  <div class="warnbox"><b>動手 6：</b>用 8 分鐘，在白紙上畫例題的配置草圖。比例抓 1/400，也就是 40 m 畫成 10 cm、50 m 畫成 12.5 cm。把上面六項都標出來。畫完對照上面的示範。</div>
+</article>

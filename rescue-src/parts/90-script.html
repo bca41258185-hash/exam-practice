@@ -1,0 +1,214 @@
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var KEY='kyujo-course-v1', st={done:{},last:'home',t:{},xp:{}};
+try{var raw=localStorage.getItem(KEY); if(raw){var o=JSON.parse(raw); if(o&&typeof o==='object'){st.done=o.done||{};st.last=o.last||'home';st.t=o.t||{};st.xp=o.xp||{};st.sc=o.sc||{}}}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+var LV=[[0,'小白'],[120,'描圖員'],[300,'繪圖員'],[500,'設計師'],[750,'準建築師']];
+function xpTotal(){var t=0;for(var k in st.xp)t+=st.xp[k]||0;return t}
+function lvOf(x){var n=LV[0][1];LV.forEach(function(l){if(x>=l[0])n=l[1]});return n}
+var toastT=null;
+function toast(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('on')},1900)}
+function award(key,pts){pts=Math.max(0,Math.round(pts));var old=st.xp[key]||0;if(pts<=old)return false;var b=lvOf(xpTotal());st.xp[key]=pts;save();refresh();var a=lvOf(xpTotal());toast(a!==b?'升級：'+a+'！':'+'+(pts-old)+' XP');return true}
+function stampOff(box){var o=box.querySelector('.stamp');if(o)o.parentNode.removeChild(o)}
+function stampOn(box,txt){stampOff(box);var d=document.createElement('div');d.className='stamp';d.textContent=txt||'合格';box.appendChild(d)}
+function fmt(n){return Math.round(n).toLocaleString('en-US')}
+function mmss(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2)}
+function el(tag,attrs,html){var e=document.createElement(tag);if(attrs)for(var k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e}
+
+/* ---------- 課表與路由 ---------- */
+var mods=$$('.mod').map(function(a){return {id:a.id.slice(2),min:+a.dataset.min,title:a.dataset.title,ds:a.dataset.ds,node:a}});
+var TOTAL=mods.reduce(function(s,m){return s+m.min},0);
+var railList=$('#railList'), homeGrid=$('#homeGrid');
+mods.forEach(function(m,i){
+  var li=el('li',{'data-id':m.id});
+  li.appendChild(el('button',{type:'button','data-go':m.id},'<span class="dot"></span><span>'+i+'　'+m.title+'</span><span class="min">'+m.min+'′</span>'));
+  railList.appendChild(li);
+  var hi=el('li',{'data-id':m.id});
+  var hasGame=!!m.node.querySelector('.game');
+  hi.appendChild(el('button',{type:'button','data-go':m.id},'<span class="no">0'+i+'</span><span class="ttl">'+m.title+'</span><span class="ds">'+m.ds+'</span><span class="k">'+m.min+' 分鐘</span>'+(hasGame?'<span class="tag">內含遊戲</span>':'')));
+  var mh=el('div',{'class':'bp mhead'}); mh.appendChild(el('div',{'class':'big','aria-hidden':'true'},'0'+i));
+  var ebn=$('.eyebrow',m.node), h1n=$('h1',m.node), gl=$('.goal',m.node); m.node.insertBefore(mh,m.node.firstChild); mh.appendChild(ebn); mh.appendChild(h1n); if(gl)mh.appendChild(gl);
+  homeGrid.appendChild(hi);
+  // 計時顯示
+  var eb=$('.eyebrow',m.node); eb.appendChild(el('span',{'data-clock':m.id},''));
+  // 單元底部導覽
+  var prev=i>0?mods[i-1].id:'home', next=i<mods.length-1?mods[i+1].id:'cheat';
+  var nav=el('div',{'class':'navrow'});
+  nav.appendChild(el('button',{type:'button','class':'ghost','data-go':prev},'← 上一頁'));
+  nav.appendChild(el('button',{type:'button','class':'go','data-done':m.id,'data-next':next}, i<mods.length-1?'過關，前往下一關 →':'全部過關，打開考場小抄 →'));
+  m.node.appendChild(nav);
+});
+function refresh(){
+  var got=0;
+  mods.forEach(function(m){var d=!!st.done[m.id]; if(d)got+=m.min;
+    $$('[data-id="'+m.id+'"]').forEach(function(li){li.classList.toggle('done',d); var dot=$('.dot',li); if(dot)dot.textContent=d?'✓':''})});
+  $('#barFill').style.width=(got/TOTAL*100)+'%'; $('#barTxt').textContent=got+' / '+TOTAL+' 分';
+  var x=xpTotal(); $('#lvXp').textContent=x+' XP'; $('#lvName').textContent=lvOf(x);
+  if(window.KYplay)window.KYplay();
+}
+var cur='home';
+function show(id,noScroll){
+  if(!document.getElementById('v-'+id))id='home';
+  cur=id; stopSay();
+  $$('.view').forEach(function(v){v.hidden=(v.id!=='v-'+id)});
+  $$('.rail button').forEach(function(b){b.setAttribute('aria-current',b.dataset.go===id?'true':'false')});
+  if(id!=='home'&&id!=='cheat'){st.last=id;save()}
+  closeMenu(); if(!noScroll)window.scrollTo(0,0);
+}
+function go(id){ if(('#'+id)!==location.hash){ try{location.hash=id}catch(e){} } show(id) }
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-go]'); if(b){go(b.dataset.go); if(b.dataset.anchor){var t=document.getElementById(b.dataset.anchor); if(t)t.scrollIntoView({block:'start'})} return}
+  var d=e.target.closest('[data-done]'); if(d){st.done[d.dataset.done]=true;save();award('mod:'+d.dataset.done,20);refresh();go(d.dataset.next)}
+});
+window.addEventListener('hashchange',function(){var h=location.hash.slice(1); if(h&&h!==cur)show(h)});
+/* 抽屜 */
+var rail=$('#rail'), scrim=$('#scrim'), menuBtn=$('#menuBtn');
+function closeMenu(){rail.classList.remove('open');scrim.hidden=true;menuBtn.setAttribute('aria-expanded','false')}
+menuBtn.addEventListener('click',function(){var o=!rail.classList.contains('open');rail.classList.toggle('open',o);scrim.hidden=!o;menuBtn.setAttribute('aria-expanded',o?'true':'false')});
+scrim.addEventListener('click',closeMenu);
+/* 單元計時 */
+setInterval(function(){
+  if(document.hidden)return; var m=mods.filter(function(x){return x.id===cur})[0]; if(!m)return;
+  st.t[m.id]=(st.t[m.id]||0)+1; if(st.t[m.id]%10===0)save();
+  var c=$('[data-clock="'+m.id+'"]'); if(c){c.textContent=' · 已用 '+mmss(st.t[m.id]); c.style.color=st.t[m.id]>m.min*90?'var(--bad)':''}
+},1000);
+
+/* ---------- 朗讀 ---------- */
+var sayBtn=$('#sayBtn'), synth=window.speechSynthesis, sayQ=[];
+function stopSay(){sayQ=[]; try{synth&&synth.cancel()}catch(e){} sayBtn.setAttribute('aria-pressed','false'); sayBtn.textContent='朗讀'}
+function sayNext(){ if(!sayQ.length){stopSay();return}
+  var u=new SpeechSynthesisUtterance(sayQ.shift()); u.lang='zh-TW'; u.rate=1; u.onend=sayNext; u.onerror=function(){stopSay()}; synth.speak(u) }
+if(!synth||typeof SpeechSynthesisUtterance==='undefined'){sayBtn.hidden=true}
+else sayBtn.addEventListener('click',function(){
+  if(sayBtn.getAttribute('aria-pressed')==='true'){stopSay();return}
+  var v=$('#v-'+cur); sayQ=$$('h1,h2,h3,p,li,figcaption',v).filter(function(n){return !n.closest('[hidden]')&&!n.closest('.navrow')&&!n.closest('.drill')&&n.offsetParent!==null&&!(n.tagName==='P'&&n.parentNode.closest('li'))}).map(function(n){return n.textContent.replace(/\s+/g,' ').trim()}).filter(Boolean);
+  if(!sayQ.length)return; sayBtn.setAttribute('aria-pressed','true'); sayBtn.textContent='停止朗讀'; try{synth.cancel()}catch(e){} sayNext();
+});
+
+/* ---------- 選擇題、數字題 ---------- */
+$$('.quiz').forEach(function(q,qi){
+  $$('.opts button',q).forEach(function(b){b.addEventListener('click',function(){
+    var ok=b.dataset.k===q.dataset.ans; $$('.opts button',q).forEach(function(x){x.classList.remove('wrong')});
+    b.classList.add(ok?'right':'wrong'); var w=$('.why',q);
+    if(ok){award('quiz:'+qi,10);$$('.opts button',q).forEach(function(x){x.disabled=true}); w.hidden=false; w.className='why ok'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>對。</b>'+w.dataset.o}
+    else{w.hidden=false; w.className='why no'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>再想一下。</b>想想哪個選項最能保證「畫完、不違規、有回應題目」。'}
+  })});
+});
+function gradeNum(inp,ans,tol){var v=parseFloat(inp.value); return isFinite(v)&&Math.abs(v-ans)<=tol+1e-9}
+$$('.numq').forEach(function(q,qi){
+  var inp=$('input',q), btn=$('button',q), w=$('.why',q), base=w.innerHTML;
+  function chk(){ if(inp.value===''){return} var ok=gradeNum(inp,+q.dataset.ans,+q.dataset.tol);
+    if(ok)award('num:'+qi,10); w.hidden=false; w.className='why '+(ok?'ok':'no'); w.innerHTML=(ok?'<b>對。</b>':'<b>不對，算法是：</b>')+base }
+  btn.addEventListener('click',chk); inp.addEventListener('keydown',function(e){if(e.key==='Enter')chk()});
+});
+
+/* ---------- M2 量體計算機 ---------- */
+(function(){
+  var svg=$('#mcSvg'); if(!svg)return; var ids=['mcA','mcB','mcF','mcN','mcL'];
+  function draw(){
+    var A=+$('#mcA').value||0,B=(+$('#mcB').value||0)/100,F=(+$('#mcF').value||0)/100,N=+$('#mcN').value||0,L=+$('#mcL').value||1;
+    $('#mcLv').textContent=L; var maxFp=A*B,maxGfa=A*F,per=N/L, okB=per<=maxFp+0.5, okF=N<=maxGfa+0.5, minL=maxFp>0?Math.ceil(N/maxFp-1e-9):0;
+    // 俯視：基地正方形邊長 180px
+    var S=180, r=A>0?Math.sqrt(Math.min(per/A,1)):0, rm=Math.sqrt(Math.min(B,1)), fp=S*r, fm=S*rm, x0=40,y0=30,cx=x0+S/2,cy=y0+S/2;
+    var h='<rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'" class="f-paper s-ink" stroke-width="2"/>'
+     +'<rect x="'+(cx-fm/2)+'" y="'+(cy-fm/2)+'" width="'+fm+'" height="'+fm+'" class="s-blue" stroke-dasharray="6 4" stroke-width="1.5"/>'
+     +'<rect x="'+(cx-fp/2)+'" y="'+(cy-fp/2)+'" width="'+fp+'" height="'+fp+'" class="'+(okB?'f-soft s-ink':'f-bad s-bad')+'" stroke-width="2"/>'
+     +'<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" font-size="13" font-weight="700">每層 '+fmt(per)+' ㎡</text>'
+     +'<text x="'+cx+'" y="20" text-anchor="middle" class="dim">俯視：虛線＝建蔽率上限 '+fmt(maxFp)+' ㎡</text>'
+     +'<text x="'+cx+'" y="228" text-anchor="middle" class="dim">法定空地至少 '+fmt(A-maxFp)+' ㎡</text>';
+    // 側視
+    var gx=330,gw=340,gy=205, fh=Math.min(22,170/L), bw=Math.max(40,gw*0.75*r/Math.max(rm,0.01)*rm); bw=Math.min(bw,gw*0.9);
+    h+='<line x1="'+(gx-20)+'" y1="'+gy+'" x2="'+(gx+gw+20)+'" y2="'+gy+'" class="s-ink" stroke-width="3"/>';
+    for(var i=0;i<L;i++){h+='<rect x="'+(gx+gw/2-bw/2)+'" y="'+(gy-(i+1)*fh)+'" width="'+bw+'" height="'+fh+'" class="'+((okB&&okF)?'f-soft s-ink':'f-bad s-bad')+'" stroke-width="1.5"/>';
+      if(fh>=13)h+='<text x="'+(gx+gw/2)+'" y="'+(gy-i*fh-fh/2+4)+'" text-anchor="middle" font-size="11">'+(i+1)+'F</text>'}
+    h+='<text x="'+(gx+gw/2)+'" y="20" text-anchor="middle" class="dim">側視：'+L+' 層 × '+fmt(per)+' ㎡ ＝ '+fmt(N)+' ㎡</text>'
+     +'<text x="'+(gx+gw/2)+'" y="228" text-anchor="middle" class="dim">容積率上限 '+fmt(maxGfa)+' ㎡</text>';
+    svg.innerHTML=h;
+    $('#mcOut').innerHTML='<div><small>最大建築面積</small><b>'+fmt(maxFp)+' ㎡</b></div><div><small>最大容積樓地板</small><b>'+fmt(maxGfa)+' ㎡</b></div>'
+      +'<div class="'+(okB?'flag-ok':'flag-bad')+'"><small>每層面積</small><b>'+fmt(per)+' ㎡</b></div>'
+      +'<div><small>實際建蔽率</small><b>'+(A?(per/A*100).toFixed(1):'0')+'%</b></div><div><small>實際容積率</small><b>'+(A?(N/A*100).toFixed(1):'0')+'%</b></div><div><small>最少要幾層</small><b>'+minL+' 層</b></div>';
+    var v=$('#mcVerdict');
+    if(!okF){v.className='verdict no';v.textContent='超過容積率：需要 '+fmt(N)+' ㎡，上限只有 '+fmt(maxGfa)+' ㎡。層數救不了，只能減少樓地板。'}
+    else if(!okB){v.className='verdict no';v.textContent='超過建蔽率：每層 '+fmt(per)+' ㎡ 大於上限 '+fmt(maxFp)+' ㎡。把層數加到 '+minL+' 層以上。'}
+    else if(per<maxFp*0.5&&L>minL){v.className='verdict mid';v.textContent='合法，但每層只用到建蔽率上限的 '+Math.round(per/maxFp*100)+'%。樓層多代表樓梯電梯佔比高、動線長，可以考慮減少層數。'}
+    else{v.className='verdict ok';v.textContent='合法。每層 '+fmt(per)+' ㎡，留下 '+fmt(A-per)+' ㎡ 空地可以做廣場、綠地和退讓。'}
+  }
+  ids.forEach(function(i){$('#'+i).addEventListener('input',draw)}); draw();
+})();
+
+/* ---------- M3 定量表 ---------- */
+var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半公共、低樓層'],['樂齡教室 ×4',240,'半公共、每間 60'],['多功能廳',250,'公共、夜間獨立、需挑高'],['共餐廚房與用餐',120,'公共、需卸貨'],['行政辦公',90,'內部'],['社區咖啡',80,'公共、臨街']];
+(function(){
+  var t=$('#pcTable'); if(!t)return;
+  ROOMS.forEach(function(r,i){var tr=el('tr'); tr.innerHTML='<td><label for="pc'+i+'">'+r[0]+'</label></td><td class="n"><input type="number" id="pc'+i+'" value="'+r[1]+'" min="0" step="10" inputmode="decimal" style="width:6em;text-align:right"></td><td>'+r[2]+'</td>'; t.appendChild(tr)});
+  function calc(){var net=0; ROOMS.forEach(function(r,i){net+=(+$('#pc'+i).value||0)}); var k=+$('#pcK').value, g=net*k, cap=3200, fp=1000;
+    $('#pcKv').textContent=k.toFixed(2);
+    $('#pcOut').innerHTML='<div><small>淨面積加總</small><b>'+fmt(net)+' ㎡</b></div><div><small>需要的樓地板</small><b>'+fmt(g)+' ㎡</b></div><div class="'+(g<=cap?'flag-ok':'flag-bad')+'"><small>容積使用</small><b>'+Math.round(g/cap*100)+'%</b></div><div><small>蓋 3 層時每層</small><b>'+fmt(g/3)+' ㎡</b></div>';
+    var v=$('#pcVerdict');
+    if(g>cap){v.className='verdict no';v.textContent='超過容積上限 3,200 ㎡。題目的空間不能刪，只能降低係數（走廊更省）或檢查是否算錯。'}
+    else if(g/3>fp){v.className='verdict mid';v.textContent='容積沒問題，但 3 層放不下（每層超過建蔽率上限 1,000 ㎡），要蓋 4 層。'}
+    else{v.className='verdict ok';v.textContent='沒有超過容積上限，3 層每層 '+fmt(g/3)+' ㎡ 也在建蔽率上限 1,000 ㎡ 以內。'}
+  }
+  $$('input',t).concat([$('#pcK')]).forEach(function(i){i.addEventListener('input',calc)}); calc();
+})();
+
+/* ---------- M4 示範播放 ---------- */
+(function(){
+  var box=$('#siteAnim'); if(!box)return;
+  var caps=['看基地：南邊是主要道路和公車站，西邊是次要道路，東邊是公園，北邊是住宅，東南角有老樹。','畫退縮線：南、西各退 4 m，北、東各退 3 m。虛線內才能蓋。','標人流：公車站來的人從南邊，公園的人從東邊，居民從西邊。','先定車道：開在西側道路最北端，離路口和公車站最遠，沿北側下地下室。','放量體：24 × 32 m 靠西放，北側退到 7 m，東側留出 12 m。','開入口：主入口朝南面對廣場；西南角給多功能廳夜間獨立入口；東面開門通往公園。','安排空地：南側入口廣場、東側綠帶與平台接公園並保護老樹、北側種一排喬木隔開住宅。'];
+  var n=1, timer=null, N=caps.length, playBtn=$('[data-act="play"]',box);
+  function set(k){n=Math.max(1,Math.min(N,k)); $$('[data-s]',box).forEach(function(g){g.classList.toggle('on',+g.dataset.s<=n)}); $('[data-n]',box).textContent=n+'/'+N; $('[data-cap]',box).textContent=caps[n-1]}
+  function stop(){clearInterval(timer);timer=null;playBtn.textContent='▶ 播放'}
+  box.addEventListener('click',function(e){var b=e.target.closest('[data-act]'); if(!b)return; var a=b.dataset.act;
+    if(a==='next'){stop();set(n+1)} else if(a==='prev'){stop();set(n-1)}
+    else if(timer){stop()} else{ if(n>=N)set(1); playBtn.textContent='❚❚ 暫停'; timer=setInterval(function(){ if(n>=N){stop();return} set(n+1) },3200) }});
+  set(N);
+})();
+
+/* ---------- M5 樓梯 ---------- */
+(function(){
+  var svg=$('#stSvg'); if(!svg)return;
+  function draw(){
+    var H=(+$('#stH').value||0)*100, R=+$('#stR').value||16, T=+$('#stT').value||28, W=+$('#stW').value||1.5;
+    if(H<=0||R<=0){return}
+    var n=Math.ceil(H/R-1e-9); if(n%2)n++; var r=H/n, per=n/2, run=(per-1)*T/100, len=run+2*W, wid=W*2+0.2;
+    var sc=Math.min(60,640/len,150/wid), x0=40,y0=30, L=len*sc, Wd=wid*sc, w=W*sc, t=T/100*sc;
+    var h='<rect x="'+x0+'" y="'+y0+'" width="'+L+'" height="'+Wd+'" class="f-sheet s-ink" stroke-width="2.5"/>';
+    h+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+Wd+'" class="f-paper s-ink"/><rect x="'+(x0+L-w)+'" y="'+y0+'" width="'+w+'" height="'+Wd+'" class="f-paper s-ink"/>';
+    for(var i=0;i<per;i++){var x=x0+w+i*t; h+='<line x1="'+x+'" y1="'+y0+'" x2="'+x+'" y2="'+(y0+w)+'" class="s-ink"/><line x1="'+x+'" y1="'+(y0+Wd-w)+'" x2="'+x+'" y2="'+(y0+Wd)+'" class="s-ink"/>'}
+    h+='<rect x="'+(x0+w)+'" y="'+(y0+w)+'" width="'+(run*sc)+'" height="'+(Wd-2*w)+'" class="f-ink"/>';
+    h+='<path d="M'+(x0+L-w/2)+' '+(y0+Wd-w/2)+' H'+(x0+w/2)+' V'+(y0+w/2)+' H'+(x0+L-w*0.7)+'" class="s-blue" stroke-width="2"/><text x="'+(x0+L-w/2)+'" y="'+(y0+Wd-w/2+4)+'" text-anchor="middle" font-size="11" class="t-blue">上</text>';
+    h+='<text x="'+(x0+w/2)+'" y="'+(y0+Wd/2+4)+'" text-anchor="middle" font-size="11">平台</text><text x="'+(x0+L-w/2)+'" y="'+(y0+Wd/2+4)+'" text-anchor="middle" font-size="11">樓層</text>';
+    h+='<text x="'+(x0+L/2)+'" y="'+(y0+Wd+18)+'" text-anchor="middle" class="dim">總長 '+len.toFixed(2)+' m（平台 '+W.toFixed(1)+' ＋ 梯段 '+run.toFixed(2)+' ＋ 平台 '+W.toFixed(1)+'）</text>';
+    h+='<text x="'+(x0+L+8)+'" y="'+(y0+Wd/2+4)+'" class="dim">寬 '+wid.toFixed(1)+' m</text>';
+    svg.innerHTML=h;
+    var okT=T>=26, okW=W>=1.4;
+    $('#stOut').innerHTML='<div><small>總級數</small><b>'+n+' 級</b></div><div><small>每級高度</small><b>'+r.toFixed(1)+' cm</b></div><div><small>每段級數</small><b>'+per+' 級</b></div>'
+     +'<div class="'+(okT?'':'flag-bad')+'"><small>級深'+(okT?'':'（不足 26）')+'</small><b>'+T+' cm</b></div><div class="'+(okW?'':'flag-bad')+'"><small>梯寬'+(okW?'':'（不足 1.4）')+'</small><b>'+W.toFixed(1)+' m</b></div><div><small>樓梯間淨尺寸</small><b>'+wid.toFixed(1)+' × '+len.toFixed(1)+' m</b></div>';
+  }
+  ['stH','stR','stT','stW'].forEach(function(i){$('#'+i).addEventListener('input',draw)}); draw();
+})();
+
+/* ---------- M7 配速 ---------- */
+(function(){
+  var bar=$('#paceBar'); if(!bar)return;
+  var S=[['讀題',30,'a','標記過的題目、硬條件清單'],['計算與計畫',60,'a','量體算式、對策表、定量表、泡泡圖（直接寫在正圖上）'],['草圖',60,'b','配置和各層平面的小草圖，定案'],['配置與平面',150,'c','配置圖、各層平面正圖（先柱格、核、牆，後家具）'],['剖面立面',60,'c','剖面圖、立面圖'],['透視',40,'c','透視圖'],['標註上色',50,'d','圖名、比例、尺寸、空間名稱、陰影、重點上色'],['檢查',30,'d','檢查表逐條打勾，補漏']];
+  var acc=0, tb=$('#paceTable');
+  S.forEach(function(s,i){var d=el('div',{'class':s[2],style:'flex:'+s[1]},s[0]); bar.appendChild(d); s.start=acc; acc+=s[1]; s.end=acc; s.node=d;
+    var tr=el('tr'); tr.innerHTML='<td>'+(i+1)+'. '+s[0]+'</td><td class="n">'+s[1]+' 分</td><td class="n">'+Math.floor(acc/60)+':'+('0'+acc%60).slice(-2)+'</td><td>'+s[3]+'</td>'; tb.appendChild(tr)});
+  function upd(){var t=+$('#paceT').value; $('#paceTv').textContent=Math.floor(t/60)+':'+('0'+t%60).slice(-2);
+    var c=S.filter(function(s){return t>=s.start&&t<s.end})[0]||S[S.length-1]; S.forEach(function(s){s.node.classList.toggle('now',s===c)});
+    $('#paceNow').innerHTML=t>=480?'<b>時間到，交卷。</b>':'現在應該在：<b>'+c[0]+'</b>。這個階段還剩 '+(c.end-t)+' 分鐘，要交出：'+c[3]+'。'}
+  $('#paceT').addEventListener('input',upd); upd();
+})();
+
+/* ---------- 啟動 ---------- */
+window.KY={gradeNum:gradeNum,$:$,$$:$$,el:el,st:st,save:save,award:award,stampOn:stampOn,stampOff:stampOff,toast:toast,mmss:mmss,fmt:fmt,go:go};
+refresh();
+var h0=location.hash.slice(1);
+show(h0&&document.getElementById('v-'+h0)?h0:'home',true);
+if(!h0&&st.last&&st.last!=='home'){ var hint=$('#heroGo'); var lm=mods.filter(function(m){return m.id===st.last})[0]; if(hint&&lm){hint.dataset.go=lm.id; hint.textContent='回到上次的位置：'+lm.title+' →'} }
+})();
+</script>

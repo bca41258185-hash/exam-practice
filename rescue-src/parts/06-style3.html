@@ -1,0 +1,71 @@
+<style>
+/* 第三層：遊戲優先。任務卡在上、講義收在下、AI 閱卷委員與教練 */
+.brief{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 6px}
+.mission{font-family:var(--f-hand);font-size:clamp(20px,3.4vw,26px);line-height:1.4;margin:0}
+.mission small{display:block;font:600 12px var(--f-data);letter-spacing:.14em;color:var(--blue);margin-bottom:2px}
+.tips{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.tips li{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--bp);border-radius:4px;padding:10px 12px;font-size:14.5px;line-height:1.55}
+.tips li b{display:block;font:600 11px var(--f-data);letter-spacing:.1em;color:var(--mut);margin-bottom:2px}
+details.notes{margin-top:34px;border:1px dashed var(--line);border-radius:8px;background:var(--sheet)}
+details.notes>summary{cursor:pointer;padding:14px 16px;font-weight:700;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center}
+details.notes>summary::-webkit-details-marker{display:none}
+details.notes>summary::after{content:"展開 ＋";font:600 12px var(--f-data);color:var(--blue)}
+details.notes[open]>summary::after{content:"收合 −"}
+details.notes>summary small{font-weight:400;color:var(--mut);font-size:13px}
+details.notes>.nin{padding:0 16px 18px}
+.game.box{border:0}
+.game.box>h4{font-family:var(--f-hand);font-size:22px;margin-bottom:6px}
+.game.box>h4 em{background:var(--bp-hi);color:#1b2330;border-radius:3px;padding:3px 8px;vertical-align:middle}
+.game .qtext,.game .box{background:var(--paper);border-color:var(--line)}
+.game .hint{color:var(--mut)}
+.game input[type=number],.game input[type=text],.game textarea{background:var(--paper);color:var(--ink);border-color:var(--line)}
+textarea{font:16px/1.6 var(--f-text);width:100%;min-height:86px;border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--paper);color:var(--ink);resize:vertical}
+.game .pill{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.game .pill[aria-pressed="true"]{background:var(--bp-hi);color:#1b2330;border-color:var(--bp-hi)}
+.game .pill.c-hard{background:var(--badbg)}.game .pill.c-room{background:var(--blue-soft)}.game .pill.c-issue{background:var(--okbg)}.game .pill.c-draw{background:var(--warnbg)}
+.game .bucket{background:var(--paper);border-color:var(--line);color:var(--ink)}
+.game .bucket span.in{background:var(--blue-soft);border-color:var(--line)}
+.game .opts button{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.game .out div{background:var(--paper)}
+/* 閱卷卡 */
+.jcard{background:#fdfdf8;color:#1b2330;border-radius:6px;padding:22px 20px;min-height:150px;font-size:18px;line-height:1.6;box-shadow:4px 5px 0 rgba(0,0,0,.25);position:relative;display:flex;flex-direction:column;justify-content:center;font-family:var(--f-hand)}
+.jcard small{font:600 11px var(--f-data);letter-spacing:.12em;color:#56646f;margin-bottom:6px}
+.jbtns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.jbtns button{border:0;border-radius:8px;padding:16px 8px;font-family:var(--f-hand);font-size:22px;min-height:60px;color:#1b2330}
+.jbtns .no{background:#ffaaa0}.jbtns .yes{background:#86e3b6}
+.dots{display:flex;gap:5px;margin:12px 0 0;flex-wrap:wrap}
+.dots i{width:14px;height:14px;border-radius:50%;background:var(--paper);border:1px solid var(--line)}
+.dots i.r{background:var(--ok)}.dots i.w{background:var(--bad)}
+/* 量體蓋樓 */
+.mwrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center}
+.mspec{list-style:none;margin:0;padding:0;font-size:16px;display:flex;flex-direction:column;gap:4px}
+.mspec b{font:600 20px var(--f-data);color:var(--bp-hi)}
+.stepper{display:flex;align-items:center;gap:12px;margin:12px 0}
+.stepper button{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:var(--paper);color:var(--ink);font-size:26px;line-height:1}
+.stepper b{font:600 40px var(--f-data);min-width:2ch;text-align:center}
+/* 剖面搶時間 */
+.picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin:10px 0}
+.picks button{display:flex;justify-content:space-between;gap:8px;align-items:center;border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:9px 12px;min-height:46px;text-align:left;font-size:14.5px}
+.picks button[aria-pressed="true"]{border-color:var(--bp-hi);background:var(--blue-soft)}
+.picks button span{font:600 12px var(--f-data);color:var(--bp-hi);white-space:nowrap}
+.picks button:disabled{opacity:.45}
+/* AI */
+.ai-out{white-space:pre-wrap;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-top:12px;font-size:15px;line-height:1.7}
+.ai-tag{font:600 11px var(--f-data);letter-spacing:.12em;background:#fff;color:#12407f;border-radius:3px;padding:3px 8px}
+.photo{display:block;max-height:240px;border-radius:6px;margin:10px 0;border:1px solid var(--line)}
+.filebtn{display:inline-flex;align-items:center;min-height:42px;border:2px dashed var(--line);border-radius:6px;padding:8px 14px;cursor:pointer}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.filebtn:focus-within{outline:3px solid var(--bp-hi)}
+.coach-fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 16px);z-index:15;background:var(--bp);color:var(--bp-ink);border:2px solid var(--bp-hi);border-radius:999px;padding:12px 18px;font-family:var(--f-hand);font-size:17px;box-shadow:0 6px 18px rgba(0,0,0,.3);min-height:48px}
+.coach{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 76px);z-index:15;width:min(380px,calc(100vw - 24px));max-height:min(70vh,560px);display:flex;flex-direction:column;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);padding:0;margin:0}
+.coach header{padding:12px 14px;font-family:var(--f-hand);font-size:18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.coach .log{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:14.5px;min-height:120px}
+.coach .log p{margin:0;padding:8px 11px;border-radius:10px;max-width:90%;white-space:pre-wrap;line-height:1.6}
+.coach .log .u{align-self:flex-end;background:var(--bp-hi);color:#1b2330}
+.coach .log .a{align-self:flex-start;background:var(--paper)}
+.coach form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+.coach form input{flex:1;min-width:0;width:auto;font:15px var(--f-text);background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+.sugg{display:flex;flex-wrap:wrap;gap:6px}
+.sugg button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:5px 11px;font-size:13px}
+@media (max-width:860px){.mwrap{grid-template-columns:minmax(0,1fr)}}
+</style>

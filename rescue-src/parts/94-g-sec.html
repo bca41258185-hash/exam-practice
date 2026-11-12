@@ -1,0 +1,218 @@
+<style>
+/* 剖面搶時間：三小關（剖面、立面、透視） */
+#gSec .sc-brief{margin:0 0 6px;font-size:15px;line-height:1.6}
+#gSec figure{margin:6px 0 4px}
+#gSec .sc-sky{fill:var(--blue-soft)}
+#gSec .sc-glass{fill:var(--blue-soft);opacity:.55}
+#gSec .sc-shade{fill:var(--line);opacity:.75}
+#gSec svg .sc-key{font-family:var(--f-data);font-size:9px;font-weight:700;fill:var(--ink)}
+#gSec svg .sc-bg{fill:var(--paper)}
+#gSec .sc-res{margin:10px 0 0;padding-left:1.2em;font-size:14px;line-height:1.6}
+#gSec .sc-res li{margin:2px 0}
+#gSec .sc-res b{font-weight:700}
+#gSec .picks button.must-miss{border-color:var(--bad)}
+#gSec .picks button.junk{border-color:var(--warn);border-style:dashed}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, shuffle=K.shuffle, gameBox=K.gameBox;
+/* ============ GAME 剖面搶時間（單元 6）：剖面、立面、透視三小關 ============ */
+var gSec=gameBox('gSec','GAME','剖面搶時間','/100','考試最後 20 分鐘，圖上只剩幾條線。每個項目都要花時間，你買不起全部。挑閱卷委員一定會看的，畫完交卷。');
+(function(){
+  var D=K.draw(true), PASS=85;
+  function f1(n){return (Math.round(n*10)/10).toString()}
+  function pl(pts,close){return 'M'+pts.map(function(p){return f1(p[0])+' '+f1(p[1])}).join(' L')+(close?' Z':'')}
+  function rect(x,y,w,h,cls){return '<rect x="'+f1(x)+'" y="'+f1(y)+'" width="'+f1(w)+'" height="'+f1(h)+'" class="'+cls+'"/>'}
+  function txt(x,y,s,cls,anc){return '<text x="'+f1(x)+'" y="'+f1(y)+'" text-anchor="'+(anc||'middle')+'" class="'+cls+'">'+s+'</text>'}
+  function key(x,y,n){return '<circle cx="'+f1(x)+'" cy="'+f1(y)+'" r="6.5" class="lw-thin sc-bg"/>'+txt(x,y+3.2,n,'sc-key')}
+  function sky(){var s=''; for(var i=0;i<6;i++)s+='<rect x="0" y="'+(i*11)+'" width="720" height="11" class="sc-sky" opacity="'+(0.55-i*0.09).toFixed(2)+'"/>'; return s}
+
+  /* ---------- 第 1 小關：剖面 ---------- */
+  function drawSec(on){
+    var X0=200,X1=520,GL=210,k=10,xN=130,xS=630, Y=function(m){return GL-m*k}, s='', cut=[], i, j;
+    var FL=[[0,4.5,['門廳','多功能廳']],[4.5,8.1,['兒童閱覽','樂齡教室']],[8.1,11.7,['一般閱覽','行政']]];
+    if(on.k)s+=sky();
+    if(on.g){ s+=D.hatch(0,GL,720,78,'earth'); s+=rect(xS+6,GL,720-xS-6,4,'f-line');
+      s+='<path d="M24 '+f1(GL)+' V'+f1(Y(12))+' H112 V'+f1(GL)+'" class="lw-vis"/>'; for(j=1;j<4;j++)s+='<path d="M24 '+f1(Y(3*j))+' H112" class="lw-thin"/>';
+      s+=txt(68,Y(12)-6,'北側 4 層住宅','t-dim');
+      [xN,xS].forEach(function(x){s+='<path d="M'+x+' '+(GL-16)+' V'+(GL+16)+'" class="lw-site"/>'+txt(x,GL-20,'地界線','t-dim')});
+      s+=rect(652,GL+5,52,12,'sc-bg')+txt(678,GL+14,'15 m 道路','t-dim'); }
+    if(on.b){ s+=rect(X0,GL,X1-X0,3.6*k+6,'sc-bg'); cut.push([X0-4,GL-4,4,3.6*k+10],[X1,GL-4,4,3.6*k+10],[X0-4,Y(-3.6),X1-X0+8,6]); cut.push([X0,GL-4,X1-X0,4]) }
+    else cut.push([X0,GL-4,X1-X0,4]);
+    /* 樓板、梁、外牆、隔間 */
+    FL.forEach(function(f,n){ var top=f[1];
+      cut.push([X0,Y(top),X1-X0,4]);
+      for(i=0;i<=4;i++){var bx=X0+80*i; cut.push([i===0?X0:i===4?X1-6:bx-3,Y(top)+4,6,7])}
+      var sill=n?0.9:0.15, head=n?2.5:3.4;
+      cut.push([X0,Y(f[0]+sill),3.5,Y(f[0])-4-Y(f[0]+sill)+ (n?4:0)],[X0,Y(top)+4,3.5,Y(f[0]+head)-Y(top)-4]);
+      cut.push([X1-3.5,Y(f[0]+sill),3.5,Y(f[0])-4-Y(f[0]+sill)+(n?4:0)],[X1-3.5,Y(top)+4,3.5,Y(f[0]+head)-Y(top)-4]);
+      cut.push([X0+159,Y(top)+11,2.4,Y(f[0])-4-Y(top)-11]);
+      [X0+1.75,X1-1.75].forEach(function(x){s+='<path d="M'+f1(x-1.2)+' '+f1(Y(f[0]+sill))+' V'+f1(Y(f[0]+head))+' M'+f1(x+1.2)+' '+f1(Y(f[0]+sill))+' V'+f1(Y(f[0]+head))+'" class="lw-thin"/>'});
+      for(i=1;i<=3;i++){ if(i===2)continue; var cx=X0+80*i; s+='<path d="M'+(cx-3.5)+' '+f1(Y(f[0])-4)+' V'+f1(Y(top)+11)+' M'+(cx+3.5)+' '+f1(Y(f[0])-4)+' V'+f1(Y(top)+11)+'" class="lw-thin"/>' }
+    });
+    if(on.b){ for(i=1;i<=3;i++){var cx2=X0+80*i; s+='<path d="M'+(cx2-3.5)+' '+f1(Y(-3.6))+' V'+f1(GL+4)+' M'+(cx2+3.5)+' '+f1(Y(-3.6))+' V'+f1(GL+4)+'" class="lw-thin"/>'} }
+    /* 屋突樓梯間 */
+    cut.push([X0,Y(14.7),52,4],[X0,Y(14.7)+4,3.5,Y(11.7)-Y(14.7)-4],[X0+48.5,Y(14.7)+4,3.5,Y(11.7)-Y(14.7)-4]);
+    if(on.p)cut.push([X1-3.5,Y(12.8),3.5,Y(11.7)-Y(12.8)],[X0+52,Y(12.8),0,0]);
+    if(on.p)s+='<path d="M'+(X1-5)+' '+f1(Y(12.8))+' H'+(X1+1)+'" class="lw-vis"/>';
+    /* 剖到的部分：塗黑或只有細線 */
+    cut.forEach(function(c){ if(c[2]>0&&c[3]>0)s+=rect(c[0],c[1],c[2],c[3],on.c?'poche':'lw-thin') });
+    s+=on.g?'<path d="M0 '+GL+' H720" class="lw-cut"/>':'<path d="M'+(X0-24)+' '+GL+' H'+(X1+24)+'" class="lw-thin"/>';
+    if(on.b)s+=rect(X0,GL-4,X1-X0,4,on.c?'poche':'lw-thin');
+    /* 裝飾項目 */
+    if(on.m)FL.forEach(function(f){ for(var y=Y(f[1])+14;y<Y(f[0])-6;y+=4)s+='<path d="M'+(X0+6)+' '+f1(y)+' H'+(X1-6)+'" class="s-line" stroke-width=".5"/>' });
+    if(on.w)FL.forEach(function(f,n){ var sill=n?0.9:0.15, head=n?2.5:3.4; [X0+1.75,X1-1.75].forEach(function(x){ for(var y=Y(f[0]+head);y<Y(f[0]+sill);y+=5)s+=rect(x-2.5,y,5,4,'lw-thin') }) });
+    if(on.f)FL.concat(on.b?[[-3.6,0]]:[]).forEach(function(f){ for(var x=X0+20;x<X1-30;x+=34){var y=Y(f[0])-(f[0]<0?0:0); s+='<path d="M'+x+' '+f1(y-7)+' h14 M'+(x+2)+' '+f1(y-7)+' v7 M'+(x+12)+' '+f1(y-7)+' v7 M'+(x+17)+' '+f1(y-5)+' v5 M'+(x+17)+' '+f1(y-5)+' h4 v-5" class="lw-thin"/>'} });
+    /* 必備項目 */
+    if(on.p)s+=txt(X1+8,Y(12.8)+3,'女兒牆 1100','t-dim','start');
+    if(on.h){ var lv=on.b?[-3.6,0,4.5,8.1,11.7]:[0,4.5,8.1,11.7], lb=on.b?['3600','4500','3600','3600']:['4500','3600','3600'];
+      s+=D.dimChain(lv.map(Y),172,lb,true,0);
+      var LN={'-3.6':'B1FL −3600','0':'1FL ±0','4.5':'2FL +4500','8.1':'3FL +8100','11.7':'RFL +11700'};
+      lv.forEach(function(m){s+=D.level(646,Y(m),LN[String(m)])}) }
+    if(on.n){ FL.forEach(function(f){ s+=D.room(X0+80,(Y(f[0])+Y(f[1]))/2+8,f[2][0])+D.room(X0+240,(Y(f[0])+Y(f[1]))/2+8,f[2][1]) });
+      if(on.b)s+=D.room(X0+80,Y(-1.8)+4,'停車場')+D.room(X0+240,Y(-1.8)+4,'機房');
+      s+=txt(X0+26,Y(13.2)+3,'樓梯間','t-area') }
+    if(on.s){ s+=D.treeE(566,GL,72)+D.person(612,GL,17)+D.person(145,GL,17)+D.person(X0+130,Y(0),17)+D.person(X0+300,Y(0),17)+D.person(X0+195,Y(4.5),17)+D.person(X0+22,Y(8.1),17) }
+    if(on.t)s+=D.title(360,312,'A–A′ 剖面圖','1/200');
+    return s;
+  }
+
+  /* ---------- 第 2 小關：南向立面 ---------- */
+  function drawEle(on){
+    var X0=190,X1=526,GL=250,k=14,Y=function(m){return GL-m*k}, s='', i, j, bayX=[X0,X0+112,X0+224,X1], cw=11;
+    var outline=[[X0,GL],[X0,Y(14.7)],[X0+56,Y(14.7)],[X0+56,Y(12.8)],[X1,Y(12.8)],[X1,GL]];
+    if(on.k)s+=sky();
+    if(on.g)s+=D.hatch(0,GL,720,12,'earth');
+    /* 牆面 */
+    s+='<path d="'+pl(outline,true)+'" class="sc-bg"/>';
+    if(on.b){ for(var y=GL-3;y>Y(12.8);y-=3.2){ s+='<path d="M'+X0+' '+f1(y)+' H'+X1+'" class="lw-thin" stroke-width=".35"/>'; for(var x=X0+((Math.round((GL-y)/3.2)%2)?3:9);x<X1;x+=12)s+='<path d="M'+f1(x)+' '+f1(y)+' v-3.2" class="lw-thin" stroke-width=".35"/>' } }
+    if(on.h){ s+=D.hatch(X0,Y(12.8),X1-X0,Y(11.7)-Y(12.8),'conc')+D.hatch(X0,Y(14.7),56,Y(12.8)-Y(14.7),'conc') }
+    if(on.f){ [4.5,8.1,11.7].forEach(function(m){s+='<path d="M'+X0+' '+f1(Y(m))+' H'+X1+'" class="lw-thin"/>'});
+      for(i=1;i<3;i++)s+=rect(bayX[i]-cw/2,Y(11.7),cw,GL-Y(11.7),'lw-thin') }
+    /* 窗：跟著柱跨開 */
+    var wins=[];
+    for(j=0;j<3;j++){ var fl=[0,4.5,8.1][j];
+      for(i=0;i<3;i++){ if(j===0&&i===1&&on.e)continue;
+        var x0=bayX[i]+(i?cw/2:0)+8, x1=bayX[i+1]-(i<2?cw/2:0)-8, y0=j?Y(fl+2.9):Y(fl+3.6), y1=j?Y(fl+0.9):Y(fl+0.15); wins.push([x0,y0,x1,y1,j]) } }
+    if(on.w)wins.forEach(function(w){ s+=rect(w[0],w[1],w[2]-w[0],w[3]-w[1],'sc-glass')+rect(w[0],w[1],w[2]-w[0],w[3]-w[1],'lw-vis'); var n=4; for(var q=1;q<n;q++){var mx=w[0]+(w[2]-w[0])*q/n; s+='<path d="M'+f1(mx)+' '+f1(w[1])+' V'+f1(w[3])+'" class="lw-thin"/>'}
+      if(w[4])s+='<path d="M'+f1(w[0]-3)+' '+f1(w[3]+2)+' H'+f1(w[2]+3)+'" class="lw-vis"/>';
+      if(on.h)s+=D.hatch(w[0],w[1],w[2]-w[0],4,'hatch')+D.hatch(w[0],w[1]+4,3,w[3]-w[1]-4,'hatch') });
+    if(on.c)wins.forEach(function(w){ for(var x=w[0]+3;x<w[2]-3;x+=7)s+='<path d="M'+f1(x)+' '+f1(w[1]+2)+' q2 '+f1((w[3]-w[1])/4)+' 0 '+f1((w[3]-w[1])/2)+' t0 '+f1((w[3]-w[1])/2-3)+'" class="lw-thin"/>' });
+    if(on.r)wins.forEach(function(w){ for(var x=w[0]+6;x<w[2]-10;x+=16)s+='<path d="M'+f1(x)+' '+f1(w[3]-3)+' l8 -12 M'+f1(x+5)+' '+f1(w[3]-3)+' l5 -7" class="lw-thin"/>' });
+    /* 主入口與雨遮 */
+    var mx=(bayX[1]+bayX[2])/2;
+    if(on.e){ s+=rect(mx-26,Y(2.8),52,Y(0)-Y(2.8),'sc-glass')+rect(mx-26,Y(2.8),52,Y(0)-Y(2.8),'lw-vis')+'<path d="M'+f1(mx)+' '+f1(Y(2.8))+' V'+GL+' M'+f1(mx-13)+' '+f1(Y(2.8))+' V'+GL+' M'+f1(mx+13)+' '+f1(Y(2.8))+' V'+GL+'" class="lw-thin"/>';
+      s+=rect(mx-49,Y(3.9),98,Y(3.6)-Y(3.9),'sc-bg')+rect(mx-49,Y(3.9),98,Y(3.6)-Y(3.9),'lw-out');
+      if(on.h)s+=D.hatch(mx-46,Y(3.6),92,7,'hatch');
+      s+=txt(mx,GL+24,'主入口','t-dim') }
+    if(on.f||on.w){ /* 1F 窗台以下的牆線 */ }
+    /* 外輪廓 */
+    s+='<path d="'+pl(outline)+'" class="'+(on.o?'lw-out':'lw-thin')+'"/>';
+    s+=on.g?'<path d="M10 '+GL+' H710" class="lw-cut"/>':'<path d="M'+(X0-20)+' '+GL+' H'+(X1+20)+'" class="lw-thin"/>';
+    if(on.s)s+=D.treeE(118,GL,86)+D.treeE(604,GL,70)+D.person(mx-70,GL,24)+D.person(mx+62,GL,24)+D.person(470,GL,24)+D.person(150,GL,24);
+    if(on.m){ s+=key(X1-40,(Y(12.8)+Y(11.7))/2,'1'); if(wins.length)s+=key(wins[wins.length-1][2]-14,wins[wins.length-1][1]+12,'2'); s+=key(on.e?mx+60:mx,on.e?Y(3.75):Y(3.75),'3');
+      s+=txt(360,GL+40,'① 清水混凝土　② Low-E 複層玻璃　③ 金屬板雨遮','t-dim') }
+    if(on.t)s+=D.title(360,316,'南向立面圖','1/200');
+    return s;
+  }
+
+  /* ---------- 第 3 小關：兩點透視 ---------- */
+  function drawPer(on){
+    var f=300,cx=400,hz=236,ph=50*Math.PI/180,sn=Math.sin(ph),cs=Math.cos(ph),z0=20,s='',i,j,LR=24,LL=32,HT=12.8;
+    function P(x,h,z){return [cx+f*x/z,hz-f*(h-1.5)/z]}
+    function Rf(u,h,o){o=o||0; return P(u*cs+o*sn,h,z0+u*sn-o*cs)}
+    function Lf(u,h,o){o=o||0; return P(-u*sn-o*cs,h,z0+u*cs-o*sn)}
+    function zR(u,o){return z0+u*sn-(o||0)*cs}
+    var VL=cx-f*sn/cs, VR=cx+f*cs/sn;
+    if(on.k)s+='<path d="M90 70 q10 -16 28 -8 q12 -14 28 0 q16 -2 14 12 q8 10 -8 14 h-56 q-16 -4 -6 -18 z M520 50 q8 -12 22 -6 q10 -10 22 0 q12 0 10 10 q6 8 -6 10 h-44 q-12 -4 -4 -14 z M610 110 q6 -9 16 -5 q8 -8 16 0 q9 0 7 8 q5 6 -5 8 h-32 q-9 -3 -2 -11 z" class="lw-thin sc-bg"/>';
+    if(on.hz){ s+='<path d="M0 '+hz+' H720" class="lw-vis"/>'+txt(712,hz+30,'HL 視平線（眼高 1.5 m）','t-dim','end');
+      s+='<circle cx="'+f1(VL)+'" cy="'+hz+'" r="3.2" class="poche"/><circle cx="'+f1(VR)+'" cy="'+hz+'" r="3.2" class="poche"/>'+txt(VL,hz+15,'VP左','t-axis')+txt(VR,hz+15,'VP右','t-axis') }
+    var c0=Rf(0,0), cT=Rf(0,HT), r0=Rf(LR,0), rT=Rf(LR,HT), l0=Lf(LL,0), lT=Lf(LL,HT);
+    if(on.hz&&on.bx){ [[lT,VL],[l0,VL],[rT,VR],[r0,VR],[cT,VL],[cT,VR],[c0,VL],[c0,VR]].forEach(function(q){s+='<path d="'+pl([q[0],[q[1],hz]])+'" class="lw-hid" stroke-width=".5"/>'}) }
+    /* 地面線 */
+    if(on.s){ s+='<path d="'+pl([Lf(LL+10,0),c0,Rf(LR+12,0)])+'" class="lw-cut"/><path d="'+pl([Rf(-6,0,7),Rf(LR+14,0,7)])+'" class="lw-thin"/><path d="'+pl([Lf(-6,0,6),Lf(LL+12,0,6)])+'" class="lw-thin"/>' }
+    /* 量體 */
+    if(on.bx){ s+='<path d="'+pl([l0,c0,r0,rT,cT,lT],true)+'" class="sc-bg"/>' }
+    /* 樓層線與窗帶 */
+    if(on.fl){ [4.5,8.1,11.7].forEach(function(m){s+='<path d="'+pl([Lf(LL,m),Rf(0,m),Rf(LR,m)])+'" class="lw-thin"/>'});
+      for(j=0;j<3;j++){ var fl=[0,4.5,8.1][j], a=j?fl+1.0:fl+0.3, b=j?fl+2.9:fl+3.5;
+        [[Rf,LR],[Lf,LL]].forEach(function(F){ var fn=F[0], len=F[1];
+          for(var u=0.8;u<len-0.8;u+=4){ var u2=Math.min(u+4,len-0.8); if(j===0&&fn===Rf&&u2>9&&u<15&&on.e)continue;
+            var q=[fn(u+.25,a),fn(u2-.25,a),fn(u2-.25,b),fn(u+.25,b)]; s+='<path d="'+pl(q,true)+'" class="sc-glass"/><path d="'+pl(q,true)+'" class="lw-thin"/>';
+            if(on.r)s+='<path d="'+pl([fn(u+1,a+.3),fn(u+1.8,b-.4)])+' '+pl([fn(u+1.8,a+.3),fn(u+2.3,a+1.4)])+'" class="lw-thin"/>';
+            if(on.fu){ var p1=fn(u+1.2,fl+0.1), p2=fn(u+2.6,fl+0.1); s+='<path d="'+pl([fn(u+1.2,a+.6),fn(u+2.4,a+.6)])+' '+pl([fn(u+1.4,a+.6),fn(u+1.4,a+.2)])+' '+pl([fn(u+2.2,a+.6),fn(u+2.2,a+.2)])+'" class="lw-thin"/><circle cx="'+f1(p2[0])+'" cy="'+f1(fn(u+2.8,a+1.0)[1])+'" r="'+f1(f*.25/(fn===Rf?zR(u):z0+u*cs))+'" class="lw-thin"/>' }
+          } }) } }
+    /* 主入口 */
+    if(on.e){ var d=[Rf(10.5,0),Rf(13.5,0),Rf(13.5,3.0),Rf(10.5,3.0)]; s+='<path d="'+pl(d,true)+'" class="sc-shade"/><path d="'+pl(d,true)+'" class="lw-vis"/><path d="'+pl([Rf(12,0),Rf(12,3)])+'" class="lw-thin"/>';
+      var u1=[Rf(9,3.6),Rf(15,3.6),Rf(15,3.6,2.5),Rf(9,3.6,2.5)], fr=[Rf(9,3.6,2.5),Rf(15,3.6,2.5),Rf(15,3.95,2.5),Rf(9,3.95,2.5)], sd=[Rf(15,3.6),Rf(15,3.95),Rf(15,3.95,2.5),Rf(15,3.6,2.5)];
+      s+='<path d="'+pl(u1,true)+'" class="sc-bg"/><path d="'+pl(u1,true)+'" class="lw-vis"/><path d="'+pl(fr,true)+'" class="sc-bg"/><path d="'+pl(fr,true)+'" class="lw-out"/>';
+      var g=Rf(12,0,4); s+=D.entry(g[0],g[1]+10,0,'主入口',0,22) }
+    if(on.bx){ s+='<path d="'+pl([l0,lT,cT,rT,r0])+'" class="lw-out"/><path d="'+pl([l0,c0,r0])+'" class="lw-out"/>' }
+    else s+='<path d="'+pl([l0,lT,cT,rT,r0,c0,l0])+' '+pl([c0,cT])+'" class="lw-hid"/>';
+    if(on.v)s+='<path d="'+pl([c0,cT])+'" class="lw-cut"/>';
+    if(on.s){ [[Rf,7,4.5],[Rf,17,5],[Lf,8,4],[Lf,20,5]].forEach(function(q){var p=q[0](q[1],0,q[2]), z=q[0]===Rf?zR(q[1],q[2]):z0+q[1]*cs-q[2]*sn; s+=D.person(p[0],p[1],f*1.7/z)});
+      [[Lf,LL+3,5],[Rf,LR+4,5],[Lf,LL+13,4]].forEach(function(q){var p=q[0](q[1],0,q[2]), z=q[0]===Rf?zR(q[1],q[2]):z0+q[1]*cs-q[2]*sn; s+=D.treeE(p[0],p[1],f*7/z)}) }
+    if(on.ca){ var X=70,Yb=300; s+='<path d="M'+X+' '+(Yb-8)+' l6 -12 h30 l10 10 h14 q6 0 6 6 v4 h-66 z" class="lw-vis sc-bg"/><path d="M'+(X+9)+' '+(Yb-19)+' h11 v8 h-15 z M'+(X+24)+' '+(Yb-19)+' h10 l7 8 h-17 z" class="lw-thin"/><circle cx="'+(X+14)+'" cy="'+Yb+'" r="5" class="lw-vis sc-bg"/><circle cx="'+(X+52)+'" cy="'+Yb+'" r="5" class="lw-vis sc-bg"/><circle cx="'+(X+14)+'" cy="'+Yb+'" r="2" class="lw-thin"/><circle cx="'+(X+52)+'" cy="'+Yb+'" r="2" class="lw-thin"/><path d="M'+(X+64)+' '+(Yb-6)+' h4 M'+(X+2)+' '+(Yb-6)+' h3 M'+(X+30)+' '+(Yb-8)+' v6" class="lw-thin"/>' }
+    if(on.t)s+=D.title(360,318,'透視圖（兩點透視）');
+    return s;
+  }
+
+  var SETS=[
+   {nm:'剖面',budget:20,draw:drawSec,h:330,lab:'剖面圖',
+    brief:'<b>A–A′ 剖面，南北向切過整棟。</b>現在只有細線框。必備的八項加起來 19 分鐘。',
+    items:[['c','剖到的樓板、梁和外牆塗黑',2,1,'剖面最重要的就是分清楚「剖到」和「看到」'],['g','地面線加粗、延伸到道路和鄰地，地下畫土壤',2,1,'沒有地面線，看不出建築和地面的關係'],['h','樓高尺寸鏈和各層高程',3,1,'樓高和高程是剖面一定會被檢查的數字'],['n','每個空間的名稱',3,1,'沒寫名稱，閱卷者要回去對平面'],['b','地下室',3,1,'題目有地下層就一定要畫出來'],['p','屋頂女兒牆 1.1 m',2,1,'少了女兒牆，屋頂看起來像沒做完'],['s','人和樹（看得出尺度）',3,1,'沒有人，看不出空間有多高'],['t','圖名和比例',1,1,'圖名和比例每張圖都要有，一分鐘就畫完'],
+      ['f','每層的桌椅家具',8,0,'家具在剖面不加分'],['m','背景牆的磁磚分割線',7,0,'磁磚線只會讓圖變花'],['k','天空漸層上色',6,0,'上色不是剖面的評分項目'],['w','每扇窗的窗框細節',6,0,'1/200 的剖面看不到窗框']]},
+   {nm:'立面',budget:22,draw:drawEle,h:330,lab:'立面圖',
+    brief:'<b>南向立面，面對 15 m 道路。</b>現在只有細線外框。必備的九項加起來 21 分鐘。',
+    items:[['g','地面線加粗並延伸',2,1,'立面沒有地面線，建築像浮在空中'],['o','建築外輪廓加粗',2,1,'外輪廓最粗，量體才跳得出來'],['f','樓層線和柱跨分割（細線）',2,1,'樓層和柱跨是立面的骨架'],['w','窗戶跟著柱跨開，畫出竪框',3,1,'窗和柱跨對齊，閱卷者一眼看出結構和平面一致'],['e','主入口和雨遮',3,1,'主入口一定要在立面上看得出來'],['h','一處材質或陰影（雨遮下、窗洞、女兒牆）',3,1,'有陰影才看得出深淺和凹凸'],['s','人和樹',3,1,'沒有人和樹，立面沒有尺度'],['t','圖名和比例',1,1,'每張圖都要有圖名和比例'],['m','材料標註',2,1,'材料寫出來，立面才算交代清楚'],
+      ['b','每一塊磚都畫出來',8,0,'畫磚很花時間，1/200 只要標材料就好'],['k','天空漸層',6,0,'天空不是評分項目'],['r','玻璃反光',5,0,'反光是效果圖的事'],['c','窗簾和室內擺設',5,0,'立面看不到室內']]},
+   {nm:'透視',budget:16,draw:drawPer,h:336,lab:'透視圖',
+    brief:'<b>兩點透視的量體圖，從西南角看過去。</b>現在只有虛線草稿。必備的七項加起來 15 分鐘。',
+    items:[['hz','地平線和兩個消失點',2,1,'先定地平線和消失點，其他線才有地方收'],['v','最近的垂直角線（最粗）',1,1,'最近那條角線決定量體的高度和位置'],['bx','從角線拉到消失點，畫出量體',3,1,'量體沒拉出來就沒有透視圖'],['fl','樓層線和窗帶（一樣收到消失點）',3,1,'樓層線讓人讀出這是三層樓'],['e','主入口和雨遮',2,1,'主入口要在透視上找得到'],['s','地面線、人和樹（人頭在地平線上）',3,1,'人頭對齊地平線，尺度一看就對'],['t','圖名',1,1,'每張圖都要有圖名'],
+      ['fu','從窗戶看進去的室內家具',5,0,'量體透視不用畫室內'],['k','天上的雲',3,0,'雲不加分'],['ca','細節完整的汽車',6,0,'車子畫得再好也不會加分'],['r','每片玻璃的反光',4,0,'反光是效果圖的事']]}
+  ];
+
+  var body=el('div'); gSec.appendChild(body);
+  var on={}, set, cur=0, L, sent=false;
+  function used(){var t=0; set.items.forEach(function(x){if(on[x[0]])t+=x[2]}); return t}
+  function draw(){
+    $('svg',body).innerHTML=set.draw(on); var u=used(), B=set.budget;
+    $('.exbar i',body).style.width=(u/B*100)+'%'; $('.exbar span',body).textContent='已用 '+u+' / '+B+' 分鐘';
+    $$('.picks button',body).forEach(function(b){var it=set.items.filter(function(x){return x[0]===b.dataset.k})[0]; b.setAttribute('aria-pressed',on[it[0]]?'true':'false'); b.disabled=!on[it[0]]&&u+it[2]>B; b.classList.remove('must-miss','junk')});
+  }
+  function start(i){
+    cur=i; set=SETS[i]; on={}; sent=false; K.stampOff(gSec); hud(gSec,0);
+    body.innerHTML='<p class="sc-brief">'+set.brief+'</p><figure><svg viewBox="0 0 720 '+set.h+'" role="img" aria-label="'+set.lab+'"></svg></figure><div class="exbar"><i style="width:0"></i><span></span></div><div class="picks"></div><div class="frow"><button type="button" class="go" data-a="go">交卷</button><button type="button" class="ghost" data-a="reset">重來</button><button type="button" class="go" data-a="next" hidden>下一小關 →</button></div><div class="verdict" hidden></div>';
+    var pk=$('.picks',body);
+    shuffle(set.items.slice()).forEach(function(x){var b=el('button',{type:'button','data-k':x[0],'aria-pressed':'false'},x[1]+'<span>'+x[2]+' 分</span>'); pk.appendChild(b);
+      b.addEventListener('click',function(){ on[x[0]]=!on[x[0]]; if(sent){sent=false; $('.verdict',body).hidden=true} draw() })});
+    $('[data-a=go]',body).addEventListener('click',submit);
+    $('[data-a=reset]',body).addEventListener('click',function(){start(cur)});
+    $('[data-a=next]',body).addEventListener('click',function(){L.next()});
+    $('[data-a=next]',body).hidden=!(L&&L.best(i)>=PASS&&i<SETS.length-1);
+    draw();
+  }
+  function submit(){
+    var must=set.items.filter(function(x){return x[3]}), got=must.filter(function(x){return on[x[0]]}), miss=must.filter(function(x){return !on[x[0]]}), junk=set.items.filter(function(x){return !x[3]&&on[x[0]]});
+    var sc=Math.round(got.length/must.length*100), m=$('.verdict',body), wasted=junk.reduce(function(a,x){return a+x[2]},0); sent=true;
+    hud(gSec,sc); var ok=L.done(cur,sc); if(!ok)K.stampOff(gSec);
+    $$('.picks button',body).forEach(function(b){var it=set.items.filter(function(x){return x[0]===b.dataset.k})[0]; if(it[3]&&!on[it[0]])b.classList.add('must-miss'); if(!it[3]&&on[it[0]])b.classList.add('junk')});
+    m.hidden=false; m.className='verdict '+(sc===100?'ok':ok?'mid':'no');
+    var h='<b>'+got.length+' / '+must.length+' 項必備，'+sc+' 分。</b>';
+    if(sc===100)h+='必備的全畫了，用了 '+used()+' 分鐘。這就是'+set.lab+'的最低完成標準。';
+    else if(ok)h+='過關了，但還漏一項。';
+    else h+='還沒過，要 '+PASS+' 分。';
+    var li=[]; miss.forEach(function(x){li.push('<li>漏掉「'+x[1]+'」：'+x[4]+'。</li>')});
+    junk.forEach(function(x){li.push('<li>「'+x[1]+'」花了 '+x[2]+' 分鐘：'+x[4]+'。</li>')});
+    if(wasted)li.push('<li>裝飾項目一共用掉 '+wasted+' 分鐘，一分都不會加。</li>');
+    if(li.length)h+='<ul class="sc-res">'+li.join('')+'</ul>';
+    m.innerHTML=h;
+    $('[data-a=next]',body).hidden=!(L.best(cur)>=PASS&&cur<SETS.length-1);
+  }
+  L=K.levels(gSec,{key:'g:sec',names:SETS.map(function(x){return x.nm}),pass:PASS,start:start});
+  $('[data-a=next]',body).hidden=!(L.best(cur)>=PASS&&cur<SETS.length-1);
+})();
+})();
+</script>

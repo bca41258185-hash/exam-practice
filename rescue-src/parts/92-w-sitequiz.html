@@ -1,0 +1,420 @@
+<style>
+.sp-bg{fill:var(--paper);opacity:.88}
+.sp-badl{stroke:var(--bad)!important;stroke-width:2.2!important}
+.sp-mass{fill:var(--blue-soft);stroke:none}
+.sp-mass.bad{fill:var(--badbg)}
+.sp-out{stroke:var(--ink);stroke-width:2.6;fill:none;stroke-linejoin:miter}
+.sp-out.bad{stroke:var(--bad);stroke-width:3}
+.sp-ghost{fill:var(--blue-soft);opacity:.6;stroke:var(--ink);stroke-width:1.4;stroke-dasharray:5 3}
+.sp-hdl circle{fill:var(--mark);stroke:var(--mark-ink);stroke-width:1.5}
+.sp-hdl text{fill:var(--mark-ink)!important;font-size:12px;font-weight:900}
+.sp-hdl.bad circle{fill:var(--bad)}
+.sp-hdl:focus circle{stroke-width:3.4;stroke:var(--ink)}
+[data-d="m"]:focus .sp-out{stroke:var(--mark);stroke-width:3.4}
+[data-d]:focus{outline:none}
+.sp-let circle{fill:var(--ink)}.sp-let text{fill:var(--paper)!important;font-size:13px;font-weight:900}
+.sp-let:hover circle,.sp-let:focus circle{fill:var(--mark)}.sp-let:hover text,.sp-let:focus text{fill:var(--mark-ink)!important}.sp-let:focus{outline:none}
+.sp-let.on circle{fill:var(--mark)}.sp-let.on text{fill:var(--mark-ink)!important}
+.sq-stat{font-family:var(--f-data);font-size:13px;color:var(--mut);margin:4px 0 0}
+#siteQuiz figure,#gSite figure{margin:10px 0}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el;
+
+/* ================= 共用：三塊基地的資料 =================
+   座標單位是公尺，x 往東、y 往南，(0,0) 是基地西北角。 */
+K.siteData=[
+ {id:'lib', name:'例題基地', prog:'社區圖書分館暨樂齡學習中心', W:40, H:50,
+  sides:{S:{road:15,main:1,label:'15 m 計畫道路（主要）',lab:31},
+         W:{road:8,label:'8 m 計畫道路',lab:22},
+         E:{nb:'park',d:12,label:'社區公園'},
+         N:{nb:'house',d:10,label:'4 層集合住宅'}},
+  sb:{N:3,E:3,S:4,W:4},
+  trees:[{x:34.6,y:44.2,r:5.5,label:'老榕樹（保留）'}],
+  bus:{side:'S',t:13,w:8},
+  mass:[{kind:'rect',w:24,h:32,fl:3,floors:'3F＋B1',name:'圖書館'}],
+  spaces:[{side:'E',min:8,kind:'grass',name:'綠帶'},{side:'S',min:8,kind:'tile',name:'入口廣場'},{side:'N',min:6,kind:'trees',name:'樹帶'}],
+  cov:50, far2:160},
+ {id:'cnr', name:'街角基地', prog:'里民活動中心暨托嬰中心', W:48, H:44,
+  sides:{S:{road:20,main:1,label:'20 m 計畫道路（主要，車多）',lab:18},
+         E:{road:12,label:'12 m 計畫道路',lab:33,far:{d:8,label:'國小',gate:8,gw:6}},
+         N:{nb:'house',d:10,label:'3 層透天住宅'},
+         W:{nb:'office',d:10,label:'5 層辦公大樓'}},
+  sb:{N:3,E:4,S:4,W:3},
+  trees:[],
+  mass:[{kind:'rect',w:30,h:14,fl:4,floors:'4F',name:'活動中心'}],
+  spaces:[{side:'N',min:12,kind:'grass',name:'安靜中庭'},{side:'E',min:6,kind:'tile',name:'轉角廣場'}],
+  cov:50, far2:180},
+ {id:'old', name:'老屋基地', prog:'社區藝文中心（保留日式老屋）', W:50, H:44,
+  sides:{W:{road:15,main:1,label:'15 m 計畫道路（主要）',lab:34},
+         S:{road:8,label:'8 m 計畫道路',lab:11},
+         N:{nb:'kinder',d:10,label:'幼兒園'},
+         E:{nb:'house',d:10,label:'5 層集合住宅'}},
+  sb:{N:3,E:3,S:4,W:4},
+  trees:[{x:4.5,y:16.5,r:3.4,label:'老樟樹'}],
+  old:{x:8,y:12,w:14,h:9,buf:4,label:'日式老屋（保留）'},
+  mass:[{kind:'rect',w:40,h:12,fl:3,floors:'3F＋B1',name:'藝文中心',tag:'一字'},
+        {kind:'L',w:32,h:26,t:12,fl:3,floors:'3F＋B1',name:'藝文中心',tag:'L 型'}],
+  spaces:[{side:'N',min:10,kind:'grass',name:'日照綠地'}],
+  cov:50, far2:150}
+];
+
+/* ================= 共用：量體幾何 =================
+   rot 0–3 表示順時針轉 0、90、180、270 度。L 型在 rot 0 時缺角位於西北。 */
+K.siteShape=function(def,rot){
+  var w=def.w, h=def.h, parts, poly;
+  if(def.kind==='L'){var t=def.t; parts=[[0,h-t,w,t],[w-t,0,t,h-t]]; poly=[[0,h-t],[w-t,h-t],[w-t,0],[w,0],[w,h],[0,h]]}
+  else{parts=[[0,0,w,h]]; poly=[[0,0],[w,0],[w,h],[0,h]]}
+  for(var k=0;k<((rot||0)%4+4)%4;k++){ var BH=h;
+    parts=parts.map(function(p){return [BH-p[1]-p[3],p[0],p[3],p[2]]});
+    poly=poly.map(function(p){return [BH-p[1],p[0]]}); var tt=w; w=h; h=tt }
+  return {bw:w,bh:h,parts:parts,poly:poly};
+};
+K.siteMass=function(def,st){
+  var s=K.siteShape(def,st.rot), x=st.x, y=st.y, area=0;
+  var parts=s.parts.map(function(p){area+=p[2]*p[3]; return {x:p[0]+x,y:p[1]+y,w:p[2],h:p[3]}});
+  var poly=s.poly.map(function(p){return [p[0]+x,p[1]+y]});
+  var edges=poly.map(function(a,i){var b=poly[(i+1)%poly.length], dx=b[0]-a[0], dy=b[1]-a[1], n=[Math.sign(dy),-Math.sign(dx)];
+    return {a:a,b:b,len:Math.abs(dx)+Math.abs(dy),n:n,face:n[1]<0?'N':n[1]>0?'S':n[0]>0?'E':'W'}});
+  return {def:def,parts:parts,poly:poly,edges:edges,bb:{x:x,y:y,w:s.bw,h:s.bh},area:area,fl:def.fl};
+};
+/* 量體外框到四條地界的距離 */
+K.siteGaps=function(site,m){var b=m.bb; return {N:b.y,S:site.H-(b.y+b.h),W:b.x,E:site.W-(b.x+b.w)}};
+K.rectDist=function(a,b){var dx=Math.max(0,a.x-(b.x+b.w),b.x-(a.x+a.w)), dy=Math.max(0,a.y-(b.y+b.h),b.y-(a.y+a.h)); return Math.sqrt(dx*dx+dy*dy)};
+K.ptRectDist=function(p,b){var dx=Math.max(0,b.x-p[0],p[0]-(b.x+b.w)), dy=Math.max(0,b.y-p[1],p[1]-(b.y+b.h)); return Math.sqrt(dx*dx+dy*dy)};
+/* 地界上的點：edge 為 N/E/S/W，t 為由西或由北起算的公尺數 */
+K.sitePt=function(site,edge,t){return edge==='N'?[t,0]:edge==='S'?[t,site.H]:edge==='W'?[0,t]:[site.W,t]};
+K.edgePt=function(e,s){var dx=Math.sign(e.b[0]-e.a[0]), dy=Math.sign(e.b[1]-e.a[1]); return [e.a[0]+dx*s,e.a[1]+dy*s]};
+K.faceN={N:[0,-1],S:[0,1],W:[-1,0],E:[1,0]};
+
+/* ================= 共用：專業配置圖 =================
+   var P=K.sitePlan(site,{uid}); svg.setAttribute('viewBox','0 0 720 '+P.vbH); svg.innerHTML=P.render({...})
+   render 參數：mass:{m,bad,attrs}、ghosts:[m]、marks:[{type:'d'|'ld'|'e'|'e2',edge,t 或 pt,face,bad,nolab,hdl:{ch,attrs}}]、
+   spaces:true 自動標示開放空間、hl:{setb:{N:1},tree:{0:1},old:1}、info:[[項目,值,超過]]、top:額外 SVG */
+K.sitePlan=function(site,o){
+  o=o||{}; var D=K.draw(true), W=site.W, H=site.H, SD=['N','E','S','W'], ctx={};
+  SD.forEach(function(s){var d=site.sides[s]; ctx[s]=d.road?d.road+(d.far?d.far.d:0):(d.d||10)});
+  var totW=ctx.W+W+ctx.E, totH=ctx.N+H+ctx.S, NR=!!o.narrow, vbW=NR?400:720, S=Math.round((NR?Math.min(372/totW,500/totH):Math.min(440/totW,470/totH))*100)/100;
+  var fx=14, fy=14, fw=totW*S, fh=totH*S, ox=fx+ctx.W*S, oy=fy+ctx.N*S, cx0=Math.round(fx+fw+24), cw=706-cx0;
+  var vbH=NR?Math.round(fy+fh+238):Math.round(Math.max(fy+fh+14,396)), uid=o.uid||'sp', HR=NR?13:11;
+  function X(m){return ox+m*S} function Y(m){return oy+m*S}
+  function rr(n){return Math.round(n*10)/10}
+  function rect(x,y,w,h,cls,extra){return '<rect x="'+rr(X(x))+'" y="'+rr(Y(y))+'" width="'+rr(w*S)+'" height="'+rr(h*S)+'"'+(cls?' class="'+cls+'"':'')+(extra||'')+'/>'}
+  function hatch(x,y,w,h,kind,op){return '<rect x="'+rr(X(x))+'" y="'+rr(Y(y))+'" width="'+rr(w*S)+'" height="'+rr(h*S)+'" fill="'+D.fill(kind)+'" stroke="none"'+(op?' opacity="'+op+'"':'')+'/>'}
+  function tw(t,fs){var w=0; for(var i=0;i<t.length;i++)w+=t.charCodeAt(i)>255?fs:fs*.6; return w}
+  function line(a,b,cls){return '<path d="M'+rr(X(a[0]))+' '+rr(Y(a[1]))+' L'+rr(X(b[0]))+' '+rr(Y(b[1]))+'" class="'+cls+'"/>'}
+  /* 有底色的文字標籤，(x,y) 為 px 中心 */
+  function lab(x,y,t,cls,rot,fs){cls=cls||'t-area'; fs=fs||(cls==='t-room'?11:9.5); var w=tw(t,fs)+6, h=fs+4, tr=rot?' transform="rotate('+rot+' '+rr(x)+' '+rr(y)+')"':'';
+    return '<g'+tr+'><rect x="'+rr(x-w/2)+'" y="'+rr(y-h/2)+'" width="'+rr(w)+'" height="'+rr(h)+'" class="sp-bg"/><text x="'+rr(x)+'" y="'+rr(y+fs*.36)+'" text-anchor="middle" class="'+cls+'"'+(cls==='t-area'?' style="fill:var(--ink)"':'')+(fs!==11&&cls==='t-room'?' style="font-size:'+fs+'px"':'')+'>'+t+'</text></g>'}
+  /* 沿某一側的矩形（公尺）：a 沿地界，d 為離地界的深度 */
+  function band(s,a0,a1,d0,d1){ if(s==='N')return [a0,-d1,a1-a0,d1-d0]; if(s==='S')return [a0,H+d0,a1-a0,d1-d0]; if(s==='W')return [-d1,a0,d1-d0,a1-a0]; return [W+d0,a0,d1-d0,a1-a0]}
+  function bpt(s,a,d){return s==='N'?[a,-d]:s==='S'?[a,H+d]:s==='W'?[-d,a]:[W+d,a]}
+  function isRoad(s){return !!site.sides[s].road}
+  function perp(s){return (s==='N'||s==='S')?['W','E']:['N','S']}
+  function alongLen(s){return (s==='N'||s==='S')?W:H}
+  /* 道路沿線範圍到路口為止；鄰地的角落交給南北兩側 */
+  function inner(s){var p=perp(s); return [isRoad(p[0])?0:-ctx[p[0]], isRoad(p[1])?alongLen(s):alongLen(s)+ctx[p[1]]]}
+  function nbRange(s){ if(s==='E'||s==='W')return [0,H]; return inner(s)}
+
+  function neighbour(s){var d=site.sides[s], g=nbRange(s), a0=g[0], a1=g[1], dd=ctx[s], h='', vert=(s==='E'||s==='W');
+    var c=bpt(s,(a0+a1)/2,dd/2);
+    if(d.nb==='park'){ var r=band(s,a0,a1,0,dd); h+=hatch(r[0],r[1],r[2],r[3],'grass');
+      var q0=bpt(s,a0,dd*.62), q1=bpt(s,(a0+a1)/2,dd*.25), q2=bpt(s,a1,dd*.55);
+      h+='<path d="M'+rr(X(q0[0]))+' '+rr(Y(q0[1]))+' Q'+rr(X(q1[0]))+' '+rr(Y(q1[1]))+' '+rr(X(q2[0]))+' '+rr(Y(q2[1]))+'" class="lw-thin" style="stroke-width:7;stroke:var(--line);opacity:.8"/>';
+      var i=0; for(var a=a0+5;a<a1-3;a+=10.5){var tp=bpt(s,a,i++%2?dd*.74:dd*.3); h+=D.tree(X(tp[0]),Y(tp[1]),2.8*S)}
+      h+=lab(X(c[0]),Y(c[1]),d.label,'t-room',vert?-90:0) }
+    else if(d.nb==='kinder'){ var pg=band(s,a0+3,a1-3,1.5,dd*.5), kb=band(s,a0+3,a1-3,dd*.58,dd+2); h+=hatch(pg[0],pg[1],pg[2],pg[3],'grass')+rect(pg[0],pg[1],pg[2],pg[3],'lw-thin');
+      h+=hatch(kb[0],kb[1],kb[2],kb[3],'hatch',.3)+rect(kb[0],kb[1],kb[2],kb[3],'lw-vis');
+      var c1=bpt(s,(a0+a1)/2,dd*.27), c2=bpt(s,(a0+a1)/2,dd*.82); h+=lab(X(c1[0]),Y(c1[1]),'遊戲場（朝南）','t-area')+lab(X(c2[0]),Y(c2[1]),'2F '+d.label,'t-room') }
+    else { var off=d.nb==='office', seg=off?(a1-a0-4):15, a=a0+(off?2:1);
+      while(a<a1-4){var e=Math.min(a+seg,a1-1); var r2=band(s,a,e,1.5,dd+2); h+=hatch(r2[0],r2[1],r2[2],r2[3],'hatch',.3)+rect(r2[0],r2[1],r2[2],r2[3],'lw-vis'); a=e+4}
+      h+=lab(X(c[0]),Y(c[1]),d.label,'t-room',vert?-90:0) }
+    return h }
+
+  function road(s){var d=site.sides[s], p=perp(s), full=[-ctx[p[0]],alongLen(s)+ctx[p[1]]], r=band(s,full[0],full[1],0,d.road), h='', vert=(s==='E'||s==='W'), g=inner(s), c0=g[0], c1=g[1];
+    if(!isRoad(p[0]))c0=full[0]; if(!isRoad(p[1]))c1=full[1];
+    h+=rect(r[0],r[1],r[2],r[3],'f-line')+hatch(r[0],r[1],r[2],r[3],'road');
+    h+=line(bpt(s,c0,d.road/2),bpt(s,c1,d.road/2),'lw-axis');
+    h+=line(bpt(s,c0,0),bpt(s,c1,0),'lw-vis');
+    h+=line(bpt(s,c0,2.5),bpt(s,c1,2.5),'lw-thin');
+    if(!d.far)h+=line(bpt(s,c0,d.road),bpt(s,c1,d.road),'lw-vis');
+    var lp=bpt(s,d.lab!=null?d.lab:alongLen(s)/2,d.road*.7); h+=lab(X(lp[0]),Y(lp[1]),d.label,'t-dim',vert?-90:0,10);
+    if(d.far){var f=d.far, fr=band(s,c0,c1,d.road,d.road+f.d), gt=f.gate, gw=f.gw||6;
+      h+=hatch(fr[0],fr[1],fr[2],fr[3],'grass',.7);
+      var A=bpt(s,c0,d.road+.4), B=bpt(s,gt-gw/2,d.road+.4), C=bpt(s,gt+gw/2,d.road+.4), E=bpt(s,c1,d.road+.4);
+      h+='<path d="M'+rr(X(A[0]))+' '+rr(Y(A[1]))+' L'+rr(X(B[0]))+' '+rr(Y(B[1]))+' M'+rr(X(C[0]))+' '+rr(Y(C[1]))+' L'+rr(X(E[0]))+' '+rr(Y(E[1]))+'" class="lw-out" style="stroke-dasharray:3 2"/>';
+      [B,C].forEach(function(q){h+='<rect x="'+rr(X(q[0])-2.5)+'" y="'+rr(Y(q[1])-2.5)+'" width="5" height="5" class="poche"/>'});
+      for(var z=1;z<d.road-.5;z+=1.25){var zr=band(s,gt-2.2,gt+2.2,z,z+.6); h+='<rect x="'+rr(X(zr[0]))+'" y="'+rr(Y(zr[1]))+'" width="'+rr(zr[2]*S)+'" height="'+rr(zr[3]*S)+'" style="fill:var(--ink);opacity:.5"/>'}
+      var gl=bpt(s,gt,d.road+f.d*.5); h+=lab(X(gl[0]),Y(gl[1]),'校門','t-area',vert?-90:0);
+      var fl=bpt(s,(gt+gw/2+c1)/2+2,d.road+f.d*.5); h+=lab(X(fl[0]),Y(fl[1]),f.label,'t-room',vert?-90:0) }
+    return h }
+
+  /* 自動標示的開放空間：量體與地界之間夠寬的一側 */
+  function spaceRect(sp,m,g){var b=m.bb; if(sp.side==='N')return [0,0,W,g]; if(sp.side==='S')return [0,b.y+b.h,W,g]; if(sp.side==='E')return [b.x+b.w,b.y,g,b.h]; return [0,b.y,g,b.h]}
+  /* 標籤位置：在候選點中挑離入口、車道、樹最遠的一個（公尺） */
+  var OBS=[];
+  function spacePos(sp,m,gaps){var b=m.bb, g=gaps[sp.side], t=sp.name+' '+g+' m', vert=sp.side==='E'||sp.side==='W', rot=vert&&g<15, hw=(tw(t,11)/2+5)/S, c=[];
+    if(!vert){var y=sp.side==='N'?g*(sp.kind==='trees'?.8:.5):H-g/2; [.5,.3,.7,.15,.85].forEach(function(f){c.push([b.x+b.w*f,y])}); c.push([b.x/2,y]); c.push([(b.x+b.w+W)/2,y]);
+      c=c.map(function(q){return [clamp(q[0],hw+.5,W-hw-.5),q[1]]})}
+    else {var x=sp.side==='E'?W-g/2:g/2; [.5,.3,.7,.2,.8].forEach(function(f){c.push([x,b.y+b.h*f])}); if(rot)c=c.map(function(q){return [q[0],clamp(q[1],b.y+hw,b.y+b.h-hw)]})}
+    var best=c[0], bs=-1e9; c.forEach(function(q){var sc=1e9; OBS.forEach(function(o){var dx=Math.max(0,Math.abs(q[0]-o[0])-(rot?1.2:hw)), dy=Math.max(0,Math.abs(q[1]-o[1])-(rot?hw:1.2)); sc=Math.min(sc,Math.hypot(dx,dy)-o[2])}); if(sc>bs+.5){bs=sc;best=q}});
+    return {x:best[0],y:best[1],rot:rot,t:t,hw:hw}}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+  function spaceStrip(sp,m,gaps){var g=gaps[sp.side]; if(g<sp.min)return ''; var r=spaceRect(sp,m,g), h=hatch(r[0],r[1],r[2],r[3],sp.kind==='tile'?'tile':'grass');
+    if(sp.kind==='tile')h+=hatch(r[0],r[1],r[2],r[3],'conc');
+    if(sp.kind==='trees'){var lp=spacePos(sp,m,gaps), n=Math.floor((r[2]-2)/6.5), tr=Math.min(2.6,g/2.4); for(var i=0;i<n;i++){var tx=r[0]+4+i*6.5; if(Math.abs(tx-lp.x)<lp.hw+tr&&Math.abs(r[1]+r[3]*.42-lp.y)<tr+1.4)continue; var ty=r[1]+r[3]*.42; if(OBS.some(function(o){return o[2]<5&&Math.hypot(tx-o[0],ty-o[1])<tr+o[2]}))continue; h+=D.tree(X(tx),Y(r[1]+r[3]*.42),tr*S)}}
+    return h }
+  function spaceLabel(sp,m,gaps){var g=gaps[sp.side]; if(g<sp.min)return ''; var q=spacePos(sp,m,gaps); return lab(X(q.x),Y(q.y),q.t,'t-room',q.rot?-90:0,11) }
+  /* 量體到地界的尺寸（mm） */
+  function gapDims(m,gaps,spc){var h='', named={}; if(spc)(site.spaces||[]).forEach(function(sp){ if(gaps[sp.side]>=sp.min)named[sp.side]=1 });
+    SD.forEach(function(s){var g=gaps[s]; if(g<=0||named[s])return; var part=m.parts.slice().sort(function(p,q){return s==='N'?p.y-q.y:s==='S'?(q.y+q.h)-(p.y+p.h):s==='W'?p.x-q.x:(q.x+q.w)-(p.x+p.w)})[0], t=String(Math.round(g*1000));
+      if(s==='N'){var x=part.x+Math.min(3,part.w*.15); h+=D.dim(X(x),Y(0),X(x),Y(part.y),t,0)}
+      else if(s==='S'){var x2=part.x+Math.min(3,part.w*.15); h+=D.dim(X(x2),Y(part.y+part.h),X(x2),Y(H),t,0)}
+      else if(s==='W'){var y=part.y+part.h-Math.min(3,part.h*.15); h+=D.dim(X(0),Y(y),X(part.x),Y(y),t,0)}
+      else {var y2=part.y+Math.min(3,part.h*.15); h+=D.dim(X(part.x+part.w),Y(y2),X(W),Y(y2),t,0)} });
+    return h }
+
+  function massSvg(m,bad,attrs,ghost){var h='<g'+(attrs||'')+'>';
+    if(ghost){m.parts.forEach(function(p){h+=rect(p.x,p.y,p.w,p.h,'sp-ghost')}); return h+'</g>'}
+    m.parts.forEach(function(p){h+=rect(p.x,p.y,p.w,p.h,'sp-mass'+(bad?' bad':''))});
+    /* 柱位軸線（8 m） */
+    m.parts.forEach(function(p){ var gx, gy;
+      for(gx=m.bb.x+Math.ceil((p.x-m.bb.x+.01)/8)*8; gx<p.x+p.w-.5; gx+=8)h+='<path d="M'+rr(X(gx))+' '+rr(Y(p.y))+' V'+rr(Y(p.y+p.h))+'" class="lw-axis"/>';
+      for(gy=m.bb.y+Math.ceil((p.y-m.bb.y+.01)/8)*8; gy<p.y+p.h-.5; gy+=8)h+='<path d="M'+rr(X(p.x))+' '+rr(Y(gy))+' H'+rr(X(p.x+p.w))+'" class="lw-axis"/>' });
+    /* 女兒牆內緣 */
+    var n=m.poly.length, inn=m.poly.map(function(v,i){var e1=m.edges[(i-1+n)%n].n, e2=m.edges[i].n; return [v[0]-.7*(e1[0]+e2[0]),v[1]-.7*(e1[1]+e2[1])]});
+    function pth(pl){return pl.map(function(v,i){return (i?'L':'M')+rr(X(v[0]))+' '+rr(Y(v[1]))}).join(' ')+' Z'}
+    h+='<path d="'+pth(inn)+'" class="lw-thin"/><path d="'+pth(m.poly)+'" class="sp-out'+(bad?' bad':'')+'"/>';
+    var big=m.parts.slice().sort(function(p,q){return q.w*q.h-p.w*p.h})[0], cxm=X(big.x+big.w/2), cym=Y(big.y+big.h/2);
+    h+=lab(cxm,cym-7,m.def.name,'t-room')+lab(cxm,cym+9,m.def.floors+'　'+m.area+' ㎡','t-area');
+    return h+'</g>' }
+
+  function inward(e){return e==='N'?[0,1]:e==='S'?[0,-1]:e==='W'?[1,0]:[-1,0]}
+  var HD=[];
+  function handle(x,y,ch,attrs,bad){HD.push('<g class="sp-hdl drag'+(bad?' bad':'')+'"'+(attrs||'')+'><circle cx="'+rr(x)+'" cy="'+rr(y)+'" r="'+HR+'"/><text x="'+rr(x)+'" y="'+rr(y+4.2)+'" text-anchor="middle">'+ch+'</text></g>'); return ''}
+  function drive(mk){var p=K.sitePt(site,mk.edge,mk.t), n=inward(mk.edge), tg=[Math.abs(n[1]),Math.abs(n[0])], h='', ld=mk.type==='ld', wd=ld?4:6, dep=ld?9:6, cls='lw-vis'+(mk.bad?' sp-badl':'');
+    function box(d0,d1){var a=[p[0]-tg[0]*wd/2+n[0]*d0,p[1]-tg[1]*wd/2+n[1]*d0], b=[p[0]+tg[0]*wd/2+n[0]*d1,p[1]+tg[1]*wd/2+n[1]*d1]; return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1])]}
+    var ap=box(-2.5,0), ins=box(0,dep);
+    h+=hatch(ap[0],ap[1],ap[2],ap[3],'conc')+rect(ins[0],ins[1],ins[2],ins[3],'f-void')+hatch(ins[0],ins[1],ins[2],ins[3],ld?'tile':'conc');
+    if(ld){h+=rect(ins[0],ins[1],ins[2],ins[3],cls,' style="stroke-dasharray:4 2"')+line([p[0]-tg[0]*wd/2,p[1]-tg[1]*wd/2],[p[0]+tg[0]*wd/2+n[0]*dep,p[1]+tg[1]*wd/2+n[1]*dep],'lw-thin')}
+    else{ [-1,1].forEach(function(sg){var c=[p[0]+tg[0]*sg*wd/2,p[1]+tg[1]*sg*wd/2]; h+=line([c[0]-n[0]*2.5,c[1]-n[1]*2.5],[c[0]+n[0]*dep,c[1]+n[1]*dep],cls)});
+      [-1,1].forEach(function(sg){var b0=[p[0]+tg[0]*sg*1.4-n[0]*1.6,p[1]+tg[1]*sg*1.4-n[1]*1.6], b1=[b0[0]+n[0]*(dep),b0[1]+n[1]*(dep)]; if(sg>0){var t=b0;b0=b1;b1=t}
+        var A=Math.atan2(b1[1]-b0[1],b1[0]-b0[0]), ex=X(b1[0]), ey=Y(b1[1]);
+        h+='<path d="M'+rr(X(b0[0]))+' '+rr(Y(b0[1]))+' L'+rr(ex)+' '+rr(ey)+' M'+rr(ex-6*Math.cos(A-.45))+' '+rr(ey-6*Math.sin(A-.45))+' L'+rr(ex)+' '+rr(ey)+' L'+rr(ex-6*Math.cos(A+.45))+' '+rr(ey-6*Math.sin(A+.45))+'" class="lw-thin"/>'}) }
+    if(!mk.nolab){var lp=[p[0]-n[0]*(mk.hdl?5.8:5),p[1]-n[1]*(mk.hdl?5.8:5)], vert=mk.edge==='E'||mk.edge==='W'; h+=lab(X(lp[0]),Y(lp[1]),ld?'卸貨':'車道出入口','t-area',vert?-90:0)}
+    if(mk.hdl)h+=handle(X(p[0]),Y(p[1]),mk.hdl.ch,mk.hdl.attrs,mk.bad);
+    return h }
+  function entry(mk){var n=K.faceN[mk.face], p=mk.pt, rot=mk.face==='N'?180:mk.face==='S'?0:mk.face==='W'?90:-90, h='', main=mk.type!=='e2';
+    var tp=[p[0]+n[0]*1.2,p[1]+n[1]*1.2];
+    h+='<path d="M0 -7 L6 5 L-6 5 Z" class="'+(main?'poche':'lw-vis f-void')+'" transform="translate('+rr(X(tp[0]))+','+rr(Y(tp[1]))+') rotate('+rot+')"'+(mk.bad?(main?' style="fill:var(--bad)"':' style="stroke:var(--bad)"'):'')+'/>';
+    var vert=mk.face==='E'||mk.face==='W', lt=main?'主入口':'次入口';
+    if(mk.hdl){var hp=[p[0]+n[0]*4.2,p[1]+n[1]*4.2], lp=vert?[hp[0],hp[1]-3.4]:[hp[0]+5.4,hp[1]]; if(!mk.nolab)h+=lab(X(lp[0]),Y(lp[1]),lt,'t-area'); h+=handle(X(hp[0]),Y(hp[1]),mk.hdl.ch,mk.hdl.attrs,mk.bad)}
+    else if(!mk.nolab){var lq=[p[0]+n[0]*3.8,p[1]+n[1]*3.8]; h+=lab(X(lq[0]),Y(lq[1]),lt,'t-area')}
+    return h }
+
+  /* 窄螢幕：圖說放在圖的下方 */
+  function sideN(info){var h='', x=14, r=386, y=Math.round(fy+fh+14), c2=x+190, i;
+    h+='<text x="'+x+'" y="'+(y+14)+'" class="t-ttl" style="font-size:12px">'+site.name+'</text><text x="'+(x+70)+'" y="'+(y+14)+'" class="t-area" style="fill:var(--ink)">'+site.W+' × '+site.H+' m</text>';
+    h+=D.north(r-18,y+22,14)+D.scale(x,y+26,S,[0,5,10,20]);
+    y+=60; h+='<text x="'+x+'" y="'+y+'" class="t-axis">計畫概要</text><path d="M'+x+' '+(y+5)+' H'+r+'" class="lw-vis"/>'; y+=5;
+    (info||[]).forEach(function(row,k){var cx=k%2?c2:x, cr=k%2?r:c2-12, yy=y+Math.floor(k/2)*18;
+      h+='<text x="'+cx+'" y="'+(yy+13)+'" class="t-area">'+row[0]+'</text><text x="'+cr+'" y="'+(yy+13)+'" text-anchor="end" class="t-dim"'+(row[2]?' style="fill:var(--bad)"':'')+'>'+row[1]+'</text><path d="M'+cx+' '+(yy+18)+' H'+cr+'" class="lw-thin" style="opacity:.5"/>'});
+    y+=Math.ceil((info||[]).length/2)*18+20;
+    var items=[['<path d="M0 0 h26" class="lw-site"/>','地界線'],['<path d="M0 0 h26" class="lw-setb"/>','退縮線'],['<path d="M8 -6 L13 4 L3 4 Z" class="poche"/>','主入口'],['<path d="M8 -6 L13 4 L3 4 Z" class="lw-vis"/>','次入口'],['<rect y="-5" width="26" height="10" class="lw-thin f-ok"/><rect y="-5" width="26" height="10" fill="'+D.fill('grass')+'"/>','綠地'],['<rect y="-5" width="26" height="10" class="lw-thin" fill="'+D.fill('conc')+'"/>','鋪面']];
+    for(i=0;i<items.length;i++){var ix=x+(i%3)*126, iy=y+Math.floor(i/3)*17; h+='<g transform="translate('+ix+','+iy+')">'+items[i][0]+'</g><text x="'+(ix+32)+'" y="'+(iy+3)+'" class="t-area">'+items[i][1]+'</text>'}
+    h+=D.title(200,vbH-30,'配置圖','1/500')+'<text x="200" y="'+(vbH-10)+'" text-anchor="middle" class="t-area">'+site.prog+'</text>';
+    return h }
+  function side(info){ if(NR)return sideN(info); var h='', x=cx0, r=706, y;
+    h+=D.north(r-20,40,15);
+    h+='<text x="'+x+'" y="32" class="t-ttl" style="font-size:12px">'+site.name+'</text><text x="'+x+'" y="48" class="t-area" style="fill:var(--ink)">'+site.W+' × '+site.H+' m</text>';
+    h+=D.scale(x,64,S,[0,5,10,20]);
+    y=106; h+='<text x="'+x+'" y="'+y+'" class="t-axis">計畫概要</text><path d="M'+x+' '+(y+5)+' H'+r+'" class="lw-vis"/>'; y+=5;
+    (info||[]).forEach(function(row){h+='<text x="'+x+'" y="'+(y+13)+'" class="t-area">'+row[0]+'</text><text x="'+r+'" y="'+(y+13)+'" text-anchor="end" class="t-dim"'+(row[2]?' style="fill:var(--bad)"':'')+'>'+row[1]+'</text><path d="M'+x+' '+(y+18)+' H'+r+'" class="lw-thin" style="opacity:.5"/>'; y+=18});
+    y+=24; var hx=x+Math.round(cw/2);
+    h+='<text x="'+x+'" y="'+y+'" class="t-axis">圖例</text><path d="M'+x+' '+(y+5)+' H'+r+'" class="lw-vis"/>'; y+=20;
+    h+='<path d="M'+x+' '+y+' h30" class="lw-site"/><text x="'+(x+36)+'" y="'+(y+3)+'" class="t-area">地界線</text>';
+    h+='<path d="M'+hx+' '+y+' h30" class="lw-setb"/><text x="'+(hx+36)+'" y="'+(y+3)+'" class="t-area">退縮線</text>'; y+=18;
+    h+='<path d="M0 -6 L5 4 L-5 4 Z" class="poche" transform="translate('+(x+15)+','+y+')"/><text x="'+(x+36)+'" y="'+(y+3)+'" class="t-area">主入口</text>';
+    h+='<path d="M0 -6 L5 4 L-5 4 Z" class="lw-vis" transform="translate('+(hx+15)+','+y+')"/><text x="'+(hx+36)+'" y="'+(y+3)+'" class="t-area">次入口</text>'; y+=18;
+    h+='<rect x="'+x+'" y="'+(y-6)+'" width="30" height="11" class="lw-thin f-ok"/><rect x="'+x+'" y="'+(y-6)+'" width="30" height="11" fill="'+D.fill('grass')+'"/><text x="'+(x+36)+'" y="'+(y+3)+'" class="t-area">綠地</text>';
+    h+='<rect x="'+hx+'" y="'+(y-6)+'" width="30" height="11" class="lw-thin" fill="'+D.fill('conc')+'"/><rect x="'+hx+'" y="'+(y-6)+'" width="30" height="11" fill="'+D.fill('tile')+'"/><text x="'+(hx+36)+'" y="'+(y+3)+'" class="t-area">鋪面</text>';
+    h+=D.title(x+cw/2,vbH-34,'配置圖','1/500');
+    h+='<text x="'+rr(x+cw/2)+'" y="'+(vbH-13)+'" text-anchor="middle" class="t-area">'+site.prog+'</text>';
+    return h }
+
+  return {S:S,X:X,Y:Y,vbH:vbH,vbW:vbW,D:D,lab:lab,ox:ox,oy:oy,
+    /* svg 座標換成基地公尺 */
+    toM:function(p){return [(p.x-ox)/S,(p.y-oy)/S]},
+    letter:function(x,y,k,attrs,on){return '<g class="sp-let'+(on?' on':'')+'"'+(attrs||'')+' style="cursor:pointer"><circle cx="'+rr(X(x))+'" cy="'+rr(Y(y))+'" r="12"/><text x="'+rr(X(x))+'" y="'+rr(Y(y)+4.6)+'" text-anchor="middle">'+k+'</text></g>'},
+    render:function(a){a=a||{}; var hl=a.hl||{}, h='', mass=a.mass||null; HD=[];
+      h+='<defs><clipPath id="'+uid+'-clip"><rect x="'+fx+'" y="'+fy+'" width="'+rr(fw)+'" height="'+rr(fh)+'"/></clipPath></defs><g clip-path="url(#'+uid+'-clip)">';
+      SD.forEach(function(s){ if(!isRoad(s))h+=neighbour(s) });
+      ['N','S','E','W'].forEach(function(s){ if(isRoad(s))h+=road(s) });
+      if(site.bus){var bs=site.bus, br=band(bs.side,bs.t,bs.t+bs.w,.6,2.1); h+=rect(br[0],br[1],br[2],br[3],'lw-vis f-void'); var bl=bpt(bs.side,bs.t+bs.w/2,4); h+=lab(X(bl[0]),Y(bl[1]),'公車站','t-area')}
+      h+='</g>';
+      var m0=mass&&mass.m, gaps=m0?K.siteGaps(site,m0):null;
+      OBS=(site.trees||[]).map(function(t){return [t.x,t.y,t.r]});
+      (a.marks||[]).forEach(function(mk){ if(mk.type==='d'||mk.type==='ld'){var q=K.sitePt(site,mk.edge,mk.t), n=inward(mk.edge); OBS.push([q[0]+n[0]*3,q[1]+n[1]*3,3])} else {var f=K.faceN[mk.face]; OBS.push([mk.pt[0]+f[0]*3,mk.pt[1]+f[1]*3,mk.hdl?4:2.5])} });
+      if(a.spaces&&m0)(site.spaces||[]).forEach(function(sp){h+=spaceStrip(sp,m0,gaps)});
+      h+=a.under||'';
+      if(site.old){var od=site.old, b=od.buf; h+=rect(od.x-b,od.y-b,od.w+2*b,od.h+2*b,'lw-hid'+(hl.old?' sp-badl':''));
+        h+=rect(od.x,od.y,od.w,od.h,'f-void')+hatch(od.x,od.y,od.w,od.h,'hatch',.35)+rect(od.x,od.y,od.w,od.h,'lw-out');
+        var e=od.h/2; h+='<path d="M'+rr(X(od.x))+' '+rr(Y(od.y))+' L'+rr(X(od.x+e))+' '+rr(Y(od.y+e))+' L'+rr(X(od.x))+' '+rr(Y(od.y+od.h))+' M'+rr(X(od.x+od.w))+' '+rr(Y(od.y))+' L'+rr(X(od.x+od.w-e))+' '+rr(Y(od.y+e))+' L'+rr(X(od.x+od.w))+' '+rr(Y(od.y+od.h))+' M'+rr(X(od.x+e))+' '+rr(Y(od.y+e))+' H'+rr(X(od.x+od.w-e))+'" class="lw-vis"/>';
+        h+=lab(X(od.x+od.w/2),Y(od.y+od.h*.72),od.label,'t-area');
+        h+='<text x="'+rr(X(od.x-b)+3)+'" y="'+rr(Y(od.y-b)-4)+'" class="t-dim"'+(hl.old?' style="fill:var(--bad)"':'')+'>保存範圍 '+b+' m</text>'}
+      (a.marks||[]).forEach(function(mk){ if(mk.type==='d'||mk.type==='ld')h+=drive(mk) });
+      (a.ghosts||[]).forEach(function(g){h+=massSvg(g,false,'',true)});
+      if(mass)h+=massSvg(mass.m,mass.bad,mass.attrs);
+      if(site.old&&hl.old)h+=rect(site.old.x,site.old.y,site.old.w,site.old.h,'lw-out sp-badl',' style="stroke-dasharray:6 3"');
+      (site.trees||[]).forEach(function(t,i){h+=D.tree(X(t.x),Y(t.y),t.r*S); if(hl.tree&&hl.tree[i])h+='<circle cx="'+rr(X(t.x))+'" cy="'+rr(Y(t.y))+'" r="'+rr(t.r*S+3)+'" class="sp-badl" style="fill:none;stroke-dasharray:4 3"/>';
+        h+=lab(X(t.x),Y(t.y)-t.r*S-8,t.label,'t-area')});
+      var sb=site.sb; [['N',sb.W,sb.N,W-sb.E,sb.N],['S',sb.W,H-sb.S,W-sb.E,H-sb.S],['W',sb.W,sb.N,sb.W,H-sb.S],['E',W-sb.E,sb.N,W-sb.E,H-sb.S]].forEach(function(l){
+        h+=line([l[1],l[2]],[l[3],l[4]],'lw-setb'+(hl.setb&&hl.setb[l[0]]?' sp-badl':''))});
+      h+=rect(0,0,W,H,'lw-site');
+      if(m0&&a.dims!==false)h+=gapDims(m0,gaps,a.spaces);
+      if(a.spaces&&m0)(site.spaces||[]).forEach(function(sp){h+=spaceLabel(sp,m0,gaps)});
+      (a.marks||[]).forEach(function(mk){ if(mk.type==='e'||mk.type==='e2')h+=entry(mk) });
+      h+='<rect x="'+fx+'" y="'+fy+'" width="'+rr(fw)+'" height="'+rr(fh)+'" class="lw-thin"/>';
+      h+=(a.over||'')+side(a.info)+HD.join('')+(a.top||'');
+      return h }
+  };
+};
+/* 窄螢幕改用直式配置圖 */
+K.narrowPlan=function(){return (window.innerWidth||1000)<640};
+/* 計畫概要表 */
+K.siteInfo=function(site,m){var A=site.W*site.H, rows=[['基地面積',A.toLocaleString()+' ㎡']];
+  if(!m)return rows.concat([['建蔽率上限',site.cov+'%'],['容積率上限',site.far2+'%'],['建築量體',site.mass.map(function(d){return d.kind==='L'?'L 型':d.w+'×'+d.h+' m'}).join('／')]]);
+  var cov=m.area/A*100, fa=m.area*m.fl, far=fa/A*100;
+  return rows.concat([['建築面積',m.area.toLocaleString()+' ㎡'],['建蔽率',cov.toFixed(1)+'%（≤'+site.cov+'%）',cov>site.cov],['樓層',m.def.floors],['地上樓地板',fa.toLocaleString()+' ㎡'],['容積率',Math.round(far)+'%（≤'+site.far2+'%）',far>site.far2]])};
+
+/* ================= 基地四決定 ================= */
+(function(){
+  var box=$('#siteQuiz'); if(!box)return;
+  var SITES=K.siteData;
+  /* 每塊基地四個決定。at：地界上的位置；m：量體；e：入口所在的面（面名或邊的序號）與位置比例；lp：字母位置 */
+  var Q=[
+   [ {p:'車道出入口開在哪裡？',kind:'drive',pts:[
+       {k:'A',at:['S',9],t:'南側 15 m 道路，公車站旁',why:'主要道路車多人多，旁邊就是公車站，車輛進出會和上下車的人衝突。'},
+       {k:'B',at:['W',47],t:'西側 8 m 道路，貼近西南路口',why:'路口 5 m 內不能設車道出入口，轉彎的車看不到進出的車。'},
+       {k:'C',at:['W',6],t:'西側 8 m 道路北段',ok:1,why:'次要道路、離路口最遠、離公車站和主要人流也最遠，車從這裡沿北側下地下室。'},
+       {k:'D',at:['E',14],t:'東側，從公園進來',why:'公園不是道路，車不能從公園進出。'}]},
+     {p:'24 × 32 m 的量體放在哪裡？',kind:'mass',pts:[
+       {k:'A',m:{type:0,rot:0,x:4,y:7},lp:[12,17],t:'靠西，北側退 7 m，東側留 12 m',ok:1,why:'東側留出 12 m 綠帶接公園，北側多退讓住宅，南側留 11 m 入口廣場，也避開老榕樹。'},
+       {k:'B',m:{type:0,rot:0,x:13,y:7},lp:[31,22],t:'靠東，貼著公園',why:'貼著公園等於擋住連接，西側剩下的空地臨路又西曬，而且壓到老榕樹的樹冠。'},
+       {k:'C',m:{type:0,rot:1,x:4,y:3},lp:[20,10],t:'轉 90 度橫放，貼北側',why:'離北側住宅只有 3 m，壓迫感最大，題目要求的退讓完全沒做到。'},
+       {k:'D',m:{type:0,rot:0,x:8,y:9},lp:[20,33],t:'放正中央，四周平均留空',why:'四周各剩一小條，沒有一塊夠大的開放空間，也沒有回應任何一側鄰地。'}]},
+     {p:'行人主入口開在量體的哪一面？',kind:'entry',pts:[
+       {k:'A',e:['S',.5],t:'南面，朝向 15 m 道路和公車站',ok:1,why:'主要人流從南邊來，入口前有 11 m 的廣場可以緩衝和停留。'},
+       {k:'B',e:['W',.5],t:'西面，朝向 8 m 道路',why:'可以當夜間或次要入口，但不是主要人流方向，而且靠近車道。'},
+       {k:'C',e:['N',.5],t:'北面，朝向住宅',why:'人要繞到建築背後，會干擾北側住戶，車道也在這一側。'},
+       {k:'D',e:['E',.5],t:'東面，朝向公園',why:'很適合做次要入口連接公園，但從街上看不到，不適合當主入口。'}]},
+     {p:'剩下的空地怎麼安排？',kind:'space',pts:[
+       {k:'A',t:'四周平均種一圈樹當緩衝',why:'空地被切成四條，每條都只能走路，沒有一塊能辦活動。'},
+       {k:'B',t:'南側做入口廣場，東側做綠帶接公園並包住老榕樹，北側密植喬木',ok:1,why:'每塊空地都有名字和用途，各自回應一個議題：廣場接人流、綠帶接公園、樹帶護住宅。'},
+       {k:'C',t:'全部鋪成地面停車場，方便使用者',why:'題目要求地下停車，空地拿來停車等於放棄回應所有議題。'}]} ],
+   [ {p:'車道出入口開在哪裡？',kind:'drive',pts:[
+       {k:'A',at:['S',24],t:'南側 20 m 道路中段',why:'20 m 道路車速快、車流大，車子減速轉進基地會擋住後面的車。'},
+       {k:'B',at:['E',40],t:'東側 12 m 道路，貼近街角',why:'離街角只有 4 m，轉彎進來的車和停等紅燈的車搶同一段路。'},
+       {k:'C',at:['E',24],t:'東側 12 m 道路中段',ok:1,why:'次要道路，離街角 20 m、離國小校門 16 m，進出不卡車也不卡學生。'},
+       {k:'D',at:['E',8],t:'東側 12 m 道路，正對國小校門',why:'上下學時學生和接送家長都在校門口過馬路，車道開在這裡最危險。'}]},
+     {p:'30 × 14 m 的量體放在哪裡？',kind:'mass',pts:[
+       {k:'A',m:{type:0,rot:0,x:10,y:26},lp:[20,33],t:'長邊沿南側 20 m 道路排開',ok:1,why:'量體自己擋住車聲，北側留出 26 m 深的安靜中庭給托嬰，東側讓出 8 m 轉角廣場。'},
+       {k:'B',m:{type:0,rot:0,x:10,y:3},lp:[20,10],t:'貼北側，南邊留大空地',why:'南邊整片空地直接面對車聲，透天住宅反而被壓在建築背後。'},
+       {k:'C',m:{type:0,rot:1,x:30,y:12},lp:[37,20],t:'轉成南北向，靠東側',why:'長邊轉向後擋不住南邊的車聲，量體還堵住了街角。'},
+       {k:'D',m:{type:0,rot:0,x:9,y:15},lp:[18,22],t:'放正中央',why:'四周各剩一條窄地，中庭不夠深也不夠安靜，街角也沒有讓出來。'}]},
+     {p:'行人主入口開在哪裡？',kind:'entry',pts:[
+       {k:'A',e:['S',.86],t:'南面東端，面向街角廣場',ok:1,why:'從兩條路來的人都看得到，入口前有轉角廣場可以停留和等人。'},
+       {k:'B',e:['N',.5],t:'北面，面向中庭',why:'這是托嬰次入口的位置。主入口開在這裡，訪客要穿過中庭，吵到小朋友。'},
+       {k:'C',e:['W',.5],t:'西面，面向辦公大樓',why:'西側只剩和鄰地之間的窄縫，從街上完全看不到。'},
+       {k:'D',e:['S',.14],t:'南面西端',why:'離街角最遠，門口直接對著 20 m 道路的車流，沒有停留空間。'}]},
+     {p:'剩下的空地怎麼安排？',kind:'space',pts:[
+       {k:'A',t:'北側中庭做平面停車場，接送比較方便',why:'安靜中庭變成停車場，托嬰的戶外空間就沒了，還多了車子進出中庭。'},
+       {k:'B',t:'北側做托嬰戶外遊戲中庭，東南角做轉角廣場，沿 20 m 道路種一排喬木',ok:1,why:'中庭給最怕吵的使用者，廣場接兩條路的人流，喬木再擋一層車聲。'},
+       {k:'C',t:'空地集中在南側，臨 20 m 道路做大廣場',why:'廣場正對車流，噪音和廢氣讓人待不住，北側反而只剩窄縫。'},
+       {k:'D',t:'四周平均鋪草皮',why:'每一側都只剩窄條，托嬰沒有能用的戶外空間，街角也沒有讓出來。'}]} ],
+   [ {p:'車道出入口開在哪裡？',kind:'drive',pts:[
+       {k:'A',at:['W',32],t:'西側 15 m 主要道路',why:'主要道路車多，車道還會切過老屋前面的庭園。'},
+       {k:'B',at:['S',4],t:'南側 8 m 道路，靠西南路口',why:'離路口不到 5 m，轉彎的車看不到進出的車。'},
+       {k:'C',at:['S',26],t:'南側 8 m 道路中段',ok:1,why:'次要道路、離路口 26 m，車從南側直接下地下室，不經過老屋庭園。'},
+       {k:'D',at:['N',30],t:'北側，穿過幼兒園',why:'北側是幼兒園，不是道路，車不能從鄰地進出。'}]},
+     {p:'新量體怎麼擺，才能讓老屋成為主角？',kind:'mass',pts:[
+       {k:'A',m:{type:1,rot:0,x:12,y:12},lp:[38,20],t:'L 型，包住老屋的東側和南側',ok:1,why:'L 型兩翼圍出老屋庭園，西側向主要道路打開，北側留出 12 m 日照綠地給幼兒園。'},
+       {k:'B',m:{type:0,rot:0,x:6,y:27},lp:[12,33],t:'一字型，放在老屋南邊',why:'一字型只能貼老屋的一側，老屋被夾在建築和北側鄰地之間，成不了庭園的主角。'},
+       {k:'C',m:{type:1,rot:0,x:8,y:10},lp:[33,15],t:'L 型，往西北推到底',why:'方向對了，但離老屋只有 3 m，進到保存範圍裡，施工和使用都會傷到老屋。'},
+       {k:'D',m:{type:1,rot:2,x:15,y:3},lp:[42,8],t:'L 型，貼北側',why:'量體壓在北側，正好擋住幼兒園遊戲場的日照，還撞進老屋的保存範圍。'}]},
+     {p:'主入口開在 L 型的哪一面？',kind:'entry',pts:[
+       {k:'A',e:[1,.6],t:'東翼西面，面向老屋庭園',ok:1,why:'人從主要道路經過老屋前院走進來，老屋就是入口的門面。'},
+       {k:'B',e:[4,.5],t:'南面，朝向 8 m 道路',why:'朝向次要道路、車道和卸貨區，主要人流不從這邊來。'},
+       {k:'C',e:[3,.5],t:'東面，朝向集合住宅',why:'東側只剩 6 m 寬的側院，從街上看不到，人還會經過住宅窗前。'},
+       {k:'D',e:[2,.5],t:'北面，朝向幼兒園',why:'入口的人潮直接對著幼兒園遊戲場，兩邊互相干擾。'}]},
+     {p:'卸貨點放在哪裡？',kind:'load',pts:[
+       {k:'A',at:['W',37],t:'西側 15 m 主要道路',why:'貨車停在主要道路會擋住車流，也擋在老屋和藝文中心的門面前。'},
+       {k:'B',at:['S',40],t:'南側 8 m 道路，靠近東端',ok:1,why:'在次要道路上、緊貼建築的後勤端，和車道口分開 14 m，貨車不擋車道。'},
+       {k:'C',at:['S',31],t:'南側 8 m 道路，緊鄰車道口',why:'和車道口擠在一起，貨車一停，車子就進不去地下室。'},
+       {k:'D',at:['E',30],t:'東側，從集合住宅旁邊進來',why:'東側是鄰地不是道路，貨車進不來，噪音也全落在住戶窗前。'}]} ]
+  ];
+
+  box.innerHTML='';
+  box.appendChild(el('h4',null,'<em>動手 5</em>每塊基地先做四個決定'));
+  box.appendChild(el('p',{'class':'gdesc'},'照「車道、量體、入口、空地」的順序決定。三塊基地就是下面「配置拖拉」的三關，先在這裡想清楚再去拖。四題中第一次就選對三題算過關。'));
+  var prompt=el('p',{'class':'hint',id:'sqPrompt'}), fig=el('figure'), svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('id','sqSvg'); svg.setAttribute('role','group'); svg.setAttribute('aria-label','基地配置圖，點選圖上的字母'); fig.appendChild(svg);
+  var opts=el('div',{'class':'opts',id:'sqOpts'}), why=el('p',{'class':'why',id:'sqWhy',hidden:''}), stat=el('p',{'class':'sq-stat',id:'sqStat'});
+  var row=el('div',{'class':'frow'}), nextB=el('button',{'class':'go',type:'button',id:'sqNext',hidden:''},'下一個決定 →'), lvB=el('button',{'class':'go',type:'button',id:'sqLv',hidden:''},'下一小關 →'), againB=el('button',{'class':'ghost',type:'button',id:'sqAgain',hidden:''},'這塊基地重做一次');
+  row.appendChild(nextB); row.appendChild(lvB); row.appendChild(againB);
+  [prompt,fig,opts,why,row,stat].forEach(function(n){box.appendChild(n)});
+
+  var lv=0, qi=0, done=false, tried=false, right=0, plan=null, P=null, sel=null, L;
+  function site(){return SITES[lv]}
+  function massOf(ms){return K.siteMass(site().mass[ms.type],ms)}
+  function entryPt(m,e){var ed=typeof e[0]==='number'?m.edges[e[0]]:m.edges.filter(function(x){return x.face===e[0]}).sort(function(a,b){return b.len-a.len})[0];
+    return {pt:K.edgePt(ed,Math.round(ed.len*e[1])),face:ed.face}}
+  function optOf(k){return Q[lv][qi].pts.filter(function(x){return x.k===k})[0]}
+  function draw(){
+    var q=Q[lv][qi], mk=[], ghosts=[], top='', s=site(), sp=sel?optOf(sel):null;
+    if(plan.d)mk.push({type:'d',edge:plan.d[0],t:plan.d[1]});
+    if(plan.ld)mk.push({type:'ld',edge:plan.ld[0],t:plan.ld[1]});
+    var m=plan.m?massOf(plan.m):null;
+    if(m&&plan.e){var ep=entryPt(m,plan.e); mk.push({type:'e',pt:ep.pt,face:ep.face})}
+    if(sp&&q.kind==='mass')ghosts.push(massOf(sp.m));
+    if(sp&&(q.kind==='drive'||q.kind==='load'))mk.push({type:q.kind==='drive'?'d':'ld',edge:sp.at[0],t:sp.at[1],bad:!sp.ok,nolab:1});
+    if(sp&&q.kind==='entry'&&m){var e3=entryPt(m,sp.e); mk.push({type:'e',pt:e3.pt,face:e3.face,bad:!sp.ok,nolab:1})}
+    if(!done)q.pts.forEach(function(p){var at=null;
+      if(p.lp)at=p.lp;
+      else if(p.at){var bp=K.sitePt(s,p.at[0],p.at[1]), n=K.faceN[p.at[0]]; at=[bp[0]+n[0]*3.6,bp[1]+n[1]*3.6]}
+      else if(p.e&&m){var ee=entryPt(m,p.e), nn=K.faceN[ee.face]; at=[ee.pt[0]+nn[0]*4,ee.pt[1]+nn[1]*4]}
+      if(at)top+=P.letter(at[0],at[1],p.k,' data-k="'+p.k+'" tabindex="0" role="button" aria-label="選項 '+p.k+'"',sel===p.k)});
+    svg.innerHTML=P.render({mass:m?{m:m}:null,ghosts:ghosts,marks:mk,spaces:!!plan.sp,info:K.siteInfo(s,m),top:top});
+    $$('.sp-let',svg).forEach(function(g){g.addEventListener('click',function(){pick(g.getAttribute('data-k'))}); g.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(g.getAttribute('data-k'))}})});
+  }
+  function status(){stat.textContent='第一次就選對 '+right+'／4　已完成 '+(qi+(done?1:0))+'／4'}
+  function render(){
+    var q=Q[lv][qi]; done=false; tried=false; sel=null;
+    prompt.innerHTML='<b>決定 '+(qi+1)+'／4：'+q.p+'</b>　'+(q.kind==='space'?'選下面的方案。':'點圖上的字母或下面的選項。');
+    opts.innerHTML=''; q.pts.forEach(function(p){var b=el('button',{type:'button','data-k':p.k},'<b>'+p.k+'</b>　'+p.t); opts.appendChild(b); b.addEventListener('click',function(){pick(p.k)})});
+    why.hidden=true; nextB.hidden=true; againB.hidden=true; lvB.hidden=true; status(); draw();
+  }
+  function pick(k){ if(done)return; var q=Q[lv][qi], p=optOf(k); sel=k;
+    $$('button',opts).forEach(function(b){b.classList.remove('wrong'); if(b.dataset.k===k)b.classList.add(p.ok?'right':'wrong')});
+    why.hidden=false; why.className='why '+(p.ok?'ok':'no'); why.innerHTML=(p.ok?'<b>對。</b>':'<b>不理想。</b>')+p.why+(p.ok?'':'　再選一次。');
+    if(p.ok){ if(!tried)right++; done=true; sel=null;
+      if(q.kind==='drive')plan.d=p.at; else if(q.kind==='load')plan.ld=p.at; else if(q.kind==='mass')plan.m=p.m; else if(q.kind==='entry')plan.e=p.e;
+      $$('button',opts).forEach(function(b){b.disabled=true});
+      if(qi===3){plan.sp=1; finish()} else nextB.hidden=false }
+    tried=true; status(); draw() }
+  function finish(){var sc=Math.round(right/4*100), ok=L.done(lv,sc);
+    why.innerHTML+='<br><b>這塊基地第一次就選對 '+right+'／4，得 '+sc+' 分。</b>'+(ok?(lv<SITES.length-1?'可以到下一塊基地。':'三塊基地都做完了，去下面的配置拖拉動手擺。'):'要第一次就選對 3 題才過關，再做一次。');
+    againB.hidden=false; lvB.hidden=!(ok&&lv<SITES.length-1) }
+  function start(i){lv=i; qi=0; right=0; P=K.sitePlan(site(),{uid:'sq',narrow:K.narrowPlan()}); svg.setAttribute('viewBox','0 0 '+P.vbW+' '+P.vbH);
+    plan={d:null,m:null,e:null,sp:0,ld:null}; render()}
+  nextB.addEventListener('click',function(){qi++; render()});
+  againB.addEventListener('click',function(){start(lv)});
+  lvB.addEventListener('click',function(){L.next()});
+  L=K.levels(box,{key:'g:sq',names:['例題','街角','老屋'],pass:75,start:start});
+  var nw=K.narrowPlan(); window.addEventListener('resize',function(){var n=K.narrowPlan(); if(n===nw)return; nw=n; P=K.sitePlan(site(),{uid:'sq',narrow:n}); svg.setAttribute('viewBox','0 0 '+P.vbW+' '+P.vbH); draw()});
+})();
+})();
+</script>

@@ -1,0 +1,65 @@
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, svgPt=K.svgPt, clamp=K.clamp, shuffle=K.shuffle,
+    gameBox=K.gameBox, view=K.view, aiReady=K.aiReady, aiMsg=K.aiMsg;
+/* ============ 遊戲場卡片 ============ */
+(function(){
+  var g=$('#playGrid'); if(!g)return;
+  var L=[['配置拖拉','三塊基地，拖動量體、車道口和入口，規則即時打勾。','m4','gSite','g:site'],['平面拼圖','三層樓、三種平面：塗格子，即時變成平面圖。','m5','gPlan','g:plan'],
+    ['考場決策','三種考試狀況，看你能不能在 8 小時內交卷及格。','m7','gExam','g:exam'],['圖面找碴','三張有錯的考生圖，把錯全部點出來。','m7','gSpot','g:spot'],['數字快答','60 秒連續答題，連對有加成。','play','gFlash','g:flash']];
+  L.forEach(function(x){var li=el('li'); li.appendChild(el('button',{type:'button','data-go':x[2],'data-anchor':x[3]},'<span class="ttl">'+x[0]+'</span><span class="ds">'+x[1]+'</span><span class="best" data-best="'+x[4]+'"></span>')); g.appendChild(li)});
+  window.KYplay=function(){$$('[data-best]',g).forEach(function(n){var v=K.xpOf(n.dataset.best); n.textContent=v?'最高 '+v+' XP':'還沒玩過'})};
+  window.KYplay();
+})();
+
+/* ============ 重新編排：遊戲在上、講義收在下 ============ */
+var PLAN={
+ m0:{mission:'你是閱卷委員。三輪考卷：判及格、比輕重、決定先救哪一個。',tips:['及格＝圖都有、沒違規、有回應題目','缺圖扣得最重','漂亮是加分，不是門檻'],games:['#gJudge']},
+ m1:{mission:'拿起螢光筆，把三份題目拆成四種顏色。一份比一份多陷阱。',tips:['有數字或「應、須、不得」的是硬條件','空間名稱加面積是空間需求','形容詞和願景是議題，圖上要看得到做法'],games:['#tagger']},
+ m2:{mission:'十塊基地，三種難度。每一塊都蓋到剛好合法。',tips:['最大建築面積＝基地 × 建蔽率','最大樓地板＝基地 × 容積率','層數＝需要的樓地板 ÷ 最大建築面積，無條件進位'],games:['#gMass']},
+ m3:{mission:'幫三棟建築的空間找樓層，再讓 AI 閱卷委員批你的對策。',tips:['公共、吵、人多放低樓層；安靜的放高樓層','對策句型：把＿＿放在＿＿，讓＿＿','每條對策都要能在圖上指出位置'],games:['#zoner','#gPol']},
+ m4:{mission:'三塊基地。把建築、車道口和入口放對位置，拿到 85 分蓋章。',tips:['順序：車道 → 量體 → 入口 → 空地','車道開在次要道路，離路口越遠越好','空地要集中成有名字的地方，例如入口廣場'],games:['#siteQuiz','#gSite']},
+ m5:{mission:'塗格子排出三層樓的平面，看它即時變成正式的平面圖。',tips:['順序：柱格 → 服務核 → 走廊 → 房間','樓梯兩座，分別放在兩端','柱距 8 m；遊戲裡每一小格是 4 × 4 m ＝ 16 ㎡'],games:['#gPlan']},
+ m6:{mission:'時間快到了。剖面、立面、透視各要先畫哪些東西？',tips:['剖面必備：粗地面線、樓高、空間名稱','每張圖都要有圖名和比例','三張圖都先求有，再求好'],games:['#gSec']},
+ m7:{mission:'模擬三場 8 小時的考試，再去抓三張圖上的錯。',tips:['0:30 讀完題、2:30 草圖定案、5:00 平面畫完','落後時放棄細節，不放棄任何一張圖','最後 30 分鐘只做檢查'],games:['#gExam','#gSpot']},
+ m8:{mission:'三道新題目和 14 年真題。計時走流程，畫完拍照給 AI 講評。',tips:['流程：讀題 → 計算 → 分層與對策 → 配置','每一關時間到就往下走','畫完用檢查表或 AI 講評找出漏掉的東西'],games:['#v-m8 .box:not(.drill)','#drill','#gRev','#gPast','#gGen']}
+};
+Object.keys(PLAN).forEach(function(id){
+  var v=view(id), p=PLAN[id]; if(!v)return; var head=$('.mhead',v), nav=$('.navrow',v);
+  var games=p.games.map(function(g){return typeof g==='string'?document.querySelector(g):g}).filter(Boolean);
+  games.forEach(function(g){var pr=g.previousElementSibling; if(pr&&pr.tagName==='H2'&&g.parentNode===v)pr.parentNode.removeChild(pr); g.classList.add('game')});
+  var brief=el('div',{'class':'brief'}); brief.innerHTML='<p class="mission"><small>任務</small>'+p.mission+'</p><ul class="tips">'+p.tips.map(function(t,i){return '<li><b>重點 '+(i+1)+'</b>'+t+'</li>'}).join('')+'</ul>';
+  var notes=el('details',{'class':'notes'}); notes.innerHTML='<summary><span>完整說明與圖解 <small>想知道為什麼，或卡關時再打開</small></span></summary>'; var nin=el('div',{'class':'nin'}); notes.appendChild(nin);
+  Array.prototype.slice.call(v.children).forEach(function(c){ if(c===head||c===nav||games.indexOf(c)>=0||c.tagName==='TEMPLATE')return; nin.appendChild(c) });
+  var ref=head.nextSibling; v.insertBefore(brief,ref); games.forEach(function(g){v.insertBefore(g,nav)}); v.insertBefore(notes,nav);
+});
+$$('.home-grid .tag').forEach(function(n){n.parentNode.removeChild(n)});
+/* 遊戲場補上新遊戲 */
+(function(){var g=$('#playGrid'); if(!g)return;
+  [['閱卷委員','三輪考卷：判及格、比輕重、先救誰。','m0','gJudge','g:judge'],['蓋到剛好合法','十塊基地，算出最少要蓋幾層。','m2','gMass','g:mass'],['剖面搶時間','20 分鐘預算，挑對的東西畫。','m6','gSec','g:sec'],['無限出題','隨機基地，連續答對四個數字。','m8','gGen','g:gen'],['AI 閱卷委員','寫對策或上傳草圖，讓 AI 講評。','m3','gPol','g:pol'],['合法還是違規','每題 4 秒，用法規判斷圖上的數字。','play','gLegal','g:legal'],['圖例閃卡','看符號選名稱，看名稱找符號。','play','gSym','g:sym'],['歷屆真題挑戰','考選部 100 到 113 年原題：讀題、抓條件、算量體。','m8','gPast','g:past'],['順序連點','把打亂的流程按順序點完，拚秒數。','play','gOrder','g:order']].forEach(function(x){var li=el('li'); li.appendChild(el('button',{type:'button','data-go':x[2],'data-anchor':x[3]},'<span class="ttl">'+x[0]+'</span><span class="ds">'+x[1]+'</span><span class="best" data-best="'+x[4]+'"></span>')); g.appendChild(li)});
+  if(window.KYplay)window.KYplay();
+})();
+
+/* ============ AI 教練（右下角） ============ */
+aiReady.then(function(sample){ if(!sample)return;
+  var fab=el('button',{type:'button','class':'coach-fab','aria-expanded':'false'},'問教練'), pan=el('section',{'class':'coach game','aria-label':'AI 教練',hidden:''}); document.body.appendChild(fab); document.body.appendChild(pan);
+  pan.innerHTML='<header><span>AI 教練</span><button type="button" class="ghost" id="coX" aria-label="關閉">✕</button></header><div class="log" id="coLog"><p class="a">卡住了就問我。建築師考試、這堂課的任何一關、或是「為什麼要這樣做」都可以問。</p><div class="sugg"><button type="button">容積率到底是什麼？</button><button type="button">我畫圖很慢怎麼辦？</button><button type="button">樓梯為什麼要兩座？</button></div></div><form id="coF"><label for="coI" hidden>問題</label><input type="text" id="coI" autocomplete="off" placeholder="輸入問題" maxlength="300"><button type="submit" class="go">送出</button></form>';
+  var RULES='你是台灣建築師考試「建築計畫與設計」（大設計）的教練，學生是完全的新手，而且很容易覺得無聊。用繁體中文回答，口語、直接、不說教，每次回答不超過 120 字，能用一個具體數字或例子就不要講道理，不用 Markdown 符號。這堂課教的速記值：及格圖＝圖都有、沒違規、有回應題目；最大建築面積＝基地×建蔽率；最大樓地板＝基地×容積率；需要樓地板＝淨面積×1.3到1.5；柱格8×8m；走廊2.4m；樓梯兩座分兩端、級高≤16cm、級深≥26cm、寬≥1.4m；樓高一樓4.2到4.5m、標準層3.6m；汽車位2.5×5.5m、無障礙3.5×6m、坡道1:6、無障礙坡道1:12；配速：0:30讀題、1:30計畫、2:30草圖、5:00平面、6:00剖立面、6:40透視、7:30標註、8:00檢查。法規細節不確定時，直接說「以現行建築技術規則為準」，不要編造條號。與考試無關的問題，簡短帶回主題。';
+  var turns=[], busy=false, log=$('#coLog',pan);
+  function add(c,t){var p=el('p',{'class':c}); p.textContent=t; log.appendChild(p); log.scrollTop=log.scrollHeight; return p}
+  function ask(t){ if(busy||!t)return; busy=true; var sg=$('.sugg',log); if(sg)sg.parentNode.removeChild(sg); add('u',t); turns.push({role:'user',content:t}); if(turns.length>12)turns=turns.slice(-12); if(turns[0].role!=='user')turns.shift();
+    var b=add('a','想一下……');
+    sample([{role:'user',content:RULES}].concat(turns),{modelTier:'quick',cache:false,onText:function(u){b.textContent=u.text; log.scrollTop=log.scrollHeight}})
+     .then(function(r){b.textContent=r.text; turns.push({role:'assistant',content:r.text})})
+     .catch(function(e){turns.pop(); b.textContent=aiMsg(e)||'已取消。'; if(e&&(e.code==='not_granted'||e.code==='sampling_disabled')){fab.hidden=true; pan.hidden=true}})
+     .then(function(){busy=false}) }
+  function toggle(o){pan.hidden=!o; fab.setAttribute('aria-expanded',o?'true':'false'); if(o)$('#coI',pan).focus()}
+  fab.addEventListener('click',function(){toggle(pan.hidden)}); $('#coX',pan).addEventListener('click',function(){toggle(false)});
+  $('#coF',pan).addEventListener('submit',function(e){e.preventDefault(); var i=$('#coI',pan), t=i.value.trim(); i.value=''; ask(t)});
+  $$('.sugg button',pan).forEach(function(b){b.addEventListener('click',function(){ask(b.textContent)})});
+});
+
+})();
+</script>

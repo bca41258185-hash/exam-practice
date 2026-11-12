@@ -1,0 +1,172 @@
+<style>
+#gSite .gs-brief{font-size:14.5px;margin:0 0 6px;max-width:48em}
+#gSite .gs-brief b{color:var(--bp-hi)}
+#gSite .rules li small{display:block;color:var(--bad);font-size:12.5px;line-height:1.45;margin-top:2px}
+#gSite .rules li.ok small{display:none}
+#gSite .gs-msg{font-size:14px;color:var(--mut);margin:8px 0 0}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, clamp=K.clamp;
+/* ============ GAME 01 配置拖拉（三小關） ============ */
+(function(){
+  var box=$('#gSite'); if(!box||!K.sitePlan||!K.siteData)return;
+  var SITES=K.siteData;
+
+  /* ---------- 共用判斷 ---------- */
+  function setb(G){var s=G.s, sb=s.sb, bad={}, ok=true;
+    G.m.parts.forEach(function(p){ if(p.x<sb.W){bad.W=1;ok=false} if(p.y<sb.N){bad.N=1;ok=false} if(p.x+p.w>s.W-sb.E){bad.E=1;ok=false} if(p.y+p.h>s.H-sb.S){bad.S=1;ok=false} });
+    return {ok:ok,bad:bad}}
+  var SN={N:'北',S:'南',E:'東',W:'西'};
+  function sideList(b){return Object.keys(b).map(function(k){return SN[k]}).join('、')}
+  function treeHit(G,i){var t=G.s.trees[i]; return G.m.parts.some(function(p){return K.ptRectDist([t.x,t.y],p)<t.r})}
+  function oldDist(G){var o=G.s.old; return Math.min.apply(null,G.m.parts.map(function(p){return K.rectDist(p,o)}))}
+  function wrapSides(G){var o=G.s.old, n=0, R=12;
+    function ox(p){return Math.min(p.x+p.w,o.x+o.w)-Math.max(p.x,o.x)>0} function oy(p){return Math.min(p.y+p.h,o.y+o.h)-Math.max(p.y,o.y)>0}
+    [function(p){return p.x>=o.x+o.w&&p.x-(o.x+o.w)<=R&&oy(p)},function(p){return p.x+p.w<=o.x&&o.x-(p.x+p.w)<=R&&oy(p)},
+     function(p){return p.y>=o.y+o.h&&p.y-(o.y+o.h)<=R&&ox(p)},function(p){return p.y+p.h<=o.y&&o.y-(p.y+p.h)<=R&&ox(p)}].forEach(function(f){ if(G.m.parts.some(f))n++ });
+    return n}
+  function faces(G,e,o,R,pad){var p=e.pt, f=e.face;
+    if(f==='W')return o.x+o.w<=p[0]&&p[0]-(o.x+o.w)<=R&&p[1]>=o.y-pad&&p[1]<=o.y+o.h+pad;
+    if(f==='E')return o.x>=p[0]&&o.x-p[0]<=R&&p[1]>=o.y-pad&&p[1]<=o.y+o.h+pad;
+    if(f==='N')return o.y+o.h<=p[1]&&p[1]-(o.y+o.h)<=R&&p[0]>=o.x-pad&&p[0]<=o.x+o.w+pad;
+    return o.y>=p[1]&&o.y-p[1]<=R&&p[0]>=o.x-pad&&p[0]<=o.x+o.w+pad}
+  function notRoad(G,edge){return !G.s.sides[edge].road}
+  function R(t,ok,pts,why,hl){return {t:t,ok:!!ok,pts:pts,why:why,hl:ok?null:hl}}
+
+  /* ---------- 三小關 ---------- */
+  var LV=[
+   {site:0, name:'基本',
+    brief:'<b>例題基地</b>：社區圖書分館，量體 24 × 32 m、3 層加地下 1 層。拖動量體、<b>車</b>（車道出入口）和<b>入</b>（主入口），讓七條規則全部打勾。',
+    init:{m:{type:0,rot:0,x:9,y:12},d:['S',12],e:{i:0,s:12}}, marks:['d','e'],
+    rules:function(G){var g=G.g, sb=setb(G), d=G.d, e=G.e, dw;
+      dw=notRoad(G,d.edge)?'這一側是'+G.s.sides[d.edge].label+'，不是道路，車開不進來。':d.edge==='S'?'15 m 主要道路有公車站和大量行人，車道改開在西側 8 m 道路。':'離西南路口只有 '+(G.s.H-d.t)+' m，轉彎的車看不到進出的車，往北移。';
+      return [
+       R('量體在退縮線內（臨路退 4 m、鄰地退 3 m）',sb.ok,20,'量體超出'+sideList(sb.bad)+'側的藍色退縮線，往基地內移。',{setb:sb.bad,mass:1}),
+       R('避開老榕樹的樹冠',!treeHit(G,0),15,'量體壓到老榕樹的樹冠，挖地下室會切斷樹根，往北或往西移。',{tree:{0:1},mass:1}),
+       R('北側退讓住宅至少 6 m（現在 '+g.N+' m）',g.N>=6,15,'離 4 層住宅太近，住戶的採光和隱私都受影響，往南移。',{mass:1}),
+       R('東側留給公園的綠帶至少 8 m（現在 '+g.E+' m）',g.E>=8,15,'量體太靠公園，綠帶接不起來，往西移。',{mass:1}),
+       R('南側入口廣場至少 8 m 深（現在 '+g.S+' m）',g.S>=8,10,'入口前沒有停留空間，人一出門就站在馬路邊，往北移。',{mass:1}),
+       R('車道口在西側 8 m 道路，離西南路口 20 m 以上',d.edge==='W'&&G.s.H-d.t>=20,15,dw,{d:1}),
+       R('主入口開在量體南面，面向主要道路',e.face==='S',10,'主要人流從南側 15 m 道路和公車站過來，入口要朝南，前面接廣場。',{e:1})
+      ]}},
+   {site:1, name:'街角',
+    brief:'<b>街角基地</b>：里民活動中心暨托嬰中心，量體 30 × 14 m、4 層。南邊是車多的 20 m 道路，東邊 12 m 道路對面是國小校門。多了一個<b>次</b>（托嬰次入口）。',
+    init:{m:{type:0,rot:1,x:17,y:10},d:['S',38],e:{i:2,s:15},e2:{i:1,s:7}}, marks:['d','e','e2'],
+    rules:function(G){var g=G.g, sb=setb(G), d=G.d, e=G.e, b=G.m.bb, s=G.s, gate=s.sides.E.far.gate;
+      var cd=d.edge==='E'?s.H-d.t:d.edge==='S'?s.W-d.t:99, horiz=b.w>b.h, cpt=[b.x+b.w,b.y+b.h], ed=Math.hypot(e.pt[0]-cpt[0],e.pt[1]-cpt[1]);
+      return [
+       R('量體在退縮線內（臨路退 4 m、鄰地退 3 m）',sb.ok,15,'量體超出'+sideList(sb.bad)+'側的藍色退縮線，往基地內移。',{setb:sb.bad,mass:1}),
+       R('長邊沿 20 m 道路排開，擋住車聲（南側退 8 m 以內）',horiz&&g.S<=8,15,horiz?'量體離 20 m 道路太遠，車聲從前面的空地灌進來，往南移。':'長邊轉成南北向就擋不住南邊的車聲，按「量體轉 90°」。',{mass:1}),
+       R('北側安靜中庭至少 12 m 深（現在 '+g.N+' m）',g.N>=12,15,'托嬰的戶外遊戲場要在量體背後，中庭不夠深，往南移。',{mass:1}),
+       R('東南街角讓出至少 6 m 的轉角廣場（現在 '+g.E+' m）',g.E>=6,10,'量體堵住街角，兩條路的人流沒有地方匯集，往西移。',{mass:1}),
+       R('車道口開在東側 12 m 道路',d.edge==='E',10,d.edge==='S'?'20 m 道路車多車快，車子減速轉進來會擋住後車，改到東側。':'這一側是'+s.sides[d.edge].label+'，不是道路，車開不進來。',{d:1}),
+       R('車道口離街角 15 m 以上',cd>=15&&!notRoad(G,d.edge),10,notRoad(G,d.edge)?'車道口要先放在道路上。':'離街角只有 '+cd+' m，轉彎的車和等紅燈的車搶同一段路。',{d:1}),
+       R('車道口離國小校門 10 m 以上',d.edge!=='E'||Math.abs(d.t-gate)>=10,10,'校門口上下學時都是過馬路的學生，車道口至少離開 10 m（現在 '+Math.abs(d.t-gate)+' m）。',{d:1}),
+       R('主入口在南面或東面，離街角 8 m 以內',(e.face==='S'||e.face==='E')&&ed<=8,10,(e.face==='S'||e.face==='E')?'入口離街角太遠，從兩條路來的人都看不到，往量體東南角移。':'主入口要面向街角廣場，放在量體南面或東面靠街角的一端。',{e:1}),
+       R('托嬰次入口開在北面，直接通到中庭',G.e2.face==='N',5,'家長推嬰兒車從安靜的中庭進出，避開 20 m 道路，次入口放北面。',{e2:1})
+      ]}},
+   {site:2, name:'老屋',
+    brief:'<b>老屋基地</b>：社區藝文中心，基地中間有一棟要保留的日式老屋。可以選<b>一字型</b>或 <b>L 型</b>量體並轉向，再擺好<b>車</b>、<b>卸</b>（卸貨點）和<b>入</b>。',
+    init:{m:{type:0,rot:0,x:5,y:28},d:['W',30],ld:['W',38],e:{i:0,s:20}}, marks:['d','ld','e'],
+    /* 包住老屋時，自動鋪出老屋庭園 */
+    decor:function(G,P){var o=G.s.old; if(wrapSides(G)<2||oldDist(G)<4)return {};
+      var x0=o.x-3, y0=o.y-3, x1=o.x+o.w+3, y1=o.y+o.h+3;
+      G.m.parts.forEach(function(p){var oy=Math.min(p.y+p.h,o.y+o.h)>Math.max(p.y,o.y), ox=Math.min(p.x+p.w,o.x+o.w)>Math.max(p.x,o.x);
+        if(oy&&p.x>=o.x+o.w)x1=Math.max(x1,p.x); if(oy&&p.x+p.w<=o.x)x0=Math.min(x0,p.x+p.w); if(ox&&p.y>=o.y+o.h)y1=Math.max(y1,p.y); if(ox&&p.y+p.h<=o.y)y0=Math.min(y0,p.y+p.h)});
+      x0=Math.max(x0,0); y0=Math.max(y0,0);
+      var X=P.X, Y=P.Y, r='x="'+X(x0)+'" y="'+Y(y0)+'" width="'+(x1-x0)*P.S+'" height="'+(y1-y0)*P.S+'"';
+      return {under:'<rect '+r+' fill="'+P.D.fill('tile')+'"/><rect '+r+' fill="'+P.D.fill('conc')+'"/>',over:P.lab(X((x0+x1)/2),Y(y1-1.7),'老屋庭園','t-room')}},
+    rules:function(G){var g=G.g, sb=setb(G), d=G.d, ld=G.ld, e=G.e, s=G.s, od=oldDist(G), ws=wrapSides(G), isL=G.m.def.kind==='L';
+      var ldDist=Math.min.apply(null,G.m.parts.map(function(p){return K.ptRectDist(ld.pt,p)})), sep=(ld.edge===d.edge)?Math.abs(ld.t-d.t):99;
+      var lw=ld.edge!=='S'?(notRoad(G,ld.edge)?'這一側是'+s.sides[ld.edge].label+'，貨車進不來。':'貨車停在 15 m 主要道路會擋住車流和老屋門面，改到南側 8 m 道路。'):ldDist>8?'卸貨點離建築 '+Math.round(ldDist)+' m，搬貨要穿過整片空地，移到建築旁邊。':'和車道口只隔 '+sep+' m，貨車一停車道就被擋住，至少分開 8 m。';
+      return [
+       R('量體在退縮線內（臨路退 4 m、鄰地退 3 m）',sb.ok,15,'量體超出'+sideList(sb.bad)+'側的藍色退縮線，往基地內移。',{setb:sb.bad,mass:1}),
+       R('離日式老屋至少 4 m（保存範圍，現在 '+(Math.round(od*10)/10)+' m）',od>=4,15,'新建築進到老屋的保存範圍，施工和使用都會傷到老屋，往外移。',{old:1,mass:1}),
+       R('北側面向幼兒園留至少 10 m 日照綠地（現在 '+g.N+' m）',g.N>=10,15,'量體會擋住幼兒園遊戲場的日照，往南移。',{mass:1}),
+       R('量體包住老屋至少兩側，圍出老屋庭園（現在 '+ws+' 側）',ws>=2,20,isL?'讓 L 型的兩翼分別貼著老屋的兩側（12 m 以內），試著轉向或移近。':'一字型只能貼老屋一側，按「換成 L 型」再轉向。',{mass:1}),
+       R('車道口在南側 8 m 道路，離西南路口 15 m 以上',d.edge==='S'&&d.t>=15,10,d.edge!=='S'?(notRoad(G,d.edge)?'這一側是'+s.sides[d.edge].label+'，不是道路，車開不進來。':'15 m 主要道路車多，車道還會切過老屋前院，改到南側 8 m 道路。'):'離路口只有 '+d.t+' m，轉彎的車看不到進出的車，往東移。',{d:1}),
+       R('卸貨點在南側 8 m 道路、離建築 8 m 內、和車道口分開 8 m 以上',ld.edge==='S'&&ldDist<=8&&sep>=8,10,lw,{ld:1}),
+       R('主入口面向老屋庭園（老屋就在門前 15 m 內）',faces(G,e,s.old,15,4),15,'主入口要朝向老屋，人從主要道路經過老屋前院走進來。把「入」移到正對老屋的那一面。',{e:1})
+      ]}}
+  ];
+
+  /* ---------- DOM ---------- */
+  var head=$('.ghead',box), desc=$('.gdesc',box);
+  Array.prototype.slice.call(box.children).forEach(function(c){ if(c!==head&&c!==desc)box.removeChild(c) });
+  if(!desc){desc=el('p',{'class':'gdesc'}); box.appendChild(desc)}
+  desc.textContent='拖動量體和黃色圓點，配置圖會跟著畫出綠帶、廣場和尺寸，下面的規則即時打勾。每關 85 分蓋章，三關的基地都不一樣。';
+  var brief=el('p',{'class':'gs-brief'}), fig=el('figure'), svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('id','gsSvg'); svg.setAttribute('role','application'); svg.setAttribute('aria-label','可拖拉的基地配置圖'); fig.appendChild(svg);
+  var row=el('div',{'class':'frow'}), rotB=el('button',{'class':'ghost',type:'button',id:'gsRot'},'量體轉 90°'), typeB=el('button',{'class':'ghost',type:'button',id:'gsType',hidden:''},'換成 L 型'),
+      resetB=el('button',{'class':'ghost',type:'button',id:'gsReset'},'重來'), nextB=el('button',{'class':'go',type:'button',id:'gsNext',hidden:''},'下一小關 →');
+  [rotB,typeB,resetB,nextB].forEach(function(b){row.appendChild(b)});
+  var ul=el('ul',{'class':'rules',id:'gsRules'}), msg=el('p',{'class':'gs-msg',id:'gsMsg'});
+  [brief,fig,row,ul,msg].forEach(function(n){box.appendChild(n)});
+
+  /* ---------- 狀態 ---------- */
+  var cur=0, lvl=null, site=null, P=null, st=null, drag=null, lastDone=-1, L;
+  function clone(o){return JSON.parse(JSON.stringify(o))}
+  function mass(){return K.siteMass(site.mass[st.m.type],st.m)}
+  function fixMass(){var sh=K.siteShape(site.mass[st.m.type],st.m.rot); st.m.x=clamp(st.m.x,0,site.W-sh.bw); st.m.y=clamp(st.m.y,0,site.H-sh.bh)}
+  function edgeLen(e){return e==='N'||e==='S'?site.W:site.H}
+  function bnd(k){var b=st[k]; return {edge:b[0],t:b[1],pt:K.sitePt(site,b[0],b[1])}}
+  function ent(m,k){var e=st[k]; if(e.i>=m.edges.length)e.i=0; var ed=m.edges[e.i]; e.s=clamp(e.s,1,ed.len-1); return {pt:K.edgePt(ed,e.s),face:ed.face,edge:ed}}
+  function ctx(){var m=mass(), G={s:site,m:m,g:K.siteGaps(site,m)}; if(st.d)G.d=bnd('d'); if(st.ld)G.ld=bnd('ld'); G.e=ent(m,'e'); if(st.e2)G.e2=ent(m,'e2'); return G}
+  var CH={d:'車',ld:'卸',e:'入',e2:'次'}, NM={d:'車道出入口',ld:'卸貨點',e:'主入口',e2:'托嬰次入口'};
+
+  function draw(){
+    var G=ctx(), rs=lvl.rules(G), sc=0, hl={setb:{},tree:{},old:0}, bad={};
+    rs.forEach(function(r){ if(r.ok){sc+=r.pts;return} var h=r.hl||{}; if(h.setb)for(var k in h.setb)hl.setb[k]=1; if(h.tree)for(var t in h.tree)hl.tree[t]=1; if(h.old)hl.old=1; ['mass','d','ld','e','e2'].forEach(function(x){if(h[x])bad[x]=1}) });
+    var marks=lvl.marks.map(function(k){var a=' data-d="'+k+'" tabindex="0" role="button" aria-label="'+NM[k]+'，可拖動；方向鍵沿邊移動 1 公尺"';
+      if(k==='d'||k==='ld')return {type:k,edge:G[k].edge,t:G[k].t,bad:bad[k],hdl:{ch:CH[k],attrs:a}};
+      return {type:k,pt:G[k].pt,face:G[k].face,bad:bad[k],hdl:{ch:CH[k],attrs:a}} });
+    var dec=lvl.decor?lvl.decor(G,P):{};
+    svg.innerHTML=P.render({under:dec.under,over:dec.over,mass:{m:G.m,bad:bad.mass,attrs:' data-d="m" class="drag" tabindex="0" role="button" aria-label="建築量體，可拖動；方向鍵每次移動 1 公尺"'},marks:marks,spaces:true,hl:hl,info:K.siteInfo(site,G.m)});
+    ul.innerHTML='';
+    rs.forEach(function(r){ul.appendChild(el('li',r.ok?{'class':'ok'}:null,'<i>'+(r.ok?'✓':'✗')+'</i><span>'+r.t+(r.ok?'':'<small>'+r.why+'</small>')+'</span><span class="pt">'+r.pts+'</span>'))});
+    K.hud(box,sc); return sc;
+  }
+  function commit(){var sc=draw(); if(sc!==lastDone){lastDone=sc; var ok=L.done(cur,sc); if(!ok)K.stampOff(box)} ui(sc)}
+  function ui(sc){var best=!!L&&L.best(cur)>=85; nextB.hidden=!(best&&cur<LV.length-1);
+    msg.textContent=sc>=85?(cur<LV.length-1?'過關。還可以再調到 100 分，或按「下一小關」。':'三關都會了。真正考試時，就是用這幾條規則檢查自己的配置圖。'):'還差 '+(85-sc)+' 分過關。看紅字，照著移。';
+    typeB.hidden=site.mass.length<2; if(site.mass.length>1)typeB.textContent=st.m.type===0?'換成 L 型':'換成一字型'}
+
+  function setP(){P=K.sitePlan(site,{uid:'gs',narrow:K.narrowPlan()}); svg.setAttribute('viewBox','0 0 '+P.vbW+' '+P.vbH); svg.setAttribute('data-tf',P.ox+','+P.oy+','+P.S)}
+  function start(i){cur=i; lvl=LV[i]; site=SITES[lvl.site]; setP();
+    st=clone(lvl.init); lastDone=-1; brief.innerHTML=lvl.brief; K.stampOff(box); var sc=draw(); lastDone=sc; ui(sc)}
+
+  /* ---------- 拖拉 ---------- */
+  function nearestEdge(q){var c=[['N',Math.abs(q[1]),q[0]],['S',Math.abs(q[1]-site.H),q[0]],['W',Math.abs(q[0]),q[1]],['E',Math.abs(q[0]-site.W),q[1]]].sort(function(a,b){return a[1]-b[1]})[0];
+    return [c[0],Math.round(clamp(c[2],3,edgeLen(c[0])-3))]}
+  function nearestFace(m,q){var best=null;
+    m.edges.forEach(function(e,i){var dx=Math.sign(e.b[0]-e.a[0]), dy=Math.sign(e.b[1]-e.a[1]), s=clamp((q[0]-e.a[0])*dx+(q[1]-e.a[1])*dy,1,e.len-1), p=[e.a[0]+dx*s,e.a[1]+dy*s], d=Math.hypot(q[0]-p[0],q[1]-p[1]);
+      if(!best||d<best.d)best={d:d,i:i,s:Math.round(s)} }); return {i:best.i,s:best.s}}
+  svg.addEventListener('pointerdown',function(e){var t=e.target.closest('[data-d]'); if(!t)return; e.preventDefault(); var q=P.toM(K.svgPt(svg,e));
+    drag={k:t.getAttribute('data-d'),dx:q[0]-st.m.x,dy:q[1]-st.m.y}; try{svg.setPointerCapture(e.pointerId)}catch(x){} });
+  svg.addEventListener('pointermove',function(e){ if(!drag)return; var q=P.toM(K.svgPt(svg,e)), k=drag.k;
+    if(k==='m'){var ox=st.m.x, oy=st.m.y; st.m.x=Math.round(q[0]-drag.dx); st.m.y=Math.round(q[1]-drag.dy); fixMass(); if(ox===st.m.x&&oy===st.m.y)return}
+    else if(k==='d'||k==='ld'){var nb=nearestEdge(q); if(nb[0]===st[k][0]&&nb[1]===st[k][1])return; st[k]=nb}
+    else {var nf=nearestFace(mass(),q); if(nf.i===st[k].i&&nf.s===st[k].s)return; st[k]=nf}
+    draw() });
+  function end(){ if(!drag)return; drag=null; commit() }
+  svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
+  svg.addEventListener('keydown',function(e){var t=e.target.closest('[data-d]'); if(!t)return; var k=t.getAttribute('data-d'), v={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key]; if(!v)return; e.preventDefault();
+    if(k==='m'){st.m.x+=v[0]; st.m.y+=v[1]; fixMass()}
+    else if(k==='d'||k==='ld'){st[k][1]=clamp(st[k][1]+v[0]+v[1],3,edgeLen(st[k][0])-3)}
+    else {st[k].s+=v[0]+v[1]}
+    commit(); var n=$('[data-d="'+k+'"]',svg); if(n)n.focus() });
+  rotB.addEventListener('click',function(){var a=K.siteShape(site.mass[st.m.type],st.m.rot), b=K.siteShape(site.mass[st.m.type],st.m.rot+1);
+    st.m.x=Math.round(st.m.x+a.bw/2-b.bw/2); st.m.y=Math.round(st.m.y+a.bh/2-b.bh/2); st.m.rot=(st.m.rot+1)%4; fixMass(); commit()});
+  typeB.addEventListener('click',function(){var a=K.siteShape(site.mass[st.m.type],st.m.rot); st.m.type=st.m.type?0:1; var b=K.siteShape(site.mass[st.m.type],st.m.rot);
+    st.m.x=Math.round(st.m.x+a.bw/2-b.bw/2); st.m.y=Math.round(st.m.y+a.bh/2-b.bh/2); fixMass(); st.e={i:0,s:6}; commit()});
+  resetB.addEventListener('click',function(){start(cur)});
+  nextB.addEventListener('click',function(){L.next()});
+  L=K.levels(box,{key:'g:site',names:LV.map(function(l){return l.name}),pass:85,start:start});
+  ui(lastDone);
+  var nw=K.narrowPlan(); window.addEventListener('resize',function(){var n=K.narrowPlan(); if(n===nw||drag)return; nw=n; setP(); draw()});
+})();
+})();
+</script>

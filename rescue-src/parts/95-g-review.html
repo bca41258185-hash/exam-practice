@@ -1,0 +1,25 @@
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, svgPt=K.svgPt, clamp=K.clamp, shuffle=K.shuffle,
+    gameBox=K.gameBox, view=K.view, aiReady=K.aiReady, aiMsg=K.aiMsg;
+/* ============ AI 拍照講評（單元 8） ============ */
+var gRev=gameBox('gRev','AI','拍照給 AI 閱卷委員','','把你在上面「實戰演練」畫的配置草圖拍下來上傳（以你目前選的那一道題為準）。AI 閱卷委員會直接看你的圖，告訴你哪裡會被扣分、下一步先改什麼。');
+(function(){
+  var body=el('div'); gRev.appendChild(body); $('.hud',gRev).hidden=true;
+  body.innerHTML='<label class="filebtn" for="rvFile">選擇照片或拍照<input type="file" id="rvFile" accept="image/jpeg,image/png,image/webp"></label><img class="photo" id="rvImg" alt="你上傳的草圖" hidden><div class="frow"><button type="button" class="go" id="rvGo" disabled>請 AI 講評</button><button type="button" class="ghost" id="rvStop" hidden>停止</button></div><div class="ai-out" id="rvOut" hidden></div>';
+  var file=null, ctl=null, url=null;
+  $('#rvFile',body).addEventListener('change',function(e){file=e.target.files&&e.target.files[0]||null; var im=$('#rvImg',body); if(url)URL.revokeObjectURL(url); if(file){url=URL.createObjectURL(file); im.src=url; im.hidden=false} else im.hidden=true; $('#rvGo',body).disabled=!file});
+  aiReady.then(function(sample){
+    if(!sample){body.innerHTML='<p class="verdict mid">這個功能需要在 Claude 的頁面裡開啟才能使用。現在請改用上面第 4 關的檢查表自評。</p>';return}
+    $('#rvStop',body).addEventListener('click',function(){if(ctl)ctl.abort()});
+    $('#rvGo',body).addEventListener('click',function(){ if(!file)return; var o=$('#rvOut',body), go=$('#rvGo',body), st=$('#rvStop',body); ctl=new AbortController(); go.disabled=true; st.hidden=false; o.hidden=false; o.textContent='閱卷委員正在看你的圖……（大約需要半分鐘）';
+      sample('你是台灣建築師考試「建築計畫與設計」的閱卷委員，同時也是耐心的老師。附上的照片是一位第一次練習的新手手繪的配置草圖。\n\n'+(K.drillBrief||'題目：社區托育暨親子館。基地矩形，東西向30m、南北向40m，1200㎡。南側臨12m道路，東側臨6m巷道，西側緊鄰國小操場，北側為3層透天住宅。建蔽率60%（最大建築面積720㎡）、容積率180%。臨道路側退縮3m。地上不超過3層。托嬰室須在地面層。須設戶外遊戲庭。法定空地設汽車6部（含無障礙1部）與家長接送臨停。合理解法是蓋2層、每層約450㎡。')+'\n\n請依序檢查並用繁體中文回覆，語氣直接、具體、鼓勵，總長不超過350字，不要用 Markdown 符號：\n第一行：給一個 0 到 100 的分數，格式「分數：72」。\n「做對的」：最多三點，指出圖上實際看得到的優點。\n「會被扣分的」：最多三點，依嚴重程度排序。檢查：建築是否在退縮線內、車道或停車是否從6m巷道進出且遠離路口、人車入口是否分開、遊戲庭是否完整且不必穿越車道、6部車與接送臨停是否畫出、是否有指北針、道路名稱與寬度、入口符號、樓層數標示。\n「下一步」：一句話，說明重畫時最先要改的一件事。\n如果照片不是配置圖或看不清楚，直接說明看不出來，並請對方重拍，不要硬評。',
+        {images:[file],signal:ctl.signal,cache:false,onText:function(u){o.textContent=u.text}})
+       .then(function(r){o.textContent=r.text; var m=/分數[:：]\s*(\d{1,3})/.exec(r.text); if(m){var s=Math.min(100,+m[1]); K.award('g:rev',Math.round(s/2)); if(s>=60)K.stampOn(gRev,'及格')}})
+       .catch(function(e){o.textContent=(e&&e.text?e.text+'\n\n':'')+(e&&e.code==='images_unavailable'?'這個檢視畫面不能傳圖片給 AI。':aiMsg(e)||'已停止。')})
+       .then(function(){go.disabled=false; st.hidden=true}) }) });
+})();
+})();
+</script>

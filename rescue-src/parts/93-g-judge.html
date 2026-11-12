@@ -1,0 +1,80 @@
+<style>
+#gJudge .jpair{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+#gJudge .jpair .jcard{min-height:130px;font-size:17px}
+#gJudge .jbtns .pk{background:#ffe9a8}
+#gJudge .jtime{font:600 30px var(--f-data);color:var(--bp-hi);margin:0 0 4px}
+#gJudge .opts button.right,#gJudge .opts button.wrong{color:var(--ink)}
+#gJudge .jkey{color:#15212c}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, shuffle=K.shuffle, gameBox=K.gameBox;
+/* ============ GAME 閱卷委員（單元 0）：三小關 ============ */
+var gJudge=gameBox('gJudge','GAME','你是閱卷委員','/10','三輪閱卷：先判及格線，再比哪份扣得多，最後在時間快到時決定先救什麼。');
+(function(){
+  /* 第 1 輪：[描述, 1=及格 0=不及格, 原因] */
+  var R1=[['六張圖都有，線條普通。建蔽率、容積率的算式寫在圖上，都合法。',1,'平凡但完整、合法。這就是及格圖。'],
+   ['透視畫得像競圖作品。平面只畫了一樓，二樓三樓是空白。',0,'缺圖。題目要求的每一張圖都要存在。'],
+   ['圖都有，也很漂亮。題目要求 20 部停車位，圖上找不到停車場。',0,'漏掉硬條件。題目裡的數字，閱卷者會一條一條對。'],
+   ['圖都有。建築超出退縮線 2 公尺。',0,'違規。超出退縮線等於蓋在不能蓋的地方。'],
+   ['圖都有、合法。計畫說明用表格列出三個議題和對策，圖上都找得到。',1,'有回應題目，而且找得到。這是高分的寫法。'],
+   ['平面非常精細，連地磚都畫了。沒有剖面圖。',0,'缺圖。把畫地磚的時間拿去畫剖面，就及格了。'],
+   ['圖都有、合法。造型就是一個方盒子，沒什麼特色，但動線清楚。',1,'方盒子沒有問題。及格線不考造型。'],
+   ['建築做成螺旋形，很有創意。整棟只有一座樓梯。',0,'逃生不合格。每層至少要兩座樓梯。'],
+   ['圖都有、合法。透視只畫了一個有樓層線的盒子，加兩棵樹和一個人。',1,'量體透視就夠了。透視「有」比「美」重要。'],
+   ['圖都有、合法。所有房間都沒寫名稱，看不出哪間是什麼。',0,'沒標空間名稱，閱卷者無法確認題目要求的空間是否都有。']];
+  /* 第 2 輪：[考卷甲, 考卷乙, 扣得多的是 0=甲 1=乙, 原因] */
+  var R2=[['少畫一張剖面圖，其他都很完整。','停車位少 3 部（題目要 20 部，圖上 17 部）。',0,'缺圖比違反硬條件更嚴重。少一張圖，那張圖的分數整個是零。'],
+   ['建築超出退縮線 1 m。','廁所離閱覽區很遠，動線繞了一大圈。',0,'超出退縮線是違規；動線繞是設計不佳，只扣部分分數。'],
+   ['線條粗細都一樣，圖看起來很平。','多功能廳沒有自己的出入口，但題目要求夜間獨立開放。',1,'違反題目的硬條件，比表現不佳嚴重得多。'],
+   ['透視只畫了量體，沒有上色。','透視完全沒畫。',1,'沒畫就是缺圖。量體透視雖然簡單，但它「有」。'],
+   ['二樓閱覽區被走廊切成兩半，使用不便。','整份圖沒上色，只有黑白線條。',0,'設計不佳比表現不佳嚴重。沒上色扣的是表現分。'],
+   ['地上蓋了 5 層，題目限 4 層。','量體是方盒子，立面沒有變化。',0,'樓層超過上限是違反硬條件；造型普通不是扣分重點。'],
+   ['老榕樹的樹冠下挖了地下室。','立面圖沒畫陰影，看起來比較平。',0,'保留老樹是硬條件，樹冠下開挖等於沒保留。陰影只是表現。'],
+   ['兒童閱覽區放在三樓，離入口很遠。','立面圖沒畫。',1,'缺圖最嚴重。兒童閱覽放三樓是設計不佳，只扣部分分數。']];
+  /* 第 3 輪：[剩下的時間, 選項（第一個是對的）, 原因] */
+  var R3=[['60 分鐘',['透視圖還沒畫','平面圖的家具還沒畫','配置圖還沒上色','計畫說明的字太潦草，想重寫'],'透視是題目要求的圖，缺圖扣最重。先用 10 分鐘畫量體透視，剩下的時間再補其他。'],
+   ['40 分鐘',['二樓只畫了一座樓梯','剖面圖的樓高還沒標','透視還沒上色'],'少一座樓梯是逃生違規，會重扣。標樓高 5 分鐘就好，補完樓梯再做。'],
+   ['25 分鐘',['剖面圖還沒畫','配置圖少畫 2 部停車位','立面圖還沒上陰影','平面圖的地坪材料還沒標'],'缺圖比違規更嚴重。先用 15 分鐘畫出有地面線、樓高、空間名稱的剖面。'],
+   ['15 分鐘',['建蔽率、容積率的算式沒寫在圖上','立面沒寫材料名稱','透視沒畫人和樹'],'算式是讓閱卷者確認你合法的證據，2 分鐘就能寫完，最划算。'],
+   ['30 分鐘',['三樓平面還沒畫（一、二樓畫好了）','透視還沒上色','計畫說明的表格少一欄'],'少一層平面就是缺圖。三樓先畫柱格、服務核、房間名稱，20 分鐘內求有。'],
+   ['10 分鐘',['多功能廳的夜間獨立入口沒畫出來','各房間的地坪材料沒標','立面窗戶的陰影沒畫'],'夜間獨立開放是題目的硬條件。補一個入口符號和一扇門，3 分鐘就能救回來。']];
+  var KEY=['<b>及格圖只有三個條件：</b>題目要的圖都有畫、題目給的數字都沒違反、看得出有回應題旨。漂亮不在裡面。',
+           '<b>扣分的輕重：</b>缺圖 ＞ 違反硬條件 ＞ 設計不佳 ＞ 表現不佳。兩個問題只能改一個時，永遠先改排在前面的。',
+           '<b>時間快到時：</b>先讓每張圖都「有」，再修違規，最後才是好看。每個決定都用「這個不做會扣多少」來排。'];
+  var lv=0, deck, i, right, body=el('div'), L; gJudge.appendChild(body);
+  function total(){return deck.length}
+  function dots(){return '<div class="dots">'+deck.map(function(d){return '<i class="'+(d.r===1?'r':d.r===0?'w':'')+'"></i>'}).join('')+'</div>'}
+  function nextBtn(){var n=el('button',{type:'button','class':'go'},i<deck.length-1?'下一份 →':'看結果'); n.style.marginTop='10px'; body.appendChild(n); n.addEventListener('click',function(){i++;show()}); n.focus({preventScroll:true})}
+  function verdict(ok,txt){var m=$('.verdict',body); m.hidden=false; m.className='verdict '+(ok?'ok':'no'); m.innerHTML='<b>'+(ok?'判對了。':'判錯了。')+'</b>'+txt}
+  function show(){ if(i>=deck.length){done();return} var c=deck[i];
+    if(lv===0){
+      body.innerHTML='<div class="jcard"><small>考卷 '+(i+1)+' / '+total()+'</small>'+c[0]+'</div><div class="jbtns"><button type="button" class="no">不及格</button><button type="button" class="yes">及格</button></div><p class="verdict mid" hidden></p>'+dots();
+      $('.no',body).addEventListener('click',function(){ans(0)}); $('.yes',body).addEventListener('click',function(){ans(1)})}
+    else if(lv===1){
+      body.innerHTML='<p class="hint" style="margin:0 0 8px">第 '+(i+1)+' / '+total()+' 組。兩份都有問題。哪一份扣得比較多？</p><div class="jpair"><div class="jcard"><small>考卷 甲</small>'+c.a+'</div><div class="jcard"><small>考卷 乙</small>'+c.b+'</div></div><div class="jbtns"><button type="button" class="pk" data-v="0">甲 扣得多</button><button type="button" class="pk" data-v="1">乙 扣得多</button></div><p class="verdict mid" hidden></p>'+dots();
+      $$('.jbtns button',body).forEach(function(b){b.addEventListener('click',function(){ans(+b.dataset.v)})})}
+    else{
+      body.innerHTML='<div class="jcard"><small>情況 '+(i+1)+' / '+total()+'</small><p class="jtime">剩 '+c[0]+'</p>下面這些都還沒做完。你先做哪一個？</div><div class="opts">'+c.o.map(function(t,k){return '<button type="button" data-k="'+k+'">'+t+'</button>'}).join('')+'</div><p class="verdict mid" hidden></p>'+dots();
+      $$('.opts button',body).forEach(function(b){b.addEventListener('click',function(){ans(+b.dataset.k)})})}
+  }
+  function ans(v){var c=deck[i], ok;
+    if(lv===0){ok=v===c[1]; c.r=ok?1:0; verdict(ok,'這份'+(c[1]?'及格':'不及格')+'：'+c[2]); $$('.jbtns button',body).forEach(function(b){b.disabled=true})}
+    else if(lv===1){ok=v===c.ans; c.r=ok?1:0; verdict(ok,'扣得多的是考卷'+(c.ans?'乙':'甲')+'。'+c.why); $$('.jbtns button',body).forEach(function(b){b.disabled=true})}
+    else{ok=v===c.ans; c.r=ok?1:0; $$('.opts button',body).forEach(function(b,k){b.disabled=true; if(k===c.ans)b.classList.add('right'); else if(k===v)b.classList.add('wrong')}); verdict(ok,'先做「'+c.o[c.ans]+'」。'+c[2])}
+    if(ok)right++; hud(gJudge,right); var d=$('.dots',body); if(d)d.outerHTML=dots(); nextBtn() }
+  function done(){var sc=Math.round(right/total()*100), pass=L.done(lv,sc);
+    body.innerHTML='<p class="fq">'+right+' / '+total()+'。'+(pass?['你已經有閱卷者的眼睛了。','輕重分得出來了。','你會先救分數最多的地方了。'][lv]:'再來一次。答錯的原因都在上面那句話裡。')+'</p><div class="key jkey">'+KEY[lv]+'</div><div class="frow"></div>';
+    var fr=$('.frow',body), again=el('button',{type:'button','class':pass?'ghost':'go'},'再玩一次'); again.addEventListener('click',function(){start(lv)}); fr.appendChild(again);
+    if(pass&&lv<L.count-1){var nx=el('button',{type:'button','class':'go'},'下一小關 →'); nx.addEventListener('click',function(){L.next()}); fr.appendChild(nx)} }
+  function start(n){lv=n; i=0; right=0; hud(gJudge,0);
+    if(n===0)deck=shuffle(R1.map(function(d){return d.slice()}));
+    else if(n===1)deck=shuffle(R2.map(function(d){var sw=Math.random()<.5; return {a:sw?d[1]:d[0],b:sw?d[0]:d[1],ans:sw?1-d[2]:d[2],why:d[3]}}));
+    else deck=shuffle(R3.map(function(d){var o=d[1].map(function(t,k){return {t:t,k:k}}); shuffle(o); var x=[d[0],null,d[2]]; x.o=o.map(function(z){return z.t}); x.ans=o.map(function(z){return z.k}).indexOf(0); return x}));
+    $('.hud small',gJudge).textContent='/'+deck.length; K.stampOff(gJudge); show()}
+  L=K.levels(gJudge,{key:'g:judge',names:['及格線','比輕重','先救誰'],pass:80,start:start});
+})();
+})();
+</script>

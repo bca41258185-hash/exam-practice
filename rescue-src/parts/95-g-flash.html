@@ -1,0 +1,87 @@
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, shuffle=K.shuffle;
+/* ============ 數字快答：自動產生的大題庫 ============ */
+var box=$('#gFlash'); if(!box)return;
+function f(n){return (Math.round(n*100)/100).toLocaleString('en-US')}
+function uniq(a){var s={},o=[]; a.forEach(function(x){if(x!=null&&!s[x]){s[x]=1;o.push(x)}}); return o}
+/* 由正確值和幾個「常見算錯的值」組出一題；錯誤選項不足時自動補上相近數字 */
+function Q(c,q,v,alts,unit,why){var a=f(v)+unit, w=uniq(alts.filter(function(x){return x>0&&isFinite(x)&&Math.abs(x-v)>1e-9}).map(function(x){return f(x)+unit})).filter(function(x){return x!==a});
+  var k=1; while(w.length<2&&k<9){var x=v*(1+0.25*k*(k%2?1:-1)), t=f(x)+unit; if(x>0&&t!==a&&w.indexOf(t)<0)w.push(t); k++}
+  return {c:c,q:q,a:a,w:w.slice(0,2),y:why||''}}
+var B=[], SITES=[600,800,900,1000,1200,1500,1600,1800,2000,2400,2500,3000,3600,4000,5000];
+SITES.forEach(function(s){
+  [30,40,50,60,70,80].forEach(function(b){
+    B.push(Q('bf','基地 '+f(s)+' ㎡、建蔽率 '+b+'%，最大建築面積？',s*b/100,[s*(100-b)/100,s*b/10,s*b/200],' ㎡','基地 × 建蔽率'));
+    B.push(Q('bf','基地 '+f(s)+' ㎡、建蔽率 '+b+'%，法定空地至少？',s*(100-b)/100,[s*b/100,s*(100-b)/200,s],' ㎡','基地 − 最大建築面積'))});
+  [100,120,150,160,180,200,240,300].forEach(function(r){B.push(Q('bf','基地 '+f(s)+' ㎡、容積率 '+r+'%，最大容積樓地板？',s*r/100,[s*r/1000,s*(r+100)/100,s*r/200],' ㎡','基地 × 容積率'))});
+  [40,50,60].forEach(function(b){[1.0,1.3,1.6,2.1,2.4].forEach(function(k){var need=s*k, fp=s*b/100, fl=Math.ceil(need/fp-1e-9);
+    B.push(Q('bf','基地 '+f(s)+' ㎡、建蔽率 '+b+'%，要蓋 '+f(need)+' ㎡，至少幾層？',fl,[fl-1,fl+1,fl+2],' 層','需要樓地板 ÷ 最大建築面積，無條件進位'))})});
+  [.3,.35,.4,.45,.5,.55,.6].forEach(function(p){B.push(Q('bf','基地 '+f(s)+' ㎡，建築面積 '+f(s*p)+' ㎡，實際建蔽率？',p*100,[p*100+10,p*100-10,(1-p)*100],'%','建築面積 ÷ 基地面積'))});
+  [1.0,1.2,1.5,1.6,1.8,2.0,2.4].forEach(function(p){B.push(Q('bf','基地 '+f(s)+' ㎡，地上樓地板合計 '+f(s*p)+' ㎡，實際容積率？',p*100,[p*100+20,p*100-20,p*50],'%','容積樓地板 ÷ 基地面積'))});
+});
+var n;
+for(n=400;n<=3000;n+=100)(function(a){[1.3,1.4,1.5].forEach(function(k){B.push(Q('ar','淨面積 '+f(a)+' ㎡，係數 '+k+'，需要樓地板？',a*k,[a*(k+0.3),a*(k-0.3),a*k/2],' ㎡','淨面積 × 係數'))})})(n);
+for(n=1;n<=12;n++)B.push(Q('ar','8 × 8 m 柱格 '+n+' 格是多少面積？',n*64,[n*48,n*80,n*16],' ㎡','一格 64 ㎡'));
+for(n=70;n<=760;n+=30)(function(a){var g=Math.ceil(a/64); B.push(Q('ar',a+' ㎡ 的空間，至少要幾格 8 × 8 m 柱格？',g,[g+1,g-1,g+2],' 格','面積 ÷ 64，無條件進位'))})(n);
+for(n=6;n<=60;n+=2)(function(c){B.push(Q('ar',c+' 部汽車的地下停車場，面積大約？',c*40,[c*14,c*25,c*80],' ㎡','每部車連車道約 40 ㎡'));
+  var g=Math.ceil(c/3); B.push(Q('ar','8 m 柱距一跨停 3 部，'+c+' 部車要幾跨？',g,[g+1,g-1,g+3],' 跨','車數 ÷ 3，無條件進位'))})(n);
+[3.0,3.2,3.3,3.6,3.9,4.0,4.2,4.5,4.8,5.4].forEach(function(h){[15,16,18].forEach(function(r){var s=Math.ceil(h*100/r-1e-9); B.push(Q('st','樓高 '+h+' m、級高不超過 '+r+' cm，至少幾級？',s,[s-1,s+2,s-3],' 級','樓高 ÷ 級高，無條件進位'))})});
+for(n=18;n<=32;n++)(function(c){[15,16].forEach(function(r){B.push(Q('st',c+' 級、每級 '+r+' cm，樓高是？',c*r/100,[(c-1)*r/100,(c+2)*r/100,c*(r+2)/100],' m','級數 × 級高'))})})(n);
+[0.3,0.45,0.6,0.9,1.2,1.5].forEach(function(h){B.push(Q('st','高差 '+h+' m 的無障礙坡道（1：12），水平長度至少？',h*12,[h*6,h*8,h*20],' m','高差 × 12'))});
+[3.0,3.3,3.6,4.0,4.2,4.5].forEach(function(h){B.push(Q('st','下降 '+h+' m 的車道坡道（1：6），水平長度至少？',h*6,[h*12,h*3,h*8],' m','高差 × 6'))});
+for(n=2;n<=8;n++)(function(c){B.push(Q('st','一樓 4.5 m、其餘每層 3.6 m，'+c+' 層樓的屋頂版高度？',4.5+(c-1)*3.6,[c*3.6,c*4.5,4.5+c*3.6],' m','4.5 ＋（層數 − 1）× 3.6'));
+  B.push(Q('st','一樓 4.5 m、其餘 3.6 m、女兒牆 1.1 m，'+c+' 層樓的最高點？',4.5+(c-1)*3.6+1.1,[4.5+(c-1)*3.6,c*3.6+1.1,4.5+c*3.6+1.1],' m','屋頂版高度 ＋ 女兒牆 1.1'))})(n);
+[100,200,300,400,500].forEach(function(s){
+  [4,8,10,12,16,20,24,30,32,40,50,60].forEach(function(m){B.push(Q('sc','比例 1/'+s+'，實際 '+m+' m 在圖上畫多長？',m*100/s,[m*100/(s*2),m*200/s,m*10/s],' cm','公尺 × 100 ÷ 比例分母'))});
+  [1,2,3,4,5,6,8,10,12,15].forEach(function(c){B.push(Q('sc','比例 1/'+s+'，圖上 '+c+' cm 代表實際多長？',c*s/100,[c*s/200,c*s/50,c*s/1000],' m','公分 × 比例分母 ÷ 100'))})});
+var ST=[['讀題',0,30],['計算與計畫說明',30,90],['草圖',90,150],['配置與各層平面',150,300],['剖面、立面',300,360],['透視',360,400],['標註與上色',400,450],['檢查',450,480]];
+function hm(t){return Math.floor(t/60)+':'+('0'+t%60).slice(-2)}
+for(n=0;n<480;n+=10)(function(t){var cur=ST.filter(function(s){return t>=s[1]&&t<s[2]})[0], others=shuffle(ST.filter(function(s){return s!==cur}).map(function(s){return s[0]})).slice(0,2);
+  B.push({c:'pc',q:'開考 '+hm(t)+'，照配速表你應該在做什麼？',a:cur[0],w:others,y:cur[0]+'的時段是 '+hm(cur[1])+' 到 '+hm(cur[2])})})(n);
+[['汽車停車位的尺寸','2.5 × 5.5 m','2 × 5 m','3 × 6 m'],['無障礙汽車位的尺寸','3.5 × 6 m','2.5 × 5.5 m','3 × 5 m'],['機車位的尺寸','1 × 2 m','0.5 × 1.5 m','1.5 × 2.5 m'],['車道坡道最陡','1：6','1：12','1：4'],['無障礙坡道最陡','1：12','1：6','1：20'],
+ ['雙向車道寬','5.5 m','3.5 m','7 m'],['單向車道寬','3.5 m','2.5 m','5.5 m'],['樓梯級高上限（考場用）','16 cm','20 cm','12 cm'],['樓梯級深下限','26 cm','20 cm','32 cm'],['公共建築梯寬至少','1.4 m','0.9 m','2.4 m'],
+ ['考場萬用柱距','8 m','5 m','12 m'],['8 m 跨的梁深約','70～80 cm','30～40 cm','120 cm'],['走廊畫多寬不會錯','2.4 m','1.0 m','4 m'],['每層至少幾座樓梯','2 座','1 座','4 座'],['輪椅迴轉直徑','1.5 m','1.0 m','2.5 m'],
+ ['女兒牆至少多高','1.1 m','0.6 m','1.8 m'],['標準層樓高常用','3.6 m','2.4 m','5 m'],['一樓樓高常用','4.2～4.5 m','3 m','6 m'],['一般公共建築的面積係數','1.4','1.0','2.0'],['房間小而多（宿舍）的面積係數','1.5','1.1','2.2'],
+ ['大空間（體育館）的面積係數','1.3','1.0','1.8'],['每部汽車連車道約需','40 ㎡','14 ㎡','80 ㎡'],['讀題應該花多久','30 分鐘','5 分鐘','90 分鐘'],['草圖最晚幾點定案','2:30','4:30','1:00'],['最後留多久檢查','30 分鐘','5 分鐘','90 分鐘'],
+ ['建築計畫常見配分','30 分','10 分','70 分'],['建築設計常見配分','70 分','30 分','50 分'],['車道口離路口至少','5 m','1 m','50 m'],['到樓梯的步行距離抓','30 m 內','80 m 內','5 m 內'],['大設計考幾小時','8 小時','4 小時','12 小時'],
+ ['敷地計畫考幾小時','4 小時','8 小時','2 小時'],['每科幾分及格','60 分','50 分','70 分'],['建築師考試共幾科','6 科','4 科','8 科'],['例題：臨道路側退縮','4 m','1 m','10 m'],['考場習慣：鄰地側至少退','3 m','0 m','8 m'],
+ ['車位＋車道＋車位的總寬','16.5 m','11 m','22 m'],['電梯間考場用尺寸約','2.5 × 2.5 m','1 × 1 m','5 × 5 m'],['樓梯間考場用尺寸約','3.5 × 6.5 m','2 × 3 m','6 × 10 m'],['無障礙廁所考場用尺寸約','2 × 2 m','1 × 1.2 m','4 × 4 m'],['樓高 3.6 m、每級 15 cm，共幾級','24 級','18 級','30 級'],
+ ['樓高 4.5 m、每級 15 cm，共幾級','30 級','24 級','36 級'],['樓高 4.2 m、每級 15 cm，共幾級','28 級','21 級','35 級'],['地下停車算不算容積（考場簡化）','不算','全算','算一半'],['配置的第一個決定','車道出入口','立面材料','透視角度'],['畫平面的第一步','柱格','家具','房間名稱']
+].forEach(function(x){B.push({c:'fa',q:x[0],a:x[1],w:[x[2],x[3]],y:''})});
+(window.KY_PAST||[]).forEach(function(q){ if(!q.area||!q.bcr||!q.far||q.id==='104')return; var s=q.area, nm=q.id+' 年真題「'+q.t+'」：';
+  B.push(Q('rp',nm+'基地 '+f(s)+' ㎡、建蔽率 '+q.bcr+'%，最大建築面積？',s*q.bcr/100,[s*(100-q.bcr)/100,s*q.bcr/200,s*q.far/100],' ㎡','基地 × 建蔽率'));
+  B.push(Q('rp',nm+'基地 '+f(s)+' ㎡、容積率 '+q.far+'%，最大容積樓地板？',s*q.far/100,[s*q.bcr/100,s*(q.far+100)/100,s*q.far/200],' ㎡','基地 × 容積率'));
+  var fl=Math.ceil(q.far/q.bcr-1e-9); B.push(Q('rp',nm+'建蔽率 '+q.bcr+'%、容積率 '+q.far+'%，把容積用滿至少要幾層？',fl,[fl-1,fl+1,fl+2],' 層','容積率 ÷ 建蔽率，無條件進位'));
+  B.push({c:'rp',q:nm+'題目要求畫幾項圖面？',a:q.draw.length+' 項',w:[(q.draw.length+2)+' 項',Math.max(1,q.draw.length-2)+' 項'],y:q.draw.join('、')}) });
+B=B.filter(function(q){return q.w.length===2&&q.w[0]!==q.w[1]&&q.w.indexOf(q.a)<0});
+
+var CAT=[['all','綜合'],['bf','建蔽與容積'],['ar','面積估算'],['st','樓梯與坡道'],['sc','比例尺'],['pc','配速'],['fa','法規數字'],['rp','歷屆真題']];
+Array.prototype.slice.call(box.children).forEach(function(c){ if(!c.classList.contains('ghead')&&!c.classList.contains('gdesc'))box.removeChild(c) });
+var body=el('div'); box.appendChild(body);
+$('.gdesc',box).textContent='題庫共 '+B.length.toLocaleString('en-US')+' 題，每次隨機抽。60 秒內答越多越好：連對 3 題起每題 2 分，連對 6 題起每題 3 分。答錯會顯示算法。';
+body.innerHTML='<div class="pills" id="flCat" role="group" aria-label="題目類型"></div><div class="ftime"><i id="flBar"></i></div><p class="fq" id="flQ">選一種題型，按開始。</p><div class="fopts" id="flOpts"></div><p class="verdict mid" id="flMsg" hidden></p><div class="frow"><button class="go" type="button" id="flStart">開始 60 秒</button><span class="hint" id="flBest"></span></div>';
+var mode='all', deck, score, streak, left, timer=null, lock=false, right, total, wrongs;
+function bestOf(m){return (K.st.sc&&K.st.sc['flash:'+m])||0}
+function showBest(){$('#flBest',body).textContent='這個題型的最高紀錄：'+bestOf(mode)+' 分'}
+CAT.forEach(function(c){var b=el('button',{type:'button','class':'pill','data-m':c[0],'aria-pressed':c[0]===mode?'true':'false'},c[1]+' <span class="fig">'+(c[0]==='all'?B.length:B.filter(function(q){return q.c===c[0]}).length)+'</span>'); $('#flCat',body).appendChild(b);
+  b.addEventListener('click',function(){ if(timer)return; mode=c[0]; $$('#flCat .pill',body).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')}); showBest() })});
+function build(){ if(mode!=='all')return shuffle(B.filter(function(q){return q.c===mode}));
+  /* 綜合：各題型輪流出，避免題數多的類別洗版 */
+  var piles=CAT.slice(1).map(function(c){return shuffle(B.filter(function(q){return q.c===c[0]}))}), out=[], i=0;
+  while(out.length<210){var p=piles[i%piles.length]; if(p.length)out.push(p.pop()); i++; if(i>5000)break} return out.reverse()}
+function next(){ if(!deck.length)deck=build(); var q=deck.pop(), o=$('#flOpts',body); $('#flQ',body).textContent=q.q; o.innerHTML=''; lock=false;
+  shuffle([q.a].concat(q.w)).forEach(function(a){var b=el('button',{type:'button'},a); if(a===q.a)b.dataset.ok='1'; o.appendChild(b); b.addEventListener('click',function(){ if(lock||!timer)return; lock=true; total++;
+    if(a===q.a){streak++; right++; score+=streak>=6?3:streak>=3?2:1; b.classList.add('right')} else {streak=0; wrongs.push(q); b.classList.add('wrong'); $$('button',o).forEach(function(x){if(x.dataset.ok)x.classList.add('right')}); if(q.y)$('#flQ',body).textContent=q.q+'　→ '+q.y}
+    hud(box,score); setTimeout(function(){if(timer)next()},a===q.a?200:1100) })}) }
+function stop(){ clearInterval(timer); timer=null; $('#flOpts',body).innerHTML=''; $('#flQ',body).textContent='時間到。'; var m=$('#flMsg',body); m.hidden=false;
+  K.st.sc=K.st.sc||{}; var rec=score>bestOf(mode); if(rec){K.st.sc['flash:'+mode]=score; K.save()}
+  m.className='verdict '+(score>=20?'ok':'mid'); m.innerHTML='<b>答對 '+right+' / '+total+' 題，得 '+score+' 分'+(rec?'，新紀錄':'')+'。</b>'+(wrongs.length?'答錯的：'+wrongs.slice(0,4).map(function(q){return q.q+' → '+q.a}).join('；')+'。':'全部答對。');
+  if(score>=20)K.stampOn(box,'過關'); K.award('g:flash:'+mode,Math.min(100,score*4)/CAT.length); $('#flStart',body).hidden=false; $('#flStart',body).textContent='再來 60 秒'; showBest() }
+$('#flStart',body).addEventListener('click',function(){ deck=[]; score=0; streak=0; right=0; total=0; wrongs=[]; left=600; hud(box,0); K.stampOff(box); $('#flMsg',body).hidden=true; $('#flStart',body).hidden=true; next();
+  timer=setInterval(function(){left--; $('#flBar',body).style.width=(left/6)+'%'; if(left<=0)stop()},100) });
+showBest(); K.flashCount=B.length; K.flashBank=B;
+})();
+</script>

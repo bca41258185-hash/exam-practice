@@ -1,0 +1,27 @@
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, svgPt=K.svgPt, clamp=K.clamp, shuffle=K.shuffle,
+    gameBox=K.gameBox, view=K.view, aiReady=K.aiReady, aiMsg=K.aiMsg;
+/* ============ GAME 對策評分（單元 3，AI） ============ */
+var gPol=gameBox('gPol','AI','AI 閱卷委員：批你的對策','/10','選一個議題，用「把＿＿放在＿＿，讓＿＿」寫一條對策。AI 閱卷委員會打分數，並告訴你怎麼改得更具體。');
+(function(){
+  var IS=['不同世代自然相遇','白天晚上都有人使用','與東側公園的活動相互延伸','降低對北側住宅的壓迫與干擾'], cur=0, body=el('div'); gPol.appendChild(body);
+  body.innerHTML='<div class="pills" id="plIs"></div><label for="plTx" class="hint">你的對策</label><textarea id="plTx" maxlength="200" placeholder="例如：把咖啡放在一樓西南角，讓公車站下車的人直接看到。"></textarea><div class="frow"><button type="button" class="go" id="plGo">送出評分</button><span class="ai-tag" id="plTag">本機規則</span></div><div class="ai-out" id="plOut" hidden></div>';
+  IS.forEach(function(t,k){var b=el('button',{type:'button','class':'pill','aria-pressed':k===0?'true':'false'},t); $('#plIs',body).appendChild(b); b.addEventListener('click',function(){cur=k; $$('#plIs .pill',body).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')})})});
+  function local(t){var pos=/(樓|側|角|臨|面向|朝|旁|南|北|東|西|中央|入口|屋頂|地下)/.test(t), why=/(讓|使|以便|使得|避免|減少)/.test(t), obj=/(把|將)/.test(t), s=Math.min(8,(pos?4:0)+(why?3:0)+(obj?1:0)+(t.length>=14?2:0));
+    return {score:s,good:pos?'有寫出位置。':'',fix:(pos?'':'沒有寫出具體位置（哪一層、哪一側）。')+(why?'':'沒有寫出這樣做的效果（讓誰怎麼樣）。')||'可以再加上尺寸或相鄰的空間，讓它更具體。'}}
+  function show(r,ai){var o=$('#plOut',body); o.hidden=false; var s=Math.max(0,Math.min(10,Math.round(+r.score||0))); hud(gPol,s); K.award('g:pol',s*5); if(s>=8)K.stampOn(gPol,'合格'); else K.stampOff(gPol);
+    o.textContent=s+' / 10\n'+(r.good?'好的地方：'+r.good+'\n':'')+(r.fix?'可以改：'+r.fix+'\n':'')+(r.better?'改寫示範：'+r.better:'')}
+  aiReady.then(function(sample){ if(sample)$('#plTag',body).textContent='AI 評分';
+    $('#plGo',body).addEventListener('click',function(){var t=$('#plTx',body).value.trim(), o=$('#plOut',body); if(t.length<6){o.hidden=false;o.textContent='先寫一句對策。';return}
+      if(!sample){show(local(t));return}
+      var btn=$('#plGo',body); btn.disabled=true; o.hidden=false; o.textContent='閱卷委員正在看……';
+      sample.json('你是台灣建築師考試「建築計畫與設計」的閱卷委員，正在批改考生寫的一條設計對策。\n題目：社區圖書分館暨樂齡學習中心。基地東西40m南北50m，南臨15m主要道路（有公車站），西臨8m道路，東鄰社區公園，北鄰4層住宅，東南角有老榕樹要保留。空間有一般閱覽、兒童閱覽、樂齡教室、多功能廳（夜間獨立開放）、共餐廚房、行政、咖啡。\n考生要回應的議題：「'+IS[cur]+'」\n考生寫的對策：「'+t.slice(0,200)+'」\n評分標準（0到10分）：有沒有指出具體位置（哪層、哪側、臨什麼）；能不能在圖上畫出來；有沒有說明效果；是否真的回應這個議題。空話（例如「營造友善氛圍」）給低分。\n只回覆一個 JSON 物件，欄位：score（整數0-10）、good（一句話，做得好的地方，沒有就空字串）、fix（一句話，最該改的地方）、better（一句改寫示範，用「把＿放在＿，讓＿」句型）。全部用繁體中文。例：{"score":6,"good":"有寫出樓層。","fix":"沒說放在哪一側。","better":"把兒童閱覽放在二樓東側，讓孩子看得到公園。"}',{modelTier:'quick'})
+       .then(function(r){ if(!r||typeof r!=='object')throw {code:'invalid_json'}; show(r,true)})
+       .catch(function(e){ if(e&&(e.code==='not_granted'||e.code==='sampling_disabled')){sample=null; $('#plTag',body).textContent='本機規則'; show(local(t))} else o.textContent=aiMsg(e)||'已取消。' })
+       .then(function(){btn.disabled=false}) }) });
+})();
+})();
+</script>
