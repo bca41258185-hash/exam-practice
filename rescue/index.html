@@ -1,0 +1,1531 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="考試急救">
+<meta name="theme-color" content="#1b4f9c">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>建築師考試急救</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 版面：寬螢幕＝左側課表欄＋右側單欄講義（像圖桌上的圖紙）；窄螢幕＝頂列＋抽屜課表 */
+:root{
+  --paper:#f3f6f9; --sheet:#ffffff; --ink:#15212c; --mut:#56646f; --line:#cdd7e0;
+  --blue:#1b4f9c; --blue-soft:#e2ebf7; --mark:#ffe066; --mark-ink:#15212c;
+  --ok:#1b7447; --okbg:#dcf2e5; --bad:#b3261e; --badbg:#fbe4e1; --warn:#7d5200; --warnbg:#fbefd2;
+  --f-text:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0d151e; --sheet:#15202b; --ink:#e6edf3; --mut:#9dabb8; --line:#2b3a49;
+  --blue:#84b4f7; --blue-soft:#1a2d47; --mark:#7a6400; --mark-ink:#fff6c9;
+  --ok:#72d49d; --okbg:#143223; --bad:#ff8f85; --badbg:#3b1a17; --warn:#f0c463; --warnbg:#3a2c08; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --paper:#0d151e; --sheet:#15202b; --ink:#e6edf3; --mut:#9dabb8; --line:#2b3a49;
+  --blue:#84b4f7; --blue-soft:#1a2d47; --mark:#7a6400; --mark-ink:#fff6c9;
+  --ok:#72d49d; --okbg:#143223; --bad:#ff8f85; --badbg:#3b1a17; --warn:#f0c463; --warnbg:#3a2c08; color-scheme:dark }
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.75 var(--f-text);-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--sheet)}
+button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+a{color:var(--blue)}
+.num,td.n,.fig{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+
+/* 頂列 */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--sheet);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;gap:12px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{font-weight:900;font-size:17px;letter-spacing:.02em;white-space:nowrap;background:none;border:0;padding:6px 0}
+.brand small{font-weight:500;color:var(--mut);font-size:12px;margin-left:6px}
+.meter{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.bar{flex:1;height:8px;background:var(--blue-soft);border-radius:4px;overflow:hidden;min-width:40px}
+.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .3s}
+.meter span{font:600 13px var(--f-data);color:var(--mut);white-space:nowrap}
+.tbtn{border:1px solid var(--line);background:var(--sheet);border-radius:var(--r);padding:6px 12px;font-size:14px;white-space:nowrap;min-height:38px}
+.tbtn[aria-pressed="true"]{background:var(--blue);color:var(--sheet);border-color:var(--blue)}
+#menuBtn{display:none}
+
+/* 骨架 */
+.wrap{display:grid;grid-template-columns:270px minmax(0,1fr);max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));gap:28px}
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 56px);align-self:start;max-height:calc(100vh - 70px);overflow:auto;padding-block:20px}
+.rail h2{font-size:12px;letter-spacing:.14em;color:var(--mut);margin:0 0 8px;font-weight:700}
+.rail ol{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:2px}
+.rail button{width:100%;display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;text-align:left;background:none;border:0;border-radius:var(--r);padding:8px 8px;font-size:15px;line-height:1.35}
+.rail button:hover{background:var(--blue-soft)}
+.rail button[aria-current="true"]{background:var(--ink);color:var(--paper)}
+.rail .dot{width:18px;height:18px;border:2px solid var(--mut);border-radius:50%;display:grid;place-items:center;font-size:11px;line-height:1}
+.rail .done .dot{background:var(--ok);border-color:var(--ok);color:var(--sheet)}
+.rail .min{font:400 12px var(--f-data);opacity:.75}
+main{min-width:0;padding-block:24px 80px}
+.view{max-width:760px}
+.view[hidden]{display:none}
+
+/* 講義排版 */
+.eyebrow{font:600 12px var(--f-data);letter-spacing:.12em;color:var(--blue);margin:0}
+h1{font-size:clamp(26px,5vw,38px);line-height:1.25;font-weight:900;margin:4px 0 10px;text-wrap:balance}
+h2.h{font-size:22px;font-weight:900;margin:44px 0 8px;line-height:1.35;text-wrap:balance;padding-top:14px;border-top:2px solid var(--ink)}
+h3{font-size:17px;font-weight:700;margin:22px 0 4px}
+p{margin:10px 0}
+.lead{font-size:18px;color:var(--mut);margin:0 0 6px}
+.goal{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:14px;color:var(--mut);margin:12px 0 0;padding:0;list-style:none}
+.goal b{color:var(--ink)}
+ul.t,ol.t{padding-left:1.3em;margin:8px 0}
+ul.t li,ol.t li{margin:4px 0}
+mark{background:var(--mark);color:var(--mark-ink);padding:0 .15em;border-radius:2px}
+.key{background:var(--blue-soft);border-radius:var(--r);padding:12px 16px;margin:16px 0}
+.key b:first-child{color:var(--blue)}
+.warnbox{background:var(--warnbg);color:var(--ink);border-radius:var(--r);padding:12px 16px;margin:16px 0}
+.warnbox b:first-child{color:var(--warn)}
+.formula{font:600 17px/1.6 var(--f-data);background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;margin:12px 0;overflow-x:auto;white-space:nowrap}
+.tw{overflow-x:auto;margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:15px;background:var(--sheet)}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--blue-soft);font-weight:700;white-space:nowrap}
+td.n,th.n{text-align:right;white-space:nowrap}
+figure{margin:16px 0}
+figure svg{display:block;width:100%;height:auto;background:var(--sheet);border:1px solid var(--line);border-radius:var(--r)}
+figcaption{font-size:13px;color:var(--mut);margin-top:6px}
+svg text{font-family:var(--f-text);fill:var(--ink)}
+svg .dim{font-family:var(--f-data);font-size:11px;fill:var(--mut)}
+.s-ink{stroke:var(--ink);fill:none}.f-ink{fill:var(--ink)}.f-sheet{fill:var(--sheet)}.f-paper{fill:var(--paper)}
+.s-mut{stroke:var(--mut);fill:none}.f-mut{fill:var(--mut)}.s-line{stroke:var(--line);fill:none}.f-line{fill:var(--line)}
+.s-blue{stroke:var(--blue);fill:none}.f-blue{fill:var(--blue)}.f-soft{fill:var(--blue-soft)}
+.f-ok{fill:var(--okbg)}.s-ok{stroke:var(--ok);fill:none}.f-bad{fill:var(--badbg)}.s-bad{stroke:var(--bad);fill:none}.f-mark{fill:var(--mark)}.f-warn{fill:var(--warnbg)}
+.t-blue{fill:var(--blue)!important}.t-mut{fill:var(--mut)!important}.t-ok{fill:var(--ok)!important}.t-bad{fill:var(--bad)!important}.t-sheet{fill:var(--sheet)!important}
+
+/* 互動元件共用 */
+.box{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin:18px 0}
+.box>h4{margin:0 0 4px;font-size:15px;font-weight:700}
+.box>h4 em{font-style:normal;font:600 11px var(--f-data);letter-spacing:.1em;color:var(--blue);margin-right:8px}
+.hint{font-size:13px;color:var(--mut);margin:2px 0 10px}
+.opts{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.opts.row{flex-direction:row;flex-wrap:wrap}
+.opts button,.chip{border:1px solid var(--line);background:var(--sheet);border-radius:var(--r);padding:9px 12px;text-align:left;min-height:42px;font-size:15px;line-height:1.45}
+.opts button:hover:not(:disabled){border-color:var(--blue)}
+.opts button.right{background:var(--okbg);border-color:var(--ok)}
+.opts button.wrong{background:var(--badbg);border-color:var(--bad)}
+.why{font-size:14.5px;border-left:3px solid var(--blue);padding:2px 0 2px 12px;margin:10px 0 0}
+.why.ok{border-color:var(--ok)}.why.no{border-color:var(--bad)}
+.frow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:end;margin:10px 0}
+.frow label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mut);min-width:0}
+input[type=number],input[type=text]{font:600 16px var(--f-data);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;width:8.5em;max-width:100%}
+input[type=range]{width:100%;accent-color:var(--blue)}
+.go{background:var(--blue);color:var(--sheet);border:0;border-radius:var(--r);padding:9px 16px;font-weight:700;min-height:42px}
+.ghost{background:none;border:1px solid var(--line);border-radius:var(--r);padding:9px 14px;min-height:42px}
+.out{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0 0}
+.out div{background:var(--paper);border-radius:var(--r);padding:8px 10px;min-width:0}
+.out small{display:block;font-size:12px;color:var(--mut)}
+.out b{font:600 19px var(--f-data);overflow-wrap:anywhere}
+.out .flag-bad b{color:var(--bad)}.out .flag-ok b{color:var(--ok)}
+.verdict{margin:10px 0 0;font-size:14.5px;padding:8px 12px;border-radius:var(--r)}
+.verdict.ok{background:var(--okbg)}.verdict.no{background:var(--badbg)}.verdict.mid{background:var(--warnbg)}
+.check{list-style:none;padding:0;margin:10px 0;display:flex;flex-direction:column;gap:6px}
+.check label{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start;padding:6px 8px;border-radius:var(--r);cursor:pointer}
+.check label:hover{background:var(--blue-soft)}
+.check input{width:20px;height:20px;margin:3px 0 0;accent-color:var(--blue)}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.pill{border:1px solid var(--line);background:var(--sheet);border-radius:999px;padding:6px 14px;font-size:14px;min-height:38px}
+.pill[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.pill.placed{opacity:.35}
+.pill.c-hard{background:var(--badbg);border-color:var(--bad)}.pill.c-room{background:var(--blue-soft);border-color:var(--blue)}
+.pill.c-issue{background:var(--okbg);border-color:var(--ok)}.pill.c-draw{background:var(--warnbg);border-color:var(--warn)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--mut);margin:6px 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-1px;border:1px solid var(--mut)}
+/* 讀題標記 */
+.qtext{background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;line-height:2.15;font-size:15.5px}
+.qtext .ph{border-bottom:2px dashed var(--mut);padding:1px 2px;border-radius:2px;cursor:pointer;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.qtext .ph.c-hard{background:var(--badbg);border-bottom:2px solid var(--bad)}
+.qtext .ph.c-room{background:var(--blue-soft);border-bottom:2px solid var(--blue)}
+.qtext .ph.c-issue{background:var(--okbg);border-bottom:2px solid var(--ok)}
+.qtext .ph.c-draw{background:var(--warnbg);border-bottom:2px solid var(--warn)}
+.qtext .ph.miss{text-decoration:underline wavy var(--bad)}
+.buckets{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.bucket{border:2px dashed var(--line);border-radius:var(--r);padding:10px;min-height:92px;background:var(--paper);text-align:left;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.bucket strong{font-size:14px}
+.bucket span.in{font-size:13px;background:var(--sheet);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.bucket span.in.no{border-color:var(--bad);background:var(--badbg)}
+/* 動畫示範 */
+.player{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.player .cap{flex:1 1 240px;min-width:0;font-size:15px}
+.player .cap b{color:var(--blue);font-family:var(--f-data);margin-right:6px}
+.anim [data-s]{opacity:0;transition:opacity .5s}
+.anim [data-s].on{opacity:1}
+@media (prefers-reduced-motion:reduce){.anim [data-s],.bar i{transition:none}}
+/* 配速條 */
+.pace{display:flex;height:46px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);margin:12px 0 4px}
+.pace div{display:grid;place-items:center;font:600 11px var(--f-data);color:var(--ink);border-right:1px solid var(--sheet);min-width:0;overflow:hidden}
+.pace div.now{outline:3px solid var(--ink);outline-offset:-3px}
+.pace .a{background:var(--warnbg)}.pace .b{background:var(--blue-soft)}.pace .c{background:var(--okbg)}.pace .d{background:var(--badbg)}
+.navrow{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:44px;padding-top:18px;border-top:1px solid var(--line)}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:18px 0;padding:0;list-style:none}
+.home-grid button{width:100%;height:100%;text-align:left;background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:4px}
+.home-grid button:hover{border-color:var(--blue)}
+.home-grid .k{font:600 12px var(--f-data);color:var(--blue);letter-spacing:.08em}
+.home-grid .ttl{font-weight:700;font-size:16px;line-height:1.4}
+.home-grid .ds{font-size:13.5px;color:var(--mut);line-height:1.55}
+.home-grid .done .k::after{content:" ✓ 已完成";color:var(--ok)}
+.clock{font:600 44px/1 var(--f-data);letter-spacing:.02em}
+.cheat{columns:2 300px;column-gap:22px}
+.cheat section{break-inside:avoid;background:var(--sheet);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin:0 0 14px}
+.cheat h3{margin:0 0 6px;font-size:15px;color:var(--blue)}
+.cheat ul{margin:0;padding-left:1.15em;font-size:14.5px;line-height:1.65}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:11}
+@media (max-width:860px){
+  #menuBtn{display:inline-block}
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  .rail{position:fixed;z-index:12;top:0;bottom:0;left:0;width:min(300px,86vw);max-height:none;background:var(--sheet);border-right:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 16px) 14px 24px max(14px,env(safe-area-inset-left,0px));transform:translateX(-102%);transition:transform .2s}
+  .rail.open{transform:none}
+  .brand small{display:none}
+  .meter span{display:none}
+}
+@media print{.top,.rail,.navrow,.tbtn{display:none!important}.wrap{display:block}.view{max-width:none}}
+</style>
+<header class="top"><div class="top-in">
+  <button class="tbtn" id="menuBtn" type="button" aria-controls="rail" aria-expanded="false">課表</button>
+  <button class="brand" type="button" data-go="home">建築師考試急救<small>4 小時．建築計畫與設計</small></button>
+  <div class="meter" aria-label="課程進度"><div class="bar"><i id="barFill"></i></div><span id="barTxt">0 / 240 分</span></div>
+  <button class="tbtn" id="sayBtn" type="button" aria-pressed="false" title="朗讀目前這一頁">朗讀</button>
+</div></header>
+<div class="scrim" id="scrim" hidden></div>
+<div class="wrap">
+<nav class="rail" id="rail" aria-label="課表">
+  <h2>四小時課表</h2>
+  <ol id="railList"></ol>
+  <h2>隨時查</h2>
+  <ol>
+    <li><button type="button" data-go="cheat"><span class="dot">≡</span><span>考場小抄</span><span class="min"></span></button></li>
+    <li><button type="button" data-go="home"><span class="dot">⌂</span><span>課程首頁</span><span class="min"></span></button></li>
+  </ol>
+</nav>
+<main id="main">
+
+<!-- ================= 首頁 ================= -->
+<article class="view" id="v-home">
+  <p class="eyebrow">CRASH COURSE · 240 MIN</p>
+  <h1>四小時，從零到能把一張大設計畫完</h1>
+  <p class="lead">給第一次接觸建築師考試的人。這堂課只教一件事：拿到「建築計畫與設計」的題目後，照著固定流程，在時間內交出一張不違規、畫得完的圖。</p>
+  <div class="key"><b>你需要準備：</b>A3 白紙 5 張、鉛筆或代針筆、一支螢光筆、比例尺（沒有就用直尺）、計算機。課程中有 6 次要你停下來動手畫。</div>
+
+  <h2 class="h">課表</h2>
+  <ul class="home-grid" id="homeGrid"></ul>
+  <p class="hint">進度存在這台裝置的瀏覽器裡。中途關掉再開，會回到上次的位置。</p>
+
+  <h2 class="h">這堂課怎麼上</h2>
+  <ol class="t">
+    <li><b>照順序上。</b>每個單元都用到前一個單元的結果，同一道例題從頭用到尾。</li>
+    <li><b>看到「動手」就真的畫。</b>大設計考的是手，不是懂不懂。只看不畫，四小時後還是畫不出來。</li>
+    <li><b>每單元右上有建議時間。</b>超過沒關係，但不要在單一單元卡超過 1.5 倍時間，先往下走。</li>
+    <li><b>上完後</b>去「術科模擬考場」用真正的歷屆試題計時練習，這堂課給你的是流程，手感要靠那裡練。</li>
+  </ol>
+
+  <h2 class="h">這堂課不教什麼</h2>
+  <p>四小時教不完六科。這裡沒有結構計算、構造細部、環控公式和法規條文背誦，也不教畫得漂亮。這堂課的目標是「及格線的流程」：畫完、不違規、有回應題目。表現法和設計深度，是之後幾個月的事。</p>
+  <div class="warnbox"><b>數字的使用方式：</b>課程裡的法規數字（樓梯、走廊、停車位等）是考場常用的速記值，足夠畫圖使用。正式條文與每年考試規定，以現行《建築技術規則》和考選部當年公告為準。</div>
+  <div class="navrow"><span></span><button class="go" type="button" data-go="m0">開始第一單元 →</button></div>
+</article>
+<!-- ================= M0 考試全貌 ================= -->
+<article class="view mod" id="v-m0" data-min="10" data-title="考試全貌" data-ds="六科怎麼考、大設計在評什麼、新手為什麼不及格" hidden>
+  <p class="eyebrow">單元 0 · 10 分鐘</p>
+  <h1>先看清楚你要打的是哪一場</h1>
+  <ul class="goal"><li><b>學完你會：</b>說出六科名稱、知道大設計的三個及格條件</li></ul>
+
+  <h2 class="h">建築師考試有六科</h2>
+  <p>正式名稱是「專門職業及技術人員高等考試建築師考試」。六科分成兩種：兩科要畫圖（術科），四科是紙筆測驗（學科）。</p>
+  <div class="tw"><table>
+    <tr><th>科目</th><th>類型</th><th>考什麼</th></tr>
+    <tr><td><mark>建築計畫與設計</mark>（俗稱大設計）</td><td>畫圖，8 小時</td><td>給一塊基地和需求，設計一棟建築，畫出配置、平面、剖面、立面、透視，並寫計畫說明</td></tr>
+    <tr><td>敷地計畫與都市設計（俗稱敷地）</td><td>畫圖，4 小時</td><td>處理一塊較大的基地：多棟建築、道路、開放空間怎麼安排</td></tr>
+    <tr><td>營建法規與實務</td><td>紙筆</td><td>建築法、建築技術規則、都市計畫等法規</td></tr>
+    <tr><td>建築結構</td><td>紙筆</td><td>結構系統、力學計算</td></tr>
+    <tr><td>建築構造與施工</td><td>紙筆</td><td>材料、構造細部、施工方法</td></tr>
+    <tr><td>建築環境控制</td><td>紙筆</td><td>採光、通風、音響、設備、節能</td></tr>
+  </table></div>
+  <p>每科滿分 100，60 分及格。及格的科目可以保留，不用一次六科全過，所以多數人是分幾年考完的。保留年限和各科題型每年以考選部公告為準。</p>
+  <div class="key"><b>為什麼先救大設計：</b>學科可以靠讀書累積，大設計沒有畫過就完全不會寫。它也是多數考生最後才過的一科。這堂課四小時全部給它。</div>
+
+  <h2 class="h">大設計的考卷長什麼樣</h2>
+  <p>你會拿到一份題目（通常 2 到 4 頁，含一張基地圖）和一張大圖紙。八小時內，所有東西都要徒手畫在那張紙上。題目一般由五個部分組成：</p>
+  <ol class="t">
+    <li><b>題旨</b>：這次要設計什麼、背後關心的社會議題（高齡、社區、永續等）</li>
+    <li><b>基地說明</b>：位置、尺寸、周邊道路與鄰地、既有樹木或建物</li>
+    <li><b>法規條件</b>：使用分區、建蔽率、容積率、退縮、停車數量</li>
+    <li><b>空間需求</b>：要哪些空間、各多少面積或多少人</li>
+    <li><b>圖面要求與配分</b>：要畫哪幾張圖、比例多少、計畫與設計各占幾分</li>
+  </ol>
+  <p>近年常見的配分是「建築計畫 30 分、建築設計 70 分」。計畫指的是用文字、表格和簡圖說明你怎麼分析和決定；設計是那些圖本身。</p>
+
+  <h2 class="h">新手不及格的三個原因，依嚴重程度</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="不及格原因的三層金字塔">
+      <polygon class="f-bad" points="40,180 680,180 610,125 110,125"/>
+      <polygon class="f-warn" points="110,125 610,125 540,70 180,70"/>
+      <polygon class="f-ok" points="180,70 540,70 470,20 250,20"/>
+      <text x="360" y="158" text-anchor="middle" font-size="17" font-weight="700">1. 沒畫完（缺圖、空白）</text>
+      <text x="360" y="103" text-anchor="middle" font-size="16" font-weight="700">2. 違反硬條件（超建蔽、漏空間、沒停車）</text>
+      <text x="360" y="51" text-anchor="middle" font-size="15" font-weight="700">3. 設計不夠好</text>
+      <text x="360" y="200" text-anchor="middle" class="dim">底層沒過，上面的分數幾乎拿不到</text>
+    </svg>
+    <figcaption>多數新手把準備時間花在第 3 層，卻死在第 1、2 層。這堂課只處理第 1、2 層。</figcaption>
+  </figure>
+  <div class="key"><b>及格圖的定義，請記住：</b>題目要的圖都有畫、題目給的數字都沒違反、看得出你有回應題旨。漂亮是加分，不是門檻。</div>
+
+  <div class="box quiz" data-ans="b">
+    <h4><em>確認</em>考試剩 40 分鐘，你的平面圖很完整，但剖面和透視都還沒畫。該怎麼做？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">把平面的家具和鋪面畫得更細，讓強項更突出</button>
+      <button type="button" data-k="b">立刻改畫剖面和透視，各用最簡單的畫法把它補上</button>
+      <button type="button" data-k="c">專心把透視畫漂亮，剖面放棄</button>
+    </div>
+    <p class="why" hidden>缺圖是最重的扣分。一張簡單但存在的剖面，分數遠高於一張空白。任何時候發現有圖還沒畫，都先讓每一張圖「存在」，再回頭加細節。</p>
+  </div>
+</article>
+<!-- ================= M1 讀題 ================= -->
+<article class="view mod" id="v-m1" data-min="25" data-title="讀題" data-ds="用四色標記把題目拆成可以打勾的清單" hidden>
+  <p class="eyebrow">單元 1 · 25 分鐘</p>
+  <h1>讀題：把三頁文字變成一張檢查表</h1>
+  <ul class="goal"><li><b>學完你會：</b>用四種標記讀完一份題目，並抄出「硬條件清單」</li></ul>
+
+  <p>題目裡的每一句話，閱卷者都會回頭對你的圖。讀題的目的不是理解故事，而是把題目<b>拆成一條一條可以檢查的項目</b>。考場上請給讀題完整 30 分鐘，這是八小時裡報酬率最高的半小時。</p>
+
+  <h2 class="h">四種標記</h2>
+  <div class="tw"><table>
+    <tr><th>標記</th><th>找什麼</th><th>之後用在哪</th></tr>
+    <tr><td><b>硬條件</b></td><td>所有數字和「須、應、不得、至少、以上」開頭的句子：建蔽率、容積率、退縮、停車數、樓層限制、保留的樹</td><td>違反就重扣。抄成清單，交卷前逐條打勾</td></tr>
+    <tr><td><b>空間需求</b></td><td>空間名稱和它的面積或人數</td><td>做成定量表，算總面積</td></tr>
+    <tr><td><b>議題</b></td><td>形容詞和願景：友善、共享、開放、永續、社區連結</td><td>寫進計畫說明，圖上要看得到對應的做法</td></tr>
+    <tr><td><b>圖面要求</b></td><td>要畫哪些圖、比例、要標什麼</td><td>決定版面和時間分配</td></tr>
+  </table></div>
+  <p>考場上用螢光筆加符號就可以，例如硬條件畫底線加星號、空間需求用圈的。重點是四類要分得開，回頭找得到。</p>
+
+  <h2 class="h">本課例題</h2>
+  <p>這道例題是為這堂課設計的，難度比正式考題低，但結構相同。<b>後面所有單元都用它</b>，請先完整讀一遍。</p>
+
+  <div class="box" id="tagger">
+    <h4><em>動手 1</em>幫這份題目上標記</h4>
+    <p class="hint">先選一種標記，像拿起一支螢光筆，再去點題目裡的虛線文字。共 <span id="tagN">17</span> 處，全部標完後按「對答案」。</p>
+    <div class="pills" id="tagPick" role="group" aria-label="選擇分類">
+      <button type="button" class="pill c-hard" data-c="hard">硬條件</button>
+      <button type="button" class="pill c-room" data-c="room">空間需求</button>
+      <button type="button" class="pill c-issue" data-c="issue">議題</button>
+      <button type="button" class="pill c-draw" data-c="draw">圖面要求</button>
+    </div>
+    <div class="qtext" id="qtext">
+      <b>題目：社區圖書分館暨樂齡學習中心</b><br>
+      某市鎮老舊住宅區人口逐漸高齡化，市府擬興建一處<span data-a="issue">讓不同世代自然相遇、白天晚上都有人使用</span>的社區據點。<br>
+      <b>一、基地</b>　基地為矩形，東西向 40 m、南北向 50 m，面積 2,000 ㎡，地勢平坦。南側臨 15 m 道路（主要道路，有公車站），西側臨 8 m 道路，東側緊鄰社區公園，北側為 4 層樓集合住宅。<span data-a="hard">基地東南角有一棵老榕樹，應予保留</span>。<br>
+      <b>二、法規</b>　使用分區為住宅區，<span data-a="hard">建蔽率 50%</span>、<span data-a="hard">容積率 160%</span>。<span data-a="hard">臨道路側應退縮 4 m 作為人行步道</span>。<span data-a="hard">地上樓層不得超過 4 層</span>。<br>
+      <b>三、空間需求</b>　<span data-a="room">一般閱覽區 500 ㎡</span>、<span data-a="room">兒童閱覽區 200 ㎡</span>、<span data-a="room">樂齡教室 4 間，每間 60 ㎡</span>、<span data-a="room">多功能廳 250 ㎡（可容納 150 人）</span>、共餐廚房與用餐區 120 ㎡、行政辦公 90 ㎡、社區咖啡 80 ㎡。其餘必要之服務空間請自行擬定。<span data-a="hard">地下層設汽車位 20 部、機車位 30 部，另設無障礙汽車位 1 部</span>。<br>
+      <b>四、設計要求</b>　建築應<span data-a="issue">與東側公園的活動相互延伸</span>，並<span data-a="issue">降低對北側住宅的壓迫與干擾</span>。<span data-a="hard">多功能廳須可於夜間獨立開放</span>。全區須符合無障礙環境。<br>
+      <b>五、圖面要求</b>　<span data-a="draw">配置圖 1/400（含景觀及周邊環境）</span>、<span data-a="draw">各層平面圖 1/200</span>、<span data-a="draw">剖面圖 1/200（至少一向，標示樓高）</span>、主要立面圖 1/200、透視圖、建築計畫說明（含空間定性定量表）。<br>
+      <b>六、配分</b>　建築計畫 30 分、建築設計 70 分。
+    </div>
+    <div class="frow"><button class="go" type="button" id="tagCheck">對答案</button><button class="ghost" type="button" id="tagReset">重來</button></div>
+    <p class="verdict" id="tagOut" hidden></p>
+  </div>
+
+  <h2 class="h">抄出硬條件清單</h2>
+  <p>標完後，在草稿紙角落把硬條件抄成一欄。這張清單會跟著你到交卷。例題的清單如下，請對照你剛才標的：</p>
+  <div class="box">
+    <h4><em>例題</em>硬條件清單（交卷前逐條打勾）</h4>
+    <ul class="check" id="hardList">
+      <li><label><input type="checkbox" id="h1"><span>建蔽率 ≤ 50%（建築面積 ≤ 1,000 ㎡）</span></label></li>
+      <li><label><input type="checkbox" id="h2"><span>容積率 ≤ 160%（容積樓地板 ≤ 3,200 ㎡）</span></label></li>
+      <li><label><input type="checkbox" id="h3"><span>南側、西側各退縮 4 m 人行步道</span></label></li>
+      <li><label><input type="checkbox" id="h4"><span>地上不超過 4 層</span></label></li>
+      <li><label><input type="checkbox" id="h5"><span>東南角老榕樹保留（樹冠範圍內不蓋、不挖地下室）</span></label></li>
+      <li><label><input type="checkbox" id="h6"><span>地下汽車 20、機車 30、無障礙車位 1，有車道</span></label></li>
+      <li><label><input type="checkbox" id="h7"><span>多功能廳可夜間獨立開放（自己的入口和廁所）</span></label></li>
+      <li><label><input type="checkbox" id="h8"><span>全區無障礙（入口無高差或有坡道、電梯、無障礙廁所）</span></label></li>
+    </ul>
+  </div>
+  <div class="key"><b>注意第 5、7 條：</b>題目只寫了一句話，但它會連帶產生圖面上的後果。「保留老樹」代表地下室要避開；「夜間獨立開放」代表要有獨立入口。讀題時把這種連帶後果直接寫在清單上。</div>
+
+  <h2 class="h">題目沒寫，但一定要有的東西</h2>
+  <p>題目寫「其餘必要之服務空間請自行擬定」。下面這些，任何公共建築都要有，沒畫會被當成不懂建築：</p>
+  <ul class="t">
+    <li>每層：樓梯至少 2 座、電梯、男女廁所、無障礙廁所</li>
+    <li>全棟：門廳與服務台、機房（地下層）、儲藏室、垃圾與卸貨位置</li>
+    <li>戶外：無障礙通路、自行車停放、車道出入口、植栽</li>
+  </ul>
+
+  <div class="box quiz" data-ans="c">
+    <h4><em>確認</em>題目寫「建築應與東側公園的活動相互延伸」。這句話該怎麼處理？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">這是願景描述，沒有數字，可以略過</button>
+      <button type="button" data-k="b">在計畫說明寫一句「本案與公園相互延伸」就好</button>
+      <button type="button" data-k="c">在計畫說明寫出做法，而且圖上要看得到，例如東側留開放空間、一樓對公園開門</button>
+    </div>
+    <p class="why" hidden>議題句是評分重點。只寫文字、圖上沒有對應做法，閱卷者會認定你沒回應。每個議題至少要有一個「畫得出來」的對策。</p>
+  </div>
+</article>
+<!-- ================= M2 量體計算 ================= -->
+<article class="view mod" id="v-m2" data-min="30" data-title="量體計算" data-ds="建蔽率、容積率、要蓋幾層、一層多大" hidden>
+  <p class="eyebrow">單元 2 · 30 分鐘</p>
+  <h1>量體計算：先算出「盒子」能有多大</h1>
+  <ul class="goal"><li><b>學完你會：</b>三分鐘內算出最大建築面積、最大樓地板、需要幾層、每層多大</li></ul>
+
+  <p>還沒畫任何一條線之前，先用四則運算決定建築的大小。這一步算錯，後面八小時畫的都是違規的圖。</p>
+
+  <h2 class="h">兩個比率</h2>
+  <div class="formula">建蔽率 = 建築面積 ÷ 基地面積　　　容積率 = 容積總樓地板面積 ÷ 基地面積</div>
+  <ul class="t">
+    <li><b>建築面積</b>：建築物從正上方往下看，蓋住地面的面積。可以先理解成「一樓有多大」（上層若有突出，取最大投影）。</li>
+    <li><b>容積總樓地板面積</b>：地上各層樓地板加起來。考場上先這樣記：<mark>地下停車場和機房不算容積</mark>。</li>
+    <li><b>法定空地</b>：基地面積減掉建築面積，也就是一定要留白的地。</li>
+  </ul>
+  <p>建蔽率管「佔地多滿」，容積率管「總共蓋多少」。兩個都是上限，不能超過。</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="建蔽率與容積率示意">
+      <rect x="30" y="30" width="200" height="170" class="f-paper s-ink" stroke-width="2"/>
+      <rect x="70" y="70" width="120" height="100" class="f-soft s-blue" stroke-width="2"/>
+      <text x="130" y="125" text-anchor="middle" font-size="14" font-weight="700">建築面積</text>
+      <text x="130" y="22" text-anchor="middle" class="dim">基地（俯視）</text>
+      <text x="130" y="218" text-anchor="middle" font-size="13">建蔽率＝藍色 ÷ 整塊基地</text>
+      <line x1="300" y1="190" x2="690" y2="190" class="s-ink" stroke-width="2"/>
+      <rect x="400" y="150" width="180" height="40" class="f-soft s-blue" stroke-width="2"/>
+      <rect x="400" y="110" width="180" height="40" class="f-soft s-blue" stroke-width="2"/>
+      <rect x="400" y="70" width="180" height="40" class="f-soft s-blue" stroke-width="2"/>
+      <rect x="400" y="190" width="180" height="30" class="f-line s-mut" stroke-dasharray="4 3"/>
+      <text x="490" y="175" text-anchor="middle" font-size="13">1F</text><text x="490" y="135" text-anchor="middle" font-size="13">2F</text><text x="490" y="95" text-anchor="middle" font-size="13">3F</text>
+      <text x="490" y="210" text-anchor="middle" font-size="12" class="t-mut">B1 停車（不計容積）</text>
+      <text x="490" y="22" text-anchor="middle" class="dim">剖面（側看）</text>
+      <text x="490" y="50" text-anchor="middle" font-size="13">容積率＝1F＋2F＋3F ÷ 整塊基地</text>
+    </svg>
+    <figcaption>正式法規對容積的計算有更多細項（梯廳、陽台、機電空間等可部分免計）。新手階段用「地上各層加總」估算，結果偏保守，不會違規。</figcaption>
+  </figure>
+
+  <h2 class="h">四步驟算出盒子</h2>
+  <ol class="t">
+    <li><b>最大建築面積</b>＝基地面積 × 建蔽率</li>
+    <li><b>最大容積樓地板</b>＝基地面積 × 容積率</li>
+    <li><b>需要的樓地板</b>＝題目各空間淨面積加總 × 1.3 到 1.5（多出來的是走廊、樓梯、廁所、牆；下一單元細講）</li>
+    <li><b>決定層數與每層面積</b>：需要的樓地板 ÷ 層數 ＝ 每層面積。每層面積要 ≤ 最大建築面積，層數要 ≤ 題目限制</li>
+  </ol>
+  <p>用例題走一次：基地 2,000 ㎡、建蔽率 50%、容積率 160%。</p>
+  <div class="tw"><table>
+    <tr><th>步驟</th><th>算式</th><th class="n">結果</th></tr>
+    <tr><td>最大建築面積</td><td class="fig">2,000 × 50%</td><td class="n">1,000 ㎡</td></tr>
+    <tr><td>最大容積樓地板</td><td class="fig">2,000 × 160%</td><td class="n">3,200 ㎡</td></tr>
+    <tr><td>淨面積加總</td><td class="fig">500＋200＋60×4＋250＋120＋90＋80</td><td class="n">1,480 ㎡</td></tr>
+    <tr><td>需要的樓地板</td><td class="fig">1,480 × 1.4</td><td class="n">約 2,100 ㎡</td></tr>
+    <tr><td>層數與每層</td><td class="fig">2,100 ÷ 3 層</td><td class="n">每層 700 ㎡</td></tr>
+  </table></div>
+  <p>檢查：每層 700 ≤ 1,000（建蔽率過關）；總計 2,100 ≤ 3,200（容積率過關）；3 層 ≤ 4 層（樓層限制過關）。<b>這個盒子就是每層約 700 ㎡ × 3 層。</b></p>
+  <div class="key"><b>為什麼不蓋滿 1,000 ㎡：</b>蓋 700 就夠用時，多留的 300 ㎡ 空地可以拿來做廣場、退讓北側住宅、保護老樹。空地是你回應議題的本錢。反過來，如果題目要求「設計至容積上限」，就要用到接近 3,200 ㎡，層數會變成 4 層。</div>
+
+  <div class="box" id="massCalc">
+    <h4><em>試算</em>量體計算機</h4>
+    <p class="hint">改數字或拉層數，看盒子怎麼變。紅字代表違規。</p>
+    <div class="frow">
+      <label for="mcA">基地面積 ㎡<input type="number" id="mcA" value="2000" min="100" step="10" inputmode="decimal"></label>
+      <label for="mcB">建蔽率 %<input type="number" id="mcB" value="50" min="1" max="100" inputmode="decimal"></label>
+      <label for="mcF">容積率 %<input type="number" id="mcF" value="160" min="1" inputmode="decimal"></label>
+      <label for="mcN">需要的樓地板 ㎡<input type="number" id="mcN" value="2100" min="1" step="10" inputmode="decimal"></label>
+    </div>
+    <label for="mcL" class="hint">地上層數：<b id="mcLv" class="fig">3</b> 層</label>
+    <input type="range" id="mcL" min="1" max="8" value="3">
+    <figure><svg id="mcSvg" viewBox="0 0 720 240" role="img" aria-label="量體示意"></svg></figure>
+    <div class="out" id="mcOut"></div>
+    <p class="verdict" id="mcVerdict"></p>
+  </div>
+
+  <h2 class="h">可建範圍：扣掉退縮之後還剩多少</h2>
+  <p>建蔽率告訴你可以蓋多大，退縮告訴你可以蓋在哪。例題的基地東西 40 m、南北 50 m：</p>
+  <ul class="t">
+    <li>南側、西側臨道路，各退 4 m（題目規定）</li>
+    <li>北側、東側臨鄰地，題目沒規定。考場習慣至少退 3 m，留出通路、採光和防火間隔</li>
+  </ul>
+  <p>可建範圍 ＝ (40 − 4 − 3) × (50 − 4 − 3) ＝ 33 × 43 ＝ 1,419 ㎡。你的 700 ㎡ 要放在這個範圍內，而且還要避開東南角的老樹。</p>
+  <figure>
+    <svg viewBox="0 0 720 330" role="img" aria-label="例題基地與可建範圍">
+      <rect x="0" y="270" width="720" height="60" class="f-line"/><text x="360" y="305" text-anchor="middle" font-size="14">15 m 道路（主要，有公車站）</text>
+      <rect x="170" y="0" width="50" height="270" class="f-line"/><text x="195" y="140" text-anchor="middle" font-size="13" transform="rotate(-90 195 140)">8 m 道路</text>
+      <rect x="220" y="10" width="208" height="260" class="f-sheet s-ink" stroke-width="2.5"/>
+      <rect x="240.8" y="25.6" width="171.6" height="223.6" class="f-soft s-blue" stroke-dasharray="6 4" stroke-width="1.5"/>
+      <text x="326" y="130" text-anchor="middle" font-size="14" font-weight="700" class="t-blue">可建範圍</text>
+      <text x="326" y="150" text-anchor="middle" class="dim">33 × 43 = 1,419 ㎡</text>
+      <circle cx="398" cy="238" r="24" class="f-ok s-ok" stroke-width="1.5"/><text x="398" y="242" text-anchor="middle" font-size="12">老榕樹</text>
+      <rect x="428" y="10" width="150" height="260" class="f-ok"/><text x="503" y="140" text-anchor="middle" font-size="14">社區公園</text>
+      <text x="95" y="28" text-anchor="middle" font-size="12" class="t-mut">北側：4 層集合住宅</text><text x="95" y="46" text-anchor="middle" class="dim">（鄰地側退 3 m）</text>
+      <text x="300" y="264" text-anchor="middle" class="dim">退 4 m 人行步道</text>
+      <text x="600" y="30" font-size="13" font-weight="700">N ↑</text>
+      <text x="324" y="285" text-anchor="middle" class="dim">40 m</text>
+    </svg>
+    <figcaption>例題基地。虛線內是扣除退縮後的可建範圍，東南角要再避開樹冠。</figcaption>
+  </figure>
+
+  <h2 class="h">練習三題</h2>
+  <div class="box numq" data-ans="1560" data-tol="1">
+    <h4><em>練習 1</em>基地 2,600 ㎡，建蔽率 60%。最大建築面積是多少？</h4>
+    <div class="frow"><label for="n1">答案 ㎡<input type="number" id="n1" inputmode="decimal"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>2,600 × 0.6 ＝ 1,560 ㎡。</p>
+  </div>
+  <div class="box numq" data-ans="4" data-tol="0">
+    <h4><em>練習 2</em>基地 1,500 ㎡，建蔽率 40%，容積率 150%，題目要求「設計至容積上限」。至少要蓋幾層？</h4>
+    <div class="frow"><label for="n2">答案 層<input type="number" id="n2" inputmode="numeric"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>每層最多 1,500 × 0.4 ＝ 600 ㎡；總共要 1,500 × 1.5 ＝ 2,250 ㎡。2,250 ÷ 600 ＝ 3.75，無條件進位，至少 4 層。層數一律往上取整數。</p>
+  </div>
+  <div class="box numq" data-ans="1470" data-tol="20">
+    <h4><em>練習 3</em>題目空間淨面積加總為 1,050 ㎡，用係數 1.4 估算，需要多少樓地板？</h4>
+    <div class="frow"><label for="n3">答案 ㎡<input type="number" id="n3" inputmode="decimal"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>1,050 × 1.4 ＝ 1,470 ㎡。考場上取整數到 1,500 也可以，估算差 5% 以內都算對。</p>
+  </div>
+
+  <div class="warnbox"><b>動手 2：</b>拿一張白紙，不看螢幕，把例題的四步驟重算一次，寫出「每層約 700 ㎡ × 3 層」這個結論。考場上這幾行算式要直接寫在圖紙的計畫說明裡，它本身就是分數。</div>
+</article>
+<!-- ================= M3 建築計畫 ================= -->
+<article class="view mod" id="v-m3" data-min="35" data-title="建築計畫" data-ds="拿下 30 分：對策表、定性定量表、分層與泡泡圖" hidden>
+  <p class="eyebrow">單元 3 · 35 分鐘</p>
+  <h1>建築計畫：用一張表和一張圖拿 30 分</h1>
+  <ul class="goal"><li><b>學完你會：</b>填出計畫說明的五個固定欄位，並決定每個空間放在哪一層</li></ul>
+
+  <p>「建築計畫」這 30 分，考的是你有沒有先想清楚再畫。它不需要文筆，需要的是固定格式。考場上用 50 到 60 分鐘完成，佔圖紙大約五分之一的面積。</p>
+
+  <h2 class="h">計畫說明的五個固定欄位</h2>
+  <div class="tw"><table>
+    <tr><th>欄位</th><th>內容</th><th>形式</th></tr>
+    <tr><td>1. 基地分析</td><td>道路、鄰地、日照風向、要保留的東西，各一句結論</td><td>一張小簡圖加箭頭</td></tr>
+    <tr><td>2. 議題與對策</td><td>題目的每個議題句，對應一個做得出來的做法</td><td>表格</td></tr>
+    <tr><td>3. 量體計算</td><td>上一單元的四行算式</td><td>算式</td></tr>
+    <tr><td>4. 空間定性定量表</td><td>每個空間的面積、樓層、性質</td><td>表格</td></tr>
+    <tr><td>5. 分區與動線概念</td><td>誰靠近誰、誰跟誰分開</td><td>泡泡圖</td></tr>
+  </table></div>
+  <p>全部用條列和表格，不要寫成段落。閱卷者看一張圖的時間很短，表格讓他一眼找到分數。</p>
+
+  <h2 class="h">議題與對策表</h2>
+  <p>把單元 1 標成「議題」的句子逐條列出，右邊寫對策。對策的標準是：<b>能在圖上指出位置</b>。</p>
+  <div class="tw"><table>
+    <tr><th>題目的議題</th><th>對策（畫得出來的做法）</th><th>圖上位置</th></tr>
+    <tr><td>不同世代自然相遇</td><td>兒童閱覽與樂齡教室放同一層，中間設共用的故事角</td><td>2F 平面</td></tr>
+    <tr><td>白天晚上都有人使用</td><td>多功能廳、咖啡放一樓臨街，有獨立入口，夜間可單獨開放</td><td>1F 平面、配置</td></tr>
+    <tr><td>與東側公園相互延伸</td><td>建築靠西，東側留綠地接公園；一樓東面開門設半戶外平台</td><td>配置、剖面</td></tr>
+    <tr><td>降低對北側住宅的壓迫</td><td>北側退縮加大並種樹；三樓北側退一跨做露台</td><td>配置、剖面</td></tr>
+  </table></div>
+  <div class="key"><b>寫對策的句型：</b>「把＿＿放在＿＿，讓＿＿」。例如「把咖啡放在一樓西南角，讓公車站下車的人直接看到」。有位置、有理由，就是一條合格的對策。</div>
+
+  <h2 class="h">空間定性定量表</h2>
+  <p><b>定量</b>是面積，<b>定性</b>是這個空間的性質（公共或私密、吵或靜、需不需要挑高、要不要對外）。題目給的是<b>淨面積</b>，也就是房間內部。實際蓋出來還要加上走廊、樓梯、電梯、廁所、機房和牆，所以要乘一個係數。</p>
+  <div class="formula">需要的樓地板 ≈ 淨面積加總 × 1.3 ～ 1.5</div>
+  <ul class="t">
+    <li>空間大而少（體育館、展場）用 1.3</li>
+    <li>一般公共建築用 1.4</li>
+    <li>房間小而多（宿舍、教室、診間）用 1.5，因為走廊多</li>
+  </ul>
+
+  <div class="box" id="progCalc">
+    <h4><em>試算</em>定量表</h4>
+    <p class="hint">這是例題的空間。面積可以改，係數可以拉，看總量有沒有超過容積上限 3,200 ㎡。</p>
+    <div class="tw"><table id="pcTable">
+      <tr><th>空間</th><th class="n">淨面積 ㎡</th><th>性質</th></tr>
+    </table></div>
+    <label for="pcK" class="hint">係數：<b id="pcKv" class="fig">1.40</b></label>
+    <input type="range" id="pcK" min="1.2" max="1.6" step="0.05" value="1.4">
+    <div class="out" id="pcOut"></div>
+    <p class="verdict" id="pcVerdict"></p>
+  </div>
+
+  <h2 class="h">分層：誰放一樓，誰放樓上</h2>
+  <p>分層有三條通用規則，幾乎每一題都適用：</p>
+  <ol class="t">
+    <li><b>越公共、越吵、人越多的，越靠近地面。</b>咖啡、多功能廳、餐飲放一樓。</li>
+    <li><b>越安靜、越需要專注的，越往上。</b>閱覽、辦公、住宿放高樓層。</li>
+    <li><b>要獨立開放的，放一樓而且靠街。</b>它需要自己的門。</li>
+  </ol>
+  <p>另外兩個特殊考量：<b>幼兒和行動不便者</b>使用的空間盡量在低樓層，疏散容易；<b>大跨距無柱空間</b>（多功能廳、球場）放頂樓或一樓獨立一塊，因為它上面很難再疊有柱子的樓層。</p>
+
+  <div class="box" id="zoner">
+    <h4><em>動手 3</em>幫例題的七個空間分層</h4>
+    <p class="hint">先點一個空間，再點要放的樓層。每層淨面積建議在 440 到 600 ㎡ 之間（每層約 700 到 770 ㎡，扣掉走廊、樓梯、廁所）。</p>
+    <div class="pills" id="znPool"></div>
+    <div class="buckets" id="znBuckets">
+      <button type="button" class="bucket" data-f="3"><strong>3F　最安靜</strong><span class="hint" data-sum></span></button>
+      <button type="button" class="bucket" data-f="2"><strong>2F　半公共</strong><span class="hint" data-sum></span></button>
+      <button type="button" class="bucket" data-f="1"><strong>1F　最公共、臨街</strong><span class="hint" data-sum></span></button>
+    </div>
+    <div class="frow"><button class="go" type="button" id="znCheck">對答案</button><button class="ghost" type="button" id="znReset">重來</button></div>
+    <p class="verdict" id="znOut" hidden></p>
+  </div>
+
+  <h2 class="h">泡泡圖：畫出關係，不畫形狀</h2>
+  <p>泡泡圖用圓圈代表空間、線代表關係。圓的大小約略對應面積。它的作用是在畫平面之前，先確認三件事：誰要相鄰、誰要分開、人從哪裡進來。</p>
+  <figure>
+    <svg viewBox="0 0 720 360" role="img" aria-label="例題一樓與二樓的泡泡圖">
+      <text x="20" y="24" font-size="13" font-weight="700">1F</text>
+      <line x1="20" y1="170" x2="700" y2="170" class="s-line" stroke-dasharray="3 4"/>
+      <text x="20" y="194" font-size="13" font-weight="700">2F</text>
+      <!-- 1F -->
+      <line x1="150" y1="100" x2="330" y2="100" class="s-ink" stroke-width="3"/>
+      <line x1="330" y1="100" x2="500" y2="70" class="s-ink" stroke-width="3"/>
+      <line x1="330" y1="100" x2="500" y2="135" class="s-ink" stroke-width="3"/>
+      <line x1="500" y1="70" x2="500" y2="135" class="s-ink" stroke-width="1.5"/>
+      <line x1="330" y1="100" x2="330" y2="250" class="s-blue" stroke-width="3" stroke-dasharray="8 5"/>
+      <circle cx="150" cy="100" r="52" class="f-warn s-ink" stroke-width="1.5"/><text x="150" y="97" text-anchor="middle" font-size="14" font-weight="700">多功能廳</text><text x="150" y="115" text-anchor="middle" class="dim">250</text>
+      <circle cx="330" cy="100" r="36" class="f-sheet s-ink" stroke-width="2.5"/><text x="330" y="97" text-anchor="middle" font-size="14" font-weight="700">門廳</text><text x="330" y="114" text-anchor="middle" class="dim">服務台</text>
+      <circle cx="500" cy="62" r="32" class="f-warn s-ink" stroke-width="1.5"/><text x="500" y="60" text-anchor="middle" font-size="13" font-weight="700">咖啡</text><text x="500" y="76" text-anchor="middle" class="dim">80</text>
+      <circle cx="500" cy="135" r="38" class="f-warn s-ink" stroke-width="1.5"/><text x="500" y="133" text-anchor="middle" font-size="13" font-weight="700">共餐</text><text x="500" y="150" text-anchor="middle" class="dim">120</text>
+      <text x="60" y="40" font-size="12" class="t-blue">↓ 夜間獨立入口</text>
+      <path d="M95 46 L120 62" class="s-blue" stroke-width="2"/>
+      <text x="300" y="40" font-size="12" class="t-blue">↓ 主入口（南側 15 m 路）</text>
+      <path d="M330 46 L330 62" class="s-blue" stroke-width="2"/>
+      <text x="600" y="100" font-size="12" class="t-ok">→ 公園</text>
+      <path d="M540 100 L592 100" class="s-ok" stroke-width="2"/>
+      <!-- 2F -->
+      <line x1="170" y1="270" x2="330" y2="270" class="s-ink" stroke-width="3"/>
+      <line x1="330" y1="270" x2="490" y2="270" class="s-ink" stroke-width="3"/>
+      <circle cx="170" cy="270" r="46" class="f-soft s-ink" stroke-width="1.5"/><text x="170" y="267" text-anchor="middle" font-size="14" font-weight="700">兒童閱覽</text><text x="170" y="285" text-anchor="middle" class="dim">200</text>
+      <circle cx="330" cy="262" r="26" class="f-sheet s-ink" stroke-width="2.5"/><text x="330" y="266" text-anchor="middle" font-size="12" font-weight="700">故事角</text>
+      <circle cx="500" cy="270" r="56" class="f-soft s-ink" stroke-width="1.5"/><text x="500" y="267" text-anchor="middle" font-size="14" font-weight="700">樂齡教室</text><text x="500" y="285" text-anchor="middle" class="dim">60 × 4</text>
+      <text x="345" y="200" font-size="12" class="t-blue">樓梯、電梯</text>
+    </svg>
+    <figcaption>粗線＝要緊鄰；細線＝有關聯；藍色虛線＝垂直動線。箭頭標出人從哪裡來。三樓是一般閱覽和行政辦公，關係單純，不用畫泡泡。</figcaption>
+  </figure>
+  <div class="warnbox"><b>動手 4：</b>用 3 分鐘，在白紙上照著畫一次這張泡泡圖。只要圓圈、線和文字，不用漂亮。考場上這張圖大約 8 公分見方就夠了。</div>
+
+  <div class="box quiz" data-ans="a">
+    <h4><em>確認</em>一題學生宿舍，房間多、每間小。淨面積加總 3,000 ㎡，估算樓地板該用哪個係數？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">1.5，需要約 4,500 ㎡</button>
+      <button type="button" data-k="b">1.3，需要約 3,900 ㎡</button>
+      <button type="button" data-k="c">1.0，剛好 3,000 ㎡</button>
+    </div>
+    <p class="why" hidden>房間小而多，走廊就長，公共面積比例高，用 1.5。用 1.0 代表沒有走廊和樓梯，畫平面時一定會塞不下。</p>
+  </div>
+</article>
+<!-- ================= M4 基地配置 ================= -->
+<article class="view mod" id="v-m4" data-min="35" data-title="基地配置" data-ds="盒子放哪、人從哪進、車從哪進、空地留哪" hidden>
+  <p class="eyebrow">單元 4 · 35 分鐘</p>
+  <h1>基地配置：四個決定，順序不能亂</h1>
+  <ul class="goal"><li><b>學完你會：</b>依序決定車道、量體位置、入口、開放空間，畫出一張配置草圖</li></ul>
+
+  <p>配置圖是閱卷者第一眼看的圖，也最能看出你有沒有讀懂基地。它其實只是四個決定的結果。先做基地分析，再依序做決定。</p>
+
+  <h2 class="h">基地分析：看五樣東西，各下一個結論</h2>
+  <div class="tw"><table>
+    <tr><th>看什麼</th><th>要下的結論</th><th>例題</th></tr>
+    <tr><td>道路</td><td>哪條是主要道路（人從這裡來），哪條是次要道路（車從這裡進）</td><td>南 15 m 有公車站是主要；西 8 m 是次要</td></tr>
+    <tr><td>鄰地</td><td>哪一側要連接，哪一側要退讓</td><td>東側公園要連接；北側住宅要退讓</td></tr>
+    <tr><td>方位</td><td>哪面怕西曬，哪面採光好</td><td>西面臨路又西曬，放樓梯廁所擋熱</td></tr>
+    <tr><td>既有物</td><td>樹、舊建物、高差，哪些不能動</td><td>東南角老榕樹，周圍留空</td></tr>
+    <tr><td>人流</td><td>主要使用者從哪個方向走過來</td><td>公車站在南、社區居民從西和北、公園遊客從東</td></tr>
+  </table></div>
+  <div class="key"><b>臺灣的方位常識：</b>太陽從東邊升起、西邊落下，下午的西曬最熱。夏天吹南風或西南風，冬天吹東北季風。建築長邊朝南北最理想；做不到時，西面少開窗，改放樓梯、廁所、儲藏這類服務空間。</div>
+
+  <h2 class="h">四個決定</h2>
+  <ol class="t">
+    <li><b>車道出入口</b>：開在次要道路上，離路口越遠越好（至少 5 m 以上），避開公車站、學校和公園的出入口。</li>
+    <li><b>量體位置</b>：建築退讓需要安靜的鄰居，把空地留給想連接的那一側。</li>
+    <li><b>人的入口</b>：主入口面向主要人流。人和車的入口分開，行人不需要穿越車道。</li>
+    <li><b>開放空間</b>：空地要集中成一兩塊有用途的地方（入口廣場、連接公園的綠帶），不要變成繞建築一圈的剩餘空間。</li>
+  </ol>
+  <p>先決定車道，是因為它的限制最多、位置選擇最少。車道定了，其他三項才有依據。</p>
+
+  <div class="box" id="siteQuiz">
+    <h4><em>動手 5</em>在例題基地上做這四個決定</h4>
+    <p class="hint" id="sqPrompt"></p>
+    <figure><svg id="sqSvg" viewBox="0 0 720 340" role="group" aria-label="例題基地，點選圖上的字母"></svg></figure>
+    <div class="opts row" id="sqOpts"></div>
+    <p class="why" id="sqWhy" hidden></p>
+    <div class="frow"><button class="go" type="button" id="sqNext" hidden>下一個決定 →</button></div>
+  </div>
+
+  <h2 class="h">示範：配置是怎麼一步一步長出來的</h2>
+  <div class="box anim" id="siteAnim">
+    <h4><em>示範</em>例題配置，七個步驟</h4>
+    <figure>
+      <svg viewBox="0 0 720 340" role="img" aria-label="配置圖生成步驟">
+        <!-- 底圖 -->
+        <rect x="0" y="270" width="720" height="70" class="f-line"/><text x="560" y="312" text-anchor="middle" font-size="13">15 m 道路</text>
+        <rect x="170" y="0" width="50" height="270" class="f-line"/><text x="195" y="150" text-anchor="middle" font-size="12" transform="rotate(-90 195 150)">8 m 道路</text>
+        <rect x="428" y="10" width="160" height="260" class="f-ok"/><text x="520" y="60" text-anchor="middle" font-size="13">社區公園</text>
+        <text x="95" y="24" text-anchor="middle" font-size="12" class="t-mut">北側：4 層住宅</text>
+        <rect x="220" y="10" width="208" height="260" class="f-sheet s-ink" stroke-width="2.5"/>
+        <circle cx="400" cy="240" r="22" class="f-ok s-ok" stroke-width="1.5"/><text x="400" y="244" text-anchor="middle" font-size="11">老樹</text>
+        <text x="640" y="30" font-size="13" font-weight="700">N ↑</text>
+        <rect x="300" y="278" width="54" height="18" class="f-sheet s-ink"/><text x="327" y="291" text-anchor="middle" font-size="11">公車站</text>
+        <!-- 2 退縮 -->
+        <g data-s="2"><rect x="240.8" y="25.6" width="171.6" height="223.6" class="s-blue" stroke-dasharray="6 4" stroke-width="1.5"/>
+          <text x="262" y="264" class="dim">退 4 m</text></g>
+        <!-- 7 開放空間（先畫，讓入口符號蓋在上面） -->
+        <g data-s="7"><rect x="244" y="216" width="118" height="30" class="f-warn"/><text x="276" y="240" text-anchor="middle" font-size="11">入口廣場</text>
+          <rect x="369" y="46" width="56" height="166" class="f-ok"/><text x="397" y="90" text-anchor="middle" font-size="11">綠帶</text><text x="397" y="170" text-anchor="middle" font-size="11">平台</text>
+          <g class="s-ok" stroke-width="1.5"><circle cx="360" cy="27" r="7" class="f-ok"/><circle cx="380" cy="27" r="7" class="f-ok"/><circle cx="400" cy="27" r="7" class="f-ok"/><circle cx="418" cy="27" r="7" class="f-ok"/></g></g>
+        <!-- 3 人流 -->
+        <g data-s="3"><path d="M345 268 L345 240" class="s-blue" stroke-width="4"/><path d="M337 244 L345 232 L353 244" class="f-blue"/>
+          <path d="M470 150 L424 150" class="s-ok" stroke-width="4"/><path d="M430 142 L416 150 L430 158" style="fill:var(--ok)"/>
+          <path d="M150 215 L214 215" class="s-mut" stroke-width="3"/><path d="M208 208 L220 215 L208 222" class="f-mut"/>
+          <text x="90" y="219" font-size="11" class="t-mut">居民</text></g>
+        <!-- 4 車道 -->
+        <g data-s="4"><rect x="220" y="18" width="124.8" height="18.2" class="f-line s-ink"/><text x="282" y="31" text-anchor="middle" font-size="11">車道下地下室 ↘</text>
+          <path d="M196 27 L226 27" class="s-bad" stroke-width="3"/><path d="M220 21 L230 27 L220 33" style="fill:var(--bad)"/></g>
+        <!-- 5 量體 -->
+        <g data-s="5"><rect x="240.8" y="46.4" width="124.8" height="166.4" class="f-soft s-ink" stroke-width="2.5"/>
+          <text x="303" y="112" text-anchor="middle" font-size="14" font-weight="700">3F 建築</text><text x="303" y="131" text-anchor="middle" class="dim">24 × 32 m</text></g>
+        <!-- 6 入口 -->
+        <g data-s="6"><path d="M294 228 L303 214 L312 228 Z" class="f-ink"/><text x="303" y="205" text-anchor="middle" font-size="11" font-weight="700">主入口</text>
+          <path d="M226 172 L240 180 L226 188 Z" class="f-ink"/><text x="246" y="184" font-size="11" font-weight="700">夜間入口</text>
+          <path d="M380 152 L366 160 L380 168 Z" class="f-ink"/><text x="360" y="164" text-anchor="end" font-size="11" font-weight="700">往公園</text></g>
+      </svg>
+    </figure>
+    <div class="player">
+      <button class="go" type="button" data-act="play">▶ 播放</button>
+      <button class="ghost" type="button" data-act="prev" aria-label="上一步">←</button>
+      <button class="ghost" type="button" data-act="next" aria-label="下一步">→</button>
+      <p class="cap" aria-live="polite"><b data-n>1/7</b><span data-cap></span></p>
+    </div>
+  </div>
+
+  <h2 class="h">量體形狀：四種基本型</h2>
+  <figure>
+    <svg viewBox="0 0 720 150" role="img" aria-label="一字型、L 型、ㄇ 字型、口字型">
+      <g class="s-ink f-soft" stroke-width="2">
+        <rect x="40" y="50" width="120" height="40"/>
+        <path d="M220 30 h40 v60 h70 v40 h-110 z"/>
+        <path d="M400 30 h40 v60 h50 v-60 h40 v100 h-130 z"/>
+        <path d="M580 30 h110 v100 h-110 z M612 60 v40 h46 v-40 z" fill-rule="evenodd"/>
+      </g>
+      <text x="100" y="118" text-anchor="middle" font-size="13" font-weight="700">一字型</text>
+      <text x="275" y="146" text-anchor="middle" font-size="13" font-weight="700">L 型</text>
+      <text x="465" y="146" text-anchor="middle" font-size="13" font-weight="700">ㄇ 字型</text>
+      <text x="635" y="146" text-anchor="middle" font-size="13" font-weight="700">口字型</text>
+    </svg>
+    <figcaption>一字型：最好畫、結構最單純，新手首選。L 型：轉角圍出一個廣場。ㄇ 字型：圍出一個朝某方向開口的庭院，適合學校、長照。口字型：有中庭，基地夠大時才用。</figcaption>
+  </figure>
+  <div class="key"><b>給新手的建議：</b>前十次練習都用一字型或 L 型。形狀單純，柱子才排得整齊，平面才畫得完。量體的變化留給及格之後。</div>
+
+  <h2 class="h">配置圖上一定要標的東西</h2>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c41"><span>指北針、圖名與比例</span></label></li>
+    <li><label><input type="checkbox" id="c42"><span>周邊道路名稱與寬度、鄰地是什麼</span></label></li>
+    <li><label><input type="checkbox" id="c43"><span>建築輪廓（粗線）與樓層數，例如「3F」</span></label></li>
+    <li><label><input type="checkbox" id="c44"><span>入口三角形 ▲：主入口、次入口、車道入口</span></label></li>
+    <li><label><input type="checkbox" id="c45"><span>退縮線與退縮尺寸</span></label></li>
+    <li><label><input type="checkbox" id="c46"><span>鋪面、植栽、保留的樹、自行車位、無障礙通路</span></label></li>
+  </ul>
+  <div class="warnbox"><b>動手 6：</b>用 8 分鐘，在白紙上畫例題的配置草圖。比例抓 1/400，也就是 40 m 畫成 10 cm、50 m 畫成 12.5 cm。把上面六項都標出來。畫完對照上面的示範。</div>
+</article>
+<!-- ================= M5 平面 ================= -->
+<article class="view mod" id="v-m5" data-min="35" data-title="平面與柱格" data-ds="8 m 柱格、服務核、走廊、樓梯尺寸、地下停車" hidden>
+  <p class="eyebrow">單元 5 · 35 分鐘</p>
+  <h1>平面：先畫格子，再放核心，最後才隔房間</h1>
+  <ul class="goal"><li><b>學完你會：</b>用柱格、服務核、走廊三個步驟排出一層平面，並算出樓梯尺寸</li></ul>
+
+  <p>新手畫平面最常見的做法是從房間開始一間一間拼，結果柱子對不上、樓梯放不下、面積算不出來。正確的順序是反過來：<b>柱格 → 服務核 → 走廊 → 房間</b>。</p>
+
+  <h2 class="h">第一步：柱格</h2>
+  <p>柱格是柱子排列的方格。考場上請先用一個尺寸：<mark>8 m × 8 m</mark>。</p>
+  <ul class="t">
+    <li>一格 64 ㎡，面積好算：題目要 200 ㎡ 就是 3 格多一點，250 ㎡ 是 4 格。</li>
+    <li>地下室一跨可以排 3 部汽車（考場通用畫法；想更保險可用 8.4 m）。</li>
+    <li>梁的深度抓跨距的十二分之一到十分之一，8 m 跨的梁深約 70 到 80 cm。</li>
+  </ul>
+  <p>例題每層需要約 700 ㎡。可建範圍東西 33 m、南北 43 m，排 3 跨 × 4 跨 ＝ 24 m × 32 m ＝ 768 ㎡。比 700 略大、比上限 1,000 小，可以用。</p>
+  <div class="key"><b>用格子數面積：</b>從這一步起，不要再用計算機算房間面積。直接數格子：1 格 64、2 格 128、3 格 192、4 格 256。和題目差 10% 以內都可以接受。</div>
+
+  <h2 class="h">第二步：服務核</h2>
+  <p>服務核是每一層都在同一個位置的東西：樓梯、電梯、廁所、管道間。它們上下對齊，所以要最先定位。</p>
+  <div class="tw"><table>
+    <tr><th>項目</th><th>考場用尺寸</th><th>規則</th></tr>
+    <tr><td>樓梯</td><td class="fig">約 3.5 × 6.5 m</td><td>至少 2 座，分別放在平面的兩端</td></tr>
+    <tr><td>電梯</td><td class="fig">約 2.5 × 2.5 m</td><td>至少 1 部，靠近門廳；它同時是無障礙的垂直動線</td></tr>
+    <tr><td>男女廁所</td><td class="fig">合計約 40 ㎡</td><td>每層都要，位置上下對齊</td></tr>
+    <tr><td>無障礙廁所</td><td class="fig">約 2 × 2 m</td><td>內部要能畫出直徑 1.5 m 的輪椅迴轉圓</td></tr>
+    <tr><td>管道間</td><td class="fig">約 1 × 2 m</td><td>緊鄰廁所，上下貫通</td></tr>
+  </table></div>
+  <p><b>為什麼樓梯要兩座而且分開：</b>火災時如果一座被擋住，人要能往反方向逃。兩座樓梯擠在一起等於只有一座。從任何一個房間門口走到最近的樓梯，距離抓在 30 m 以內就安全（法規依用途為 30 到 50 m）。</p>
+
+  <h2 class="h">第三步：走廊，然後才是房間</h2>
+  <p>用一條走廊把兩座樓梯連起來，房間掛在走廊旁邊。公共建築的走廊<mark>畫 2.4 m 寬</mark>就不會錯（法規下限依情況是 1.2 到 2.4 m）。下面是例題二樓：</p>
+  <figure>
+    <svg viewBox="0 0 720 350" role="img" aria-label="例題二樓平面示意">
+      <g transform="translate(60,30)">
+        <rect x="0" y="0" width="216" height="288" class="f-sheet s-ink" stroke-width="3"/>
+        <!-- 服務帶 -->
+        <rect x="0" y="0" width="50.4" height="58.5" class="f-line s-ink"/><text x="25" y="33" text-anchor="middle" font-size="11">樓梯</text>
+        <rect x="0" y="58.5" width="50.4" height="63" class="f-line s-ink"/><text x="25" y="88" text-anchor="middle" font-size="11">廁所</text><text x="25" y="102" text-anchor="middle" font-size="9">含無障礙</text>
+        <rect x="0" y="121.5" width="50.4" height="27" class="f-line s-ink"/><text x="25" y="139" text-anchor="middle" font-size="11">電梯</text>
+        <rect x="0" y="148.5" width="50.4" height="81" class="f-paper s-ink"/><text x="25" y="192" text-anchor="middle" font-size="11">儲藏</text>
+        <rect x="0" y="229.5" width="50.4" height="58.5" class="f-line s-ink"/><text x="25" y="262" text-anchor="middle" font-size="11">樓梯</text>
+        <!-- 走廊 -->
+        <rect x="50.4" y="0" width="21.6" height="288" class="f-warn"/><text x="61" y="150" text-anchor="middle" font-size="11" transform="rotate(-90 61 150)">走廊 2.4 m</text>
+        <!-- 房間 -->
+        <g class="f-soft s-ink" stroke-width="1.5"><rect x="72" y="0" width="72" height="67.5"/><rect x="144" y="0" width="72" height="67.5"/><rect x="72" y="67.5" width="72" height="67.5"/><rect x="144" y="67.5" width="72" height="67.5"/></g>
+        <text x="144" y="38" text-anchor="middle" font-size="12" font-weight="700">樂齡教室 × 4</text><text x="144" y="104" text-anchor="middle" class="dim">各 8 × 7.5 ＝ 60 ㎡</text>
+        <rect x="72" y="135" width="144" height="40.5" class="f-sheet s-ink" stroke-dasharray="4 3"/><text x="144" y="166" text-anchor="middle" font-size="12" font-weight="700">故事角（開放）</text>
+        <rect x="72" y="175.5" width="144" height="112.5" class="f-ok s-ink" stroke-width="1.5"/><text x="144" y="248" text-anchor="middle" font-size="12" font-weight="700">兒童閱覽</text><text x="144" y="266" text-anchor="middle" class="dim">16 × 12.5 ＝ 200 ㎡</text>
+        <!-- 柱 -->
+        <g class="f-ink"><g id="colrow"><rect x="-4" y="-4" width="8" height="8"/><rect x="68" y="-4" width="8" height="8"/><rect x="140" y="-4" width="8" height="8"/><rect x="212" y="-4" width="8" height="8"/></g>
+          <use href="#colrow" y="72"/><use href="#colrow" y="144"/><use href="#colrow" y="216"/><use href="#colrow" y="288"/></g>
+        <!-- 尺寸 -->
+        <text x="36" y="-12" text-anchor="middle" class="dim">8</text><text x="108" y="-12" text-anchor="middle" class="dim">8</text><text x="180" y="-12" text-anchor="middle" class="dim">8 m</text>
+        <text x="232" y="40" class="dim">8</text><text x="232" y="112" class="dim">8</text><text x="232" y="184" class="dim">8</text><text x="232" y="256" class="dim">8 m</text>
+        <text x="-34" y="150" class="dim">西 ←</text><text x="250" y="150" class="dim">→ 公園</text>
+      </g>
+      <g font-size="13">
+        <text x="400" y="60" font-weight="700">這張圖做對了什麼</text>
+        <text x="400" y="90">1. 柱子在 8 m 格線的交點，整齊。</text>
+        <text x="400" y="116">2. 樓梯在南北兩端，分開。</text>
+        <text x="400" y="142">3. 服務空間集中在西側，擋西曬。</text>
+        <text x="400" y="168">4. 一條走廊連接兩座樓梯。</text>
+        <text x="400" y="194">5. 房間都面向東側公園，有景有光。</text>
+        <text x="400" y="220">6. 教室牆對齊格線，面積好算。</text>
+        <text x="400" y="262" class="t-mut">兒童閱覽和樂齡教室中間用開放的</text>
+        <text x="400" y="282" class="t-mut">故事角相連，回應「世代相遇」。</text>
+      </g>
+    </svg>
+    <figcaption>例題二樓，24 × 32 m。西側第一跨切成 5.6 m 服務帶和 2.4 m 走廊。</figcaption>
+  </figure>
+
+  <h2 class="h">樓梯怎麼算</h2>
+  <p>樓梯是新手最容易畫錯的地方，閱卷者也一定會看。記三個數字：<mark>級高不超過 16 cm、級深至少 26 cm、梯寬至少 1.4 m</mark>。這組數字同時滿足一般公共建築和無障礙樓梯的要求。</p>
+  <div class="key"><b>省事的做法：</b>樓高直接取 15 cm 的倍數。樓高 3.6 m 是 24 級，4.2 m 是 28 級，4.5 m 是 30 級，每級剛好 15 cm，不用除不盡。</div>
+  <div class="box" id="stairCalc">
+    <h4><em>試算</em>折返梯計算機</h4>
+    <p class="hint">折返梯是走到一半轉 180 度的樓梯，最常用。</p>
+    <div class="frow">
+      <label for="stH">樓高 m<input type="number" id="stH" value="3.6" min="2.4" max="6" step="0.1" inputmode="decimal"></label>
+      <label for="stR">級高上限 cm<input type="number" id="stR" value="16" min="12" max="20" step="0.5" inputmode="decimal"></label>
+      <label for="stT">級深 cm<input type="number" id="stT" value="28" min="24" max="35" step="1" inputmode="decimal"></label>
+      <label for="stW">梯寬 m<input type="number" id="stW" value="1.5" min="1.2" max="2.4" step="0.1" inputmode="decimal"></label>
+    </div>
+    <figure><svg id="stSvg" viewBox="0 0 720 220" role="img" aria-label="折返梯平面"></svg></figure>
+    <div class="out" id="stOut"></div>
+  </div>
+
+  <h2 class="h">各層的差別</h2>
+  <ul class="t">
+    <li><b>一樓</b>：多了門廳、服務台和各個入口。入口處畫無障礙坡道或直接做成沒有高差。樓高取 4.2 到 4.5 m，比樓上高。</li>
+    <li><b>標準層（二樓以上）</b>：服務核位置與一樓相同，只換房間。樓高取 3.6 m。</li>
+    <li><b>地下層</b>：停車、機房、水箱。柱子位置和樓上完全相同。</li>
+  </ul>
+
+  <h2 class="h">地下停車的四個數字</h2>
+  <div class="tw"><table>
+    <tr><th>項目</th><th class="n">尺寸</th><th>說明</th></tr>
+    <tr><td>汽車位</td><td class="n">2.5 × 5.5 m</td><td>8 m 柱距一跨排 3 部</td></tr>
+    <tr><td>無障礙汽車位</td><td class="n">3.5 × 6 m</td><td>靠近電梯</td></tr>
+    <tr><td>機車位</td><td class="n">1 × 2 m</td><td></td></tr>
+    <tr><td>車道寬</td><td class="n">單向 3.5 m／雙向 5.5 m</td><td>車位後方的車道留 5.5 m 才好倒車</td></tr>
+    <tr><td>坡道坡度</td><td class="n">不陡於 1：6</td><td>下降 3.6 m 需要約 22 m 長</td></tr>
+  </table></div>
+  <p>快速估算：<b>每部汽車連同車道約需 40 ㎡</b>。例題 20 部汽車約 800 ㎡，加上機車和機房，地下室約 1,000 ㎡。地下室範圍可以比地上建築大，但要避開老樹的根。</p>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="停車位與車道的斷面關係">
+      <g transform="translate(60,24)">
+        <rect x="0" y="0" width="330" height="110" class="f-paper s-ink" stroke-width="2"/>
+        <g class="f-soft s-ink"><rect x="0" y="0" width="110" height="50"/><rect x="0" y="50" width="110" height="50" /><rect x="220" y="0" width="110" height="50"/><rect x="220" y="50" width="110" height="50"/></g>
+        <text x="55" y="30" text-anchor="middle" font-size="12">車位</text><text x="275" y="30" text-anchor="middle" font-size="12">車位</text>
+        <text x="165" y="58" text-anchor="middle" font-size="12" font-weight="700">車道</text>
+        <text x="55" y="128" text-anchor="middle" class="dim">5.5</text><text x="165" y="128" text-anchor="middle" class="dim">5.5</text><text x="275" y="128" text-anchor="middle" class="dim">5.5 m</text>
+        <text x="-10" y="30" text-anchor="end" class="dim">2.5</text>
+      </g>
+      <text x="430" y="60" font-size="13">車位 ＋ 車道 ＋ 車位 ＝ 16.5 m</text>
+      <text x="430" y="86" font-size="13">大約是兩跨（16 m）的寬度。</text>
+      <text x="430" y="112" font-size="13" class="t-mut">所以停車場以「兩跨一組」來排最順。</text>
+    </svg>
+  </figure>
+
+  <div class="box quiz" data-ans="b">
+    <h4><em>確認</em>一棟 40 m 長的建築，兩座樓梯該怎麼放？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">兩座並排放在正中央，共用一個梯廳，省面積</button>
+      <button type="button" data-k="b">分別放在靠近兩端的位置</button>
+      <button type="button" data-k="c">一座放中央，另一座改成戶外迴旋梯當造型</button>
+    </div>
+    <p class="why" hidden>兩座樓梯要讓人有兩個不同方向可以逃。放在兩端時，任何位置到最近樓梯都在 20 m 內，而且中央一旦起火，兩邊都還能走。</p>
+  </div>
+</article>
+<!-- ================= M6 剖面立面透視 ================= -->
+<article class="view mod" id="v-m6" data-min="25" data-title="剖面、立面、透視" data-ds="三張最常被放棄的圖，各用最省時的畫法補上" hidden>
+  <p class="eyebrow">單元 6 · 25 分鐘</p>
+  <h1>剖面、立面、透視：先求有，再求好</h1>
+  <ul class="goal"><li><b>學完你會：</b>用 20 分鐘畫出一張標註完整的剖面，知道立面和透視的最低完成標準</li></ul>
+
+  <p>這三張圖排在平面之後，最容易因為時間不夠而空白。它們各有一套「最低完成標準」，照著做，每張 15 到 25 分鐘可以完成。</p>
+
+  <h2 class="h">剖面圖：把建築垂直切一刀</h2>
+  <p>剖面表達的是高度和上下關係，這是平面看不到的。切的位置選<b>最有內容的地方</b>：通過挑高空間、樓梯或主入口，不要切在只有走廊的地方。</p>
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="例題南北向剖面">
+      <!-- 地面 -->
+      <line x1="20" y1="200" x2="700" y2="200" class="s-ink" stroke-width="4"/>
+      <text x="690" y="194" text-anchor="end" class="dim">GL ±0</text>
+      <!-- 北側住宅 -->
+      <rect x="30" y="56" width="70" height="144" class="f-paper s-mut"/><text x="65" y="130" text-anchor="middle" font-size="11" class="t-mut">4F 住宅</text>
+      <!-- 地下 -->
+      <rect x="150" y="200" width="430" height="43" class="f-paper s-ink" stroke-width="3"/><text x="365" y="227" text-anchor="middle" font-size="12">B1 停車場、機房</text>
+      <!-- 1F -->
+      <rect x="180" y="146" width="384" height="54" class="f-sheet s-ink" stroke-width="3"/>
+      <!-- 2F -->
+      <rect x="180" y="103" width="384" height="43" class="f-sheet s-ink" stroke-width="3"/>
+      <!-- 3F 北側退一跨 -->
+      <rect x="276" y="60" width="288" height="43" class="f-sheet s-ink" stroke-width="3"/>
+      <!-- 女兒牆 -->
+      <path d="M276 60 v-12 M564 60 v-12 M180 103 v-12" class="s-ink" stroke-width="3"/>
+      <!-- 內隔 -->
+      <path d="M276 146 v54 M468 103 v43 M276 103 v43" class="s-ink" stroke-width="1.2"/>
+      <text x="228" y="178" text-anchor="middle" font-size="12">多功能廳</text><text x="420" y="178" text-anchor="middle" font-size="12">門廳、咖啡</text>
+      <text x="228" y="129" text-anchor="middle" font-size="12">樂齡教室</text><text x="372" y="129" text-anchor="middle" font-size="12">故事角</text><text x="516" y="129" text-anchor="middle" font-size="12">兒童閱覽</text>
+      <text x="420" y="86" text-anchor="middle" font-size="12">一般閱覽</text><text x="228" y="98" text-anchor="middle" font-size="11" class="t-ok">露台</text>
+      <!-- 樓高標註 -->
+      <g class="s-mut" stroke-width="1"><path d="M600 200 v-152 M595 200 h10 M595 146 h10 M595 103 h10 M595 60 h10 M595 48 h10 M600 200 v43 M595 243 h10"/></g>
+      <text x="610" y="177" class="dim">4.5 m</text><text x="610" y="128" class="dim">3.6</text><text x="610" y="85" class="dim">3.6</text><text x="610" y="226" class="dim">3.6</text><text x="610" y="52" class="dim">女兒牆 1.1</text>
+      <!-- 樹與人 -->
+      <circle cx="130" cy="170" r="16" class="f-ok s-ok"/><path d="M130 186 v14" class="s-ok" stroke-width="2"/>
+      <g class="s-ink" stroke-width="1.5"><circle cx="350" cy="182" r="3" class="f-ink"/><path d="M350 185 v9 M350 194 l-3 6 M350 194 l3 6"/></g>
+      <text x="65" y="222" text-anchor="middle" class="dim">北</text><text x="690" y="258" text-anchor="end" class="dim">南：15 m 道路</text>
+      <text x="140" y="140" text-anchor="middle" font-size="10" class="t-ok">加大退縮</text>
+      <text x="360" y="285" text-anchor="middle" font-size="12" font-weight="700">A–A′ 剖面圖　S：1/200</text><line x1="290" y1="290" x2="430" y2="290" class="s-ink" stroke-width="1.5"/>
+    </svg>
+    <figcaption>例題南北向剖面。三樓北側退一跨做露台，回應「降低對北側住宅的壓迫」。</figcaption>
+  </figure>
+  <h3>剖面的最低完成標準</h3>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c61"><span>地面線畫最粗，並延伸到道路和鄰地</span></label></li>
+    <li><label><input type="checkbox" id="c62"><span>被切到的樓板、牆、屋頂用粗線，後方看到的用細線</span></label></li>
+    <li><label><input type="checkbox" id="c63"><span>每一層標樓高，旁邊拉一條尺寸線</span></label></li>
+    <li><label><input type="checkbox" id="c64"><span>每個空間寫名稱</span></label></li>
+    <li><label><input type="checkbox" id="c65"><span>畫出地下室、屋頂女兒牆（高 1.1 m 以上）</span></label></li>
+    <li><label><input type="checkbox" id="c66"><span>放一兩個人和樹，讓人看得出尺度</span></label></li>
+    <li><label><input type="checkbox" id="c67"><span>平面圖上標出剖切位置 A–A′，圖名比例寫在圖下方</span></label></li>
+  </ul>
+  <div class="key"><b>樓高怎麼定：</b>一樓 4.2 到 4.5 m，標準層 3.6 m，地下層 3.6 m。大空間（多功能廳、球場）需要更高，可以挑空兩層或放在頂樓把屋頂抬高。這幾個數字都是 15 cm 的倍數，樓梯好算。</div>
+
+  <h2 class="h">立面圖：從正面看的外觀</h2>
+  <p>立面不需要從頭設計，它是平面和剖面的投影。畫法是把平面的寬度往上拉、把剖面的高度往旁邊拉，交出來的格子就是立面的骨架。</p>
+  <ol class="t">
+    <li>畫地面線（最粗）和建築外輪廓（次粗）。</li>
+    <li>畫樓層線和柱位線，立面被分成一格一格。</li>
+    <li>每格依照裡面的空間決定開窗：閱覽室開大窗，廁所開高窗，樓梯間開直條窗，西面加遮陽板。</li>
+    <li>標出入口，上方畫雨庇。</li>
+    <li>選一個面畫陰影或材質線，加樹和人。寫上材料名稱，例如「清水混凝土」「木格柵」。</li>
+  </ol>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="立面的骨架畫法">
+      <line x1="40" y1="160" x2="680" y2="160" class="s-ink" stroke-width="4"/>
+      <rect x="160" y="62" width="384" height="98" class="f-sheet s-ink" stroke-width="2.5"/>
+      <path d="M160 106 h384" class="s-ink"/><path d="M256 62 v98 M352 62 v98 M448 62 v98" class="s-line"/>
+      <rect x="160" y="20" width="288" height="42" class="f-sheet s-ink" stroke-width="2.5"/><path d="M256 20 v42 M352 20 v42" class="s-line"/>
+      <g class="f-soft s-ink"><rect x="170" y="28" width="76" height="26"/><rect x="266" y="28" width="76" height="26"/><rect x="362" y="28" width="76" height="26"/>
+        <rect x="170" y="70" width="76" height="28"/><rect x="266" y="70" width="76" height="28"/><rect x="362" y="70" width="76" height="28"/><rect x="458" y="70" width="76" height="28"/>
+        <rect x="170" y="116" width="76" height="44"/><rect x="266" y="116" width="76" height="44"/><rect x="458" y="116" width="76" height="44"/></g>
+      <rect x="352" y="112" width="96" height="6" class="f-ink"/><rect x="372" y="120" width="56" height="40" class="f-warn s-ink"/><text x="400" y="145" text-anchor="middle" font-size="11">入口</text>
+      <g class="s-ok"><circle cx="100" cy="128" r="20" class="f-ok"/><path d="M100 148 v12" stroke-width="2"/><circle cx="610" cy="134" r="16" class="f-ok"/><path d="M610 150 v10" stroke-width="2"/></g>
+      <text x="360" y="186" text-anchor="middle" font-size="12" font-weight="700">東向立面圖　S：1/200</text>
+    </svg>
+    <figcaption>樓層線和柱位線先畫出來，開窗跟著格子走。這樣的立面不會出錯，也和平面對得上。</figcaption>
+  </figure>
+
+  <h2 class="h">透視圖：新手用「量體透視」</h2>
+  <p>透視是把建築畫成立體的樣子。不要嘗試畫室內或複雜角度，選一個能同時看到主入口和廣場的街角視點，畫成一個有樓層線的盒子就好。</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="兩點透視量體">
+      <line x1="20" y1="120" x2="700" y2="120" class="s-line" stroke-dasharray="5 4"/><text x="676" y="113" text-anchor="end" class="dim">視平線</text>
+      <circle cx="40" cy="120" r="3" class="f-ink"/><circle cx="690" cy="120" r="3" class="f-ink"/><text x="34" y="108" class="dim">消點</text><text x="700" y="138" text-anchor="end" class="dim">消點</text>
+      <polygon points="320,40 320,180 520,150 520,78" class="f-soft s-ink" stroke-width="2.5"/>
+      <polygon points="320,40 320,180 170,146 170,82" class="f-sheet s-ink" stroke-width="2.5"/>
+      <path d="M320 87 L520 102 M320 133 L520 126 M320 87 L170 104 M320 133 L170 125" class="s-ink" stroke-width="1"/>
+      <path d="M320 40 L40 120 M320 180 L40 120 M320 40 L690 120 M320 180 L690 120" class="s-line" stroke-dasharray="2 4"/>
+      <g class="s-ok"><circle cx="110" cy="130" r="18" class="f-ok"/><path d="M110 148 v18" stroke-width="2"/><circle cx="590" cy="138" r="14" class="f-ok"/><path d="M590 152 v12" stroke-width="2"/></g>
+      <g class="s-ink" stroke-width="1.5"><circle cx="450" cy="150" r="3" class="f-ink"/><path d="M450 153 v10 M450 163 l-3 7 M450 163 l3 7"/></g>
+      <text x="360" y="215" text-anchor="middle" font-size="12" class="t-mut">步驟：視平線（人眼高度）與兩個消點 → 最近的一條垂直邊 → 連到消點成盒子 → 樓層線 → 入口、樹、人</text>
+    </svg>
+    <figcaption>兩點透視。所有水平線都往左右兩個消點收，垂直線保持垂直。</figcaption>
+  </figure>
+  <div class="warnbox"><b>動手 7：</b>用 5 分鐘照著畫一次這個盒子。先畫視平線和兩個點，再畫中間最高的垂直線，其餘的線都從它的頂端和底端拉向兩個消點。考前把這個盒子練到 10 分鐘內可以完成並加上樓層線。</div>
+
+  <h2 class="h">三種線條粗細</h2>
+  <div class="tw"><table>
+    <tr><th>粗細</th><th>用在哪</th></tr>
+    <tr><td>粗</td><td>地面線、被剖切到的牆和樓板、配置圖的建築輪廓</td></tr>
+    <tr><td>中</td><td>看得到但沒被切到的輪廓、門窗、樓梯</td></tr>
+    <tr><td>細</td><td>尺寸線、鋪面、家具、植栽、格線</td></tr>
+  </table></div>
+  <p>線條分出粗細，圖面就會有層次，這是最便宜的加分。只用一種粗細畫完整張圖，看起來會像草稿。</p>
+
+  <div class="box quiz" data-ans="c">
+    <h4><em>確認</em>剖面圖的切線位置，哪一個最好？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">沿著走廊中線切，圖最簡單</button>
+      <button type="button" data-k="b">切在建築外面，只看到立面</button>
+      <button type="button" data-k="c">通過門廳、多功能廳和樓上主要空間</button>
+    </div>
+    <p class="why" hidden>剖面的價值在於說明空間的高度與上下關係。切過主要空間，才有東西可以標註，也才能表現挑高、露台這些回應議題的做法。</p>
+  </div>
+</article>
+<!-- ================= M7 配速與版面 ================= -->
+<article class="view mod" id="v-m7" data-min="20" data-title="配速與版面" data-ds="八小時怎麼切、圖紙怎麼排、落後時怎麼救" hidden>
+  <p class="eyebrow">單元 7 · 20 分鐘</p>
+  <h1>配速與版面：八小時的作戰表</h1>
+  <ul class="goal"><li><b>學完你會：</b>背出八個階段的時間點，知道落後時先放棄什麼</li></ul>
+
+  <p>多數人不及格的原因是沒畫完，沒畫完的原因幾乎都是前面花太久。配速表的用途是告訴你「現在該停了」。</p>
+
+  <h2 class="h">八個階段</h2>
+  <div class="box" id="pacer">
+    <h4><em>配速</em>考試進行到第幾分鐘，你應該在做什麼</h4>
+    <div class="pace" id="paceBar" aria-hidden="true"></div>
+    <label for="paceT" class="hint">拖動時間：開考後 <b id="paceTv" class="fig">0:00</b></label>
+    <input type="range" id="paceT" min="0" max="480" step="5" value="0">
+    <p class="verdict mid" id="paceNow"></p>
+    <div class="tw"><table id="paceTable">
+      <tr><th>階段</th><th class="n">時間</th><th class="n">結束時刻</th><th>產出</th></tr>
+    </table></div>
+  </div>
+  <p>八小時內沒有另外的午餐時間。吃東西、上廁所的時間，要從各階段自己扣，所以每個階段請以「提早 5 分鐘結束」為目標。</p>
+
+  <h2 class="h">落後時的止損規則</h2>
+  <ol class="t">
+    <li><b>草圖階段超過 2 小時 30 分還沒定案：</b>停止修改，用手上最完整的那一版上正圖。普通但完整的方案，分數高於很好但沒畫完的方案。</li>
+    <li><b>第 5 小時平面還沒畫完：</b>平面先停，家具和鋪面全部跳過，去畫剖面和立面。</li>
+    <li><b>第 6 小時 40 分透視還沒開始：</b>改畫最簡單的量體透視，10 分鐘內結束。</li>
+    <li><b>最後 30 分鐘：</b>不管畫到哪裡都停筆，進入檢查。補圖名、比例、指北針、空間名稱、尺寸。這些每一項都是分數，而且只要幾秒鐘。</li>
+  </ol>
+  <div class="key"><b>原則：</b>每一張被要求的圖都要存在。寧可六張圖都有七成，不要三張十成、三張空白。</div>
+
+  <h2 class="h">圖紙版面</h2>
+  <p>動筆畫正圖之前，先用鉛筆在圖紙上輕輕框出每張圖的位置。確認每張圖都放得下，再開始畫。實際的圖紙大小和張數以當年試場規定為準，以下是一張橫式大圖紙的常見排法：</p>
+  <figure>
+    <svg viewBox="0 0 720 420" role="img" aria-label="圖紙版面配置範例">
+      <rect x="20" y="16" width="680" height="388" class="f-sheet s-ink" stroke-width="2.5"/>
+      <g class="s-ink" stroke-width="1.5">
+        <rect x="34" y="30" width="170" height="210" class="f-warn"/><rect x="34" y="250" width="170" height="140" class="f-warn"/>
+        <rect x="214" y="30" width="230" height="210" class="f-soft"/>
+        <rect x="454" y="30" width="232" height="130" class="f-ok"/>
+        <rect x="454" y="170" width="112" height="110" class="f-soft"/><rect x="574" y="170" width="112" height="110" class="f-soft"/>
+        <rect x="214" y="250" width="230" height="64" class="f-paper"/><rect x="214" y="324" width="230" height="66" class="f-paper"/>
+        <rect x="454" y="290" width="232" height="64" class="f-paper"/><rect x="454" y="362" width="232" height="28" class="f-sheet"/>
+      </g>
+      <g font-size="13" font-weight="700" text-anchor="middle">
+        <text x="119" y="120">建築計畫說明</text><text x="119" y="140" font-weight="400" font-size="11">基地分析、對策表</text><text x="119" y="156" font-weight="400" font-size="11">量體計算</text>
+        <text x="119" y="315">定性定量表</text><text x="119" y="335" font-weight="400" font-size="11">泡泡圖</text>
+        <text x="329" y="130">配置圖暨 1F 平面</text><text x="329" y="150" font-weight="400" font-size="11">最大、放中央</text>
+        <text x="570" y="100">透視圖</text>
+        <text x="510" y="230">2F 平面</text><text x="630" y="230">3F 平面</text>
+        <text x="329" y="287">剖面圖</text><text x="329" y="362">立面圖</text>
+        <text x="570" y="327">B1 平面</text><text x="570" y="381" font-size="11">題目名稱</text>
+      </g>
+    </svg>
+    <figcaption>左邊一欄是計畫（30 分），其餘是設計（70 分）。配置圖最大、放在視覺中心。各層平面上下或左右對齊，柱位對得起來。</figcaption>
+  </figure>
+  <ul class="t">
+    <li>題目若要求配置圖和一樓平面分開畫，就分開。沒有特別要求時，兩張合併成「配置暨一樓平面」可以省下一張圖的時間。</li>
+    <li>各層平面用同一個方向、同一個比例，並排對齊。</li>
+    <li>每張圖下方寫圖名和比例，並畫一條底線。</li>
+  </ul>
+
+  <h2 class="h">交卷前 30 分鐘的檢查表</h2>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c71"><span>題目要求的每一張圖都有，比例正確</span></label></li>
+    <li><label><input type="checkbox" id="c72"><span>硬條件清單逐條打勾（單元 1 抄的那張）</span></label></li>
+    <li><label><input type="checkbox" id="c73"><span>題目列出的每個空間，圖上都找得到名稱</span></label></li>
+    <li><label><input type="checkbox" id="c74"><span>每張圖有圖名、比例；配置和平面有指北針</span></label></li>
+    <li><label><input type="checkbox" id="c75"><span>每層有 2 座樓梯、電梯、廁所、無障礙廁所</span></label></li>
+    <li><label><input type="checkbox" id="c76"><span>入口有 ▲ 符號；車道入口、停車數量有標</span></label></li>
+    <li><label><input type="checkbox" id="c77"><span>平面有柱位和主要尺寸；剖面有樓高</span></label></li>
+    <li><label><input type="checkbox" id="c78"><span>建蔽率、容積率的檢討算式寫在圖上</span></label></li>
+    <li><label><input type="checkbox" id="c79"><span>准考證號碼、座號等依試場規定填寫；圖面上不留任何可辨識身分的記號</span></label></li>
+  </ul>
+
+  <div class="box quiz" data-ans="a">
+    <h4><em>確認</em>開考 2 小時 40 分，你的配置有兩個版本，各有優缺點，還決定不了。該怎麼做？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">選比較單純、確定畫得完的那一版，立刻上正圖</button>
+      <button type="button" data-k="b">再花 30 分鐘把兩版融合成第三版</button>
+      <button type="button" data-k="c">兩版都畫在圖上，讓閱卷者挑</button>
+    </div>
+    <p class="why" hidden>已經超過草圖階段的時限。這時候再多想 30 分鐘，換來的設計改善很小，但後面每一張圖都會少 30 分鐘。選單純的版本，把省下的時間用在畫完。</p>
+  </div>
+</article>
+<!-- ================= M8 實戰 ================= -->
+<article class="view mod" id="v-m8" data-min="25" data-title="實戰演練" data-ds="換一道新題，計時走完前半段流程" hidden>
+  <p class="eyebrow">單元 8 · 25 分鐘</p>
+  <h1>實戰：換一道題，自己走一次</h1>
+  <ul class="goal"><li><b>學完你會：</b>在 21 分鐘內，對一道沒看過的題目完成讀題、計算、分層和配置草圖</li></ul>
+
+  <p>前面七個單元都用同一道例題。現在換一道新的，確認流程能搬到別的題目上。請準備一張白紙和筆。每一關按「開始計時」後才看題目，時間到就進下一關，沒做完也要走。</p>
+
+  <div class="box">
+    <h4><em>題目</em>社區托育暨親子館</h4>
+    <div class="qtext">
+      某社區年輕家庭增加，擬興建一處<b>讓家長安心托育、鄰里互相認識</b>的親子據點。<br>
+      <b>基地</b>　矩形，東西向 30 m、南北向 40 m，面積 1,200 ㎡，平坦。南側臨 12 m 道路，東側臨 6 m 巷道，西側緊鄰國小操場，北側為 3 層透天住宅。<br>
+      <b>法規</b>　建蔽率 60%、容積率 180%。臨道路側退縮 3 m。地上不得超過 3 層。<br>
+      <b>空間需求</b>　托嬰室 3 間，每間 60 ㎡；親子遊戲室 200 ㎡；親職教室 2 間，每間 60 ㎡；社區廚房 80 ㎡；行政辦公 60 ㎡。須設戶外遊戲庭。<b>托嬰室須設於地面層。</b><br>
+      <b>停車</b>　於法定空地設汽車位 6 部（含無障礙 1 部），須有家長接送臨停空間。<br>
+      <b>圖面</b>　配置圖 1/300、各層平面 1/200、剖面 1/200、立面、透視、計畫說明。
+    </div>
+  </div>
+
+  <div class="box drill" id="drill">
+    <div class="frow" style="justify-content:space-between;align-items:center">
+      <h4 style="margin:0"><em id="drStepNo">第 1 關</em><span id="drTitle"></span></h4>
+      <span class="clock" id="drClock" aria-live="off">5:00</span>
+    </div>
+    <p id="drTask"></p>
+    <div id="drBody"></div>
+    <div class="frow">
+      <button class="go" type="button" id="drStart">開始計時</button>
+      <button class="ghost" type="button" id="drReveal" hidden>看參考答案</button>
+      <button class="go" type="button" id="drNext" hidden>下一關 →</button>
+    </div>
+    <div id="drAnswer" hidden></div>
+  </div>
+
+  <template id="dr-a1">
+    <p><b>參考的硬條件清單（8 條）：</b></p>
+    <ul class="t">
+      <li>建蔽率 ≤ 60%</li><li>容積率 ≤ 180%</li><li>南側、東側各退縮 3 m</li><li>地上 ≤ 3 層</li>
+      <li>托嬰室在地面層（3 間共 180 ㎡ 都要在一樓）</li><li>要有戶外遊戲庭</li>
+      <li>汽車 6 部含無障礙 1 部，設在地面的法定空地（不用挖地下室）</li><li>家長接送臨停空間</li>
+    </ul>
+    <p><b>議題：</b>家長安心托育（安全、看得到孩子、接送不危險）；鄰里互相認識（廚房、遊戲室對社區開放）。</p>
+    <div class="frow"><label for="drS1">你列出了幾條硬條件？<input type="number" id="drS1" min="0" max="8" inputmode="numeric"></label></div>
+  </template>
+  <template id="dr-b2">
+    <div class="frow">
+      <label for="dq1">最大建築面積 ㎡<input type="number" id="dq1" data-ans="720" data-tol="1" inputmode="decimal"></label>
+      <label for="dq2">最大容積樓地板 ㎡<input type="number" id="dq2" data-ans="2160" data-tol="1" inputmode="decimal"></label>
+      <label for="dq3">淨面積加總 ㎡<input type="number" id="dq3" data-ans="640" data-tol="1" inputmode="decimal"></label>
+      <label for="dq4">需要的樓地板 ㎡<input type="number" id="dq4" data-ans="896" data-tol="70" inputmode="decimal"></label>
+      <label for="dq5">你決定蓋幾層<input type="number" id="dq5" data-ans="2" data-tol="0" inputmode="numeric"></label>
+    </div>
+  </template>
+  <template id="dr-a2">
+    <div class="tw"><table>
+      <tr><td>最大建築面積</td><td class="fig">1,200 × 60%</td><td class="n">720 ㎡</td></tr>
+      <tr><td>最大容積樓地板</td><td class="fig">1,200 × 180%</td><td class="n">2,160 ㎡</td></tr>
+      <tr><td>淨面積</td><td class="fig">60×3＋200＋60×2＋80＋60</td><td class="n">640 ㎡</td></tr>
+      <tr><td>需要的樓地板</td><td class="fig">640 × 1.4</td><td class="n">約 900 ㎡</td></tr>
+      <tr><td>層數</td><td class="fig">900 ÷ 2 層</td><td class="n">每層 450 ㎡</td></tr>
+    </table></div>
+    <p>蓋 2 層、每層約 450 到 480 ㎡ 最合理。每層 450 遠小於上限 720，空地足夠放遊戲庭和 6 部車。蓋 3 層雖然不違規，但每層只剩 300 ㎡，而托嬰室 180 ㎡ 必須在一樓，一樓會放不下門廳和遊戲室；而且幼兒空間越低越好。蓋 1 層需要 900 ㎡，超過建蔽率上限。</p>
+  </template>
+  <template id="dr-a3">
+    <div class="tw"><table>
+      <tr><th>樓層</th><th>空間</th><th class="n">淨面積</th></tr>
+      <tr><td>1F</td><td>托嬰室 ×3、社區廚房、門廳</td><td class="n">260 ㎡</td></tr>
+      <tr><td>2F</td><td>親子遊戲室、親職教室 ×2、行政</td><td class="n">380 ㎡</td></tr>
+    </table></div>
+    <p>托嬰室題目指定在一樓。社區廚房放一樓臨街，對鄰里開放。如果你把親子遊戲室放一樓、廚房放二樓，也合理，重點是托嬰室三間都在一樓，而且兩層面積大致平衡（二樓可以用露台調整）。</p>
+    <p><b>對策範例：</b></p>
+    <ul class="t">
+      <li>把接送臨停放在東側巷道，讓家長不用在 12 m 主要道路上停車，孩子下車不必過馬路。</li>
+      <li>把托嬰室放在一樓南側面向遊戲庭，讓幼兒直接走到戶外，行政辦公室看得到庭院。</li>
+      <li>把社區廚房放在一樓東南角臨街，讓路過的鄰居看得到裡面的活動。</li>
+    </ul>
+  </template>
+  <template id="dr-a4">
+    <figure>
+      <svg viewBox="0 0 720 330" role="img" aria-label="參考配置">
+        <rect x="0" y="270" width="720" height="60" class="f-line"/><text x="200" y="305" text-anchor="middle" font-size="13">12 m 道路</text>
+        <rect x="430" y="0" width="40" height="270" class="f-line"/><text x="450" y="140" text-anchor="middle" font-size="12" transform="rotate(-90 450 140)">6 m 巷道</text>
+        <rect x="90" y="10" width="140" height="260" class="f-ok" opacity=".6"/><text x="160" y="140" text-anchor="middle" font-size="12">國小操場</text>
+        <rect x="235" y="10" width="195" height="260" class="f-sheet s-ink" stroke-width="2.5"/>
+        <rect x="254.5" y="29.5" width="117" height="143" class="f-soft s-ink" stroke-width="2.5"/>
+        <text x="313" y="92" text-anchor="middle" font-size="14" font-weight="700">2F 建築</text><text x="313" y="110" text-anchor="middle" class="dim">18 × 22 ≈ 400 ㎡</text><text x="313" y="126" text-anchor="middle" class="dim">＋二樓局部出挑</text>
+        <rect x="254.5" y="178" width="117" height="66" class="f-ok s-ok"/><text x="313" y="208" text-anchor="middle" font-size="12" font-weight="700">遊戲庭</text><text x="313" y="224" text-anchor="middle" font-size="10">南向、有圍籬</text>
+        <rect x="377" y="29.5" width="33.5" height="97.5" class="f-line s-ink"/><text x="394" y="80" text-anchor="middle" font-size="10" transform="rotate(-90 394 80)">停車 6 部</text>
+        <rect x="377" y="140" width="33.5" height="60" class="f-warn s-ink"/><text x="394" y="172" text-anchor="middle" font-size="10" transform="rotate(-90 394 172)">接送臨停</text>
+        <path d="M376 150 L362 158 L376 166 Z" class="f-ink"/><text x="330" y="150" text-anchor="end" font-size="10" font-weight="700">主入口</text>
+        <path d="M444 60 L414 60" class="s-bad" stroke-width="3"/><path d="M420 54 L410 60 L420 66" style="fill:var(--bad)"/>
+        <rect x="235" y="250.5" width="195" height="19.5" class="f-paper s-mut" stroke-dasharray="4 3"/><text x="332" y="264" text-anchor="middle" class="dim">退 3 m 人行道＋樹</text>
+        <text x="332" y="24" text-anchor="middle" class="dim">北：3 層住宅（退 3 m）</text>
+        <text x="500" y="30" font-size="13" font-weight="700">N ↑</text>
+        <g font-size="12"><text x="500" y="90">車從東側巷道北段進出</text><text x="500" y="112">接送臨停緊貼主入口</text><text x="500" y="134">遊戲庭朝南、遠離車</text><text x="500" y="156">建築靠北靠西，</text><text x="500" y="174">庭院留給陽光面</text></g>
+      </svg>
+      <figcaption>參考配置之一。配置沒有唯一答案，用下面的檢查表自己評分。</figcaption>
+    </figure>
+    <ul class="check" id="drRubric">
+      <li><label><input type="checkbox" id="r1"><span>建築面積沒有超過 720 ㎡，並寫出層數</span></label></li>
+      <li><label><input type="checkbox" id="r2"><span>南側、東側都退了 3 m</span></label></li>
+      <li><label><input type="checkbox" id="r3"><span>車道或停車從 6 m 巷道進出，不在 12 m 道路的路口旁</span></label></li>
+      <li><label><input type="checkbox" id="r4"><span>6 部車和接送臨停都畫出來了</span></label></li>
+      <li><label><input type="checkbox" id="r5"><span>行人主入口和車的出入口是分開的</span></label></li>
+      <li><label><input type="checkbox" id="r6"><span>戶外遊戲庭是完整的一塊，不用穿越車道就能到</span></label></li>
+      <li><label><input type="checkbox" id="r7"><span>有指北針、道路名稱與寬度、鄰地標示</span></label></li>
+      <li><label><input type="checkbox" id="r8"><span>有入口 ▲ 符號、退縮尺寸</span></label></li>
+    </ul>
+    <div class="frow"><button class="go" type="button" id="drScore">算分</button></div>
+    <p class="verdict" id="drScoreOut" hidden></p>
+  </template>
+
+  <h2 class="h">接下來 30 天</h2>
+  <p>你現在有流程了，但手還不夠快。以下是把四小時的內容變成考場能力的最短路徑：</p>
+  <div class="tw"><table>
+    <tr><th>週次</th><th>每次練習做什麼</th><th class="n">每次時間</th><th class="n">次數</th></tr>
+    <tr><td>第 1 週</td><td>拿歷屆試題，只做讀題、量體計算、計畫說明</td><td class="n">90 分</td><td class="n">5 題</td></tr>
+    <tr><td>第 2 週</td><td>加上配置草圖和各層平面草圖</td><td class="n">2.5 小時</td><td class="n">4 題</td></tr>
+    <tr><td>第 3 週</td><td>完整 8 小時模擬，照配速表走</td><td class="n">8 小時</td><td class="n">2 題</td></tr>
+    <tr><td>第 4 週</td><td>把第 3 週的圖攤開，對照檢查表找出自己固定會漏的三件事，再模擬 1 次</td><td class="n">8 小時</td><td class="n">1 題</td></tr>
+  </table></div>
+  <p>歷屆試題可以在考選部網站的「考畢試題查詢」免費下載。練習時請用<a href="https://arch-drill.github.io/shuke/" target="_blank" rel="noopener">術科模擬考場</a>計時並對照每一題的硬條件。</p>
+  <div class="key"><b>最後提醒：</b>找一位已經考過的人，或是補習班老師，幫你看第 3 週畫的圖。自己練可以把流程練熟，但圖哪裡會被扣分，需要有閱卷經驗的人指出來。這是這堂課沒辦法代替的部分。</div>
+</article>
+
+<!-- ================= 小抄 ================= -->
+<article class="view" id="v-cheat" hidden>
+  <p class="eyebrow">CHEAT SHEET</p>
+  <h1>考場小抄</h1>
+  <p class="lead">整堂課壓成一頁。考前一晚和進考場前各看一次。</p>
+  <div class="cheat">
+    <section><h3>及格圖的定義</h3><ul><li>要求的圖每一張都有</li><li>題目的數字都沒違反</li><li>看得出回應了題旨</li></ul></section>
+    <section><h3>流程</h3><ul><li>讀題：四種標記 → 抄硬條件清單</li><li>計算：建蔽、容積、樓地板、層數</li><li>計畫：對策表、定量表、泡泡圖</li><li>配置：車道 → 量體 → 入口 → 開放空間</li><li>平面：柱格 → 服務核 → 走廊 → 房間</li><li>剖面、立面、透視</li><li>標註、檢查</li></ul></section>
+    <section><h3>公式</h3><ul><li>最大建築面積＝基地 × 建蔽率</li><li>最大容積樓地板＝基地 × 容積率</li><li>需要樓地板＝淨面積 × 1.3～1.5</li><li>層數＝需要樓地板 ÷ 每層面積（進位）</li><li>地下停車不計容積</li></ul></section>
+    <section><h3>配速（結束時刻）</h3><ul><li class="fig">0:30　讀題</li><li class="fig">1:30　計算與計畫說明</li><li class="fig">2:30　草圖定案</li><li class="fig">5:00　配置與各層平面</li><li class="fig">6:00　剖面、立面</li><li class="fig">6:40　透視</li><li class="fig">7:30　標註、上色</li><li class="fig">8:00　檢查完畢</li></ul></section>
+    <section><h3>平面尺寸</h3><ul><li>柱格 8 × 8 m（1 格 64 ㎡）</li><li>梁深約 70～80 cm</li><li>走廊 2.4 m</li><li>樓梯間約 3.5 × 6.5 m，至少 2 座、分兩端</li><li>電梯約 2.5 × 2.5 m</li><li>無障礙廁所約 2 × 2 m，迴轉直徑 1.5 m</li><li>到樓梯的步行距離抓 30 m 內</li></ul></section>
+    <section><h3>樓梯與高度</h3><ul><li>級高 ≤ 16 cm、級深 ≥ 26 cm、寬 ≥ 1.4 m</li><li>一樓 4.2～4.5 m、標準層 3.6 m、地下 3.6 m</li><li>3.6 m ＝ 24 級 × 15 cm</li><li>女兒牆 ≥ 1.1 m</li><li>無障礙坡道不陡於 1：12</li></ul></section>
+    <section><h3>停車</h3><ul><li>汽車位 2.5 × 5.5 m；8 m 一跨 3 部</li><li>無障礙車位 3.5 × 6 m</li><li>機車位 1 × 2 m</li><li>車道單向 3.5 m、雙向 5.5 m</li><li>坡道不陡於 1：6</li><li>每部車連車道約 40 ㎡</li><li>車道口開在次要道路，離路口 5 m 以上</li></ul></section>
+    <section><h3>分層規則</h3><ul><li>公共、吵、人多 → 低樓層</li><li>安靜、專注 → 高樓層</li><li>獨立開放 → 一樓臨街、自己的門</li><li>幼兒、行動不便 → 低樓層</li><li>大跨距無柱 → 頂樓或一樓獨立</li></ul></section>
+    <section><h3>每張圖都要有</h3><ul><li>圖名、比例</li><li>配置與平面：指北針、入口 ▲、空間名稱、柱位尺寸</li><li>剖面：地面線、樓高、空間名稱、剖切位置</li><li>立面：地面線、材料名稱</li><li>配置：道路寬、鄰地、退縮、樓層數、植栽</li></ul></section>
+    <section><h3>止損</h3><ul><li>2:30 草圖沒定案 → 用現有的上正圖</li><li>5:00 平面沒完 → 停，去畫剖立面</li><li>6:40 透視沒開始 → 量體透視 10 分鐘</li><li>7:30 → 一律停筆檢查</li></ul></section>
+  </div>
+  <p class="hint">數字是考場速記值。正式條文以現行《建築技術規則》、無障礙設施設計規範及考選部當年公告為準。</p>
+</article>
+
+</main>
+</div>
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var KEY='kyujo-course-v1', st={done:{},last:'home',t:{}};
+try{var raw=localStorage.getItem(KEY); if(raw){var o=JSON.parse(raw); if(o&&typeof o==='object'){st.done=o.done||{};st.last=o.last||'home';st.t=o.t||{}}}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+function fmt(n){return Math.round(n).toLocaleString('en-US')}
+function mmss(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2)}
+function el(tag,attrs,html){var e=document.createElement(tag);if(attrs)for(var k in attrs)e.setAttribute(k,attrs[k]);if(html!=null)e.innerHTML=html;return e}
+
+/* ---------- 課表與路由 ---------- */
+var mods=$$('.mod').map(function(a){return {id:a.id.slice(2),min:+a.dataset.min,title:a.dataset.title,ds:a.dataset.ds,node:a}});
+var TOTAL=mods.reduce(function(s,m){return s+m.min},0);
+var railList=$('#railList'), homeGrid=$('#homeGrid');
+mods.forEach(function(m,i){
+  var li=el('li',{'data-id':m.id});
+  li.appendChild(el('button',{type:'button','data-go':m.id},'<span class="dot"></span><span>'+i+'　'+m.title+'</span><span class="min">'+m.min+'′</span>'));
+  railList.appendChild(li);
+  var hi=el('li',{'data-id':m.id});
+  hi.appendChild(el('button',{type:'button','data-go':m.id},'<span class="k">單元 '+i+' · '+m.min+' 分</span><span class="ttl">'+m.title+'</span><span class="ds">'+m.ds+'</span>'));
+  homeGrid.appendChild(hi);
+  // 計時顯示
+  var eb=$('.eyebrow',m.node); eb.appendChild(el('span',{'data-clock':m.id},''));
+  // 單元底部導覽
+  var prev=i>0?mods[i-1].id:'home', next=i<mods.length-1?mods[i+1].id:'cheat';
+  var nav=el('div',{'class':'navrow'});
+  nav.appendChild(el('button',{type:'button','class':'ghost','data-go':prev},'← 上一頁'));
+  nav.appendChild(el('button',{type:'button','class':'go','data-done':m.id,'data-next':next}, i<mods.length-1?'完成本單元，前往下一單元 →':'完成課程，打開考場小抄 →'));
+  m.node.appendChild(nav);
+});
+function refresh(){
+  var got=0;
+  mods.forEach(function(m){var d=!!st.done[m.id]; if(d)got+=m.min;
+    $$('[data-id="'+m.id+'"]').forEach(function(li){li.classList.toggle('done',d); var dot=$('.dot',li); if(dot)dot.textContent=d?'✓':''})});
+  $('#barFill').style.width=(got/TOTAL*100)+'%'; $('#barTxt').textContent=got+' / '+TOTAL+' 分';
+}
+var cur='home';
+function show(id,noScroll){
+  if(!document.getElementById('v-'+id))id='home';
+  cur=id; stopSay();
+  $$('.view').forEach(function(v){v.hidden=(v.id!=='v-'+id)});
+  $$('.rail button').forEach(function(b){b.setAttribute('aria-current',b.dataset.go===id?'true':'false')});
+  if(id!=='home'&&id!=='cheat'){st.last=id;save()}
+  closeMenu(); if(!noScroll)window.scrollTo(0,0);
+}
+function go(id){ if(('#'+id)!==location.hash){ try{location.hash=id}catch(e){} } show(id) }
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-go]'); if(b){go(b.dataset.go);return}
+  var d=e.target.closest('[data-done]'); if(d){st.done[d.dataset.done]=true;save();refresh();go(d.dataset.next)}
+});
+window.addEventListener('hashchange',function(){var h=location.hash.slice(1); if(h&&h!==cur)show(h)});
+/* 抽屜 */
+var rail=$('#rail'), scrim=$('#scrim'), menuBtn=$('#menuBtn');
+function closeMenu(){rail.classList.remove('open');scrim.hidden=true;menuBtn.setAttribute('aria-expanded','false')}
+menuBtn.addEventListener('click',function(){var o=!rail.classList.contains('open');rail.classList.toggle('open',o);scrim.hidden=!o;menuBtn.setAttribute('aria-expanded',o?'true':'false')});
+scrim.addEventListener('click',closeMenu);
+/* 單元計時 */
+setInterval(function(){
+  if(document.hidden)return; var m=mods.filter(function(x){return x.id===cur})[0]; if(!m)return;
+  st.t[m.id]=(st.t[m.id]||0)+1; if(st.t[m.id]%10===0)save();
+  var c=$('[data-clock="'+m.id+'"]'); if(c){c.textContent=' · 已用 '+mmss(st.t[m.id]); c.style.color=st.t[m.id]>m.min*90?'var(--bad)':''}
+},1000);
+
+/* ---------- 朗讀 ---------- */
+var sayBtn=$('#sayBtn'), synth=window.speechSynthesis, sayQ=[];
+function stopSay(){sayQ=[]; try{synth&&synth.cancel()}catch(e){} sayBtn.setAttribute('aria-pressed','false'); sayBtn.textContent='朗讀'}
+function sayNext(){ if(!sayQ.length){stopSay();return}
+  var u=new SpeechSynthesisUtterance(sayQ.shift()); u.lang='zh-TW'; u.rate=1; u.onend=sayNext; u.onerror=function(){stopSay()}; synth.speak(u) }
+if(!synth||typeof SpeechSynthesisUtterance==='undefined'){sayBtn.hidden=true}
+else sayBtn.addEventListener('click',function(){
+  if(sayBtn.getAttribute('aria-pressed')==='true'){stopSay();return}
+  var v=$('#v-'+cur); sayQ=$$('h1,h2,h3,p,li,figcaption',v).filter(function(n){return !n.closest('[hidden]')&&!n.closest('.navrow')&&!n.closest('.drill')&&n.offsetParent!==null&&!(n.tagName==='P'&&n.parentNode.closest('li'))}).map(function(n){return n.textContent.replace(/\s+/g,' ').trim()}).filter(Boolean);
+  if(!sayQ.length)return; sayBtn.setAttribute('aria-pressed','true'); sayBtn.textContent='停止朗讀'; try{synth.cancel()}catch(e){} sayNext();
+});
+
+/* ---------- 選擇題、數字題 ---------- */
+$$('.quiz').forEach(function(q){
+  $$('.opts button',q).forEach(function(b){b.addEventListener('click',function(){
+    var ok=b.dataset.k===q.dataset.ans; $$('.opts button',q).forEach(function(x){x.classList.remove('wrong')});
+    b.classList.add(ok?'right':'wrong'); var w=$('.why',q);
+    if(ok){$$('.opts button',q).forEach(function(x){x.disabled=true}); w.hidden=false; w.className='why ok'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>對。</b>'+w.dataset.o}
+    else{w.hidden=false; w.className='why no'; if(!w.dataset.o)w.dataset.o=w.innerHTML; w.innerHTML='<b>再想一下。</b>想想哪個選項最能保證「畫完、不違規、有回應題目」。'}
+  })});
+});
+function gradeNum(inp,ans,tol){var v=parseFloat(inp.value); return isFinite(v)&&Math.abs(v-ans)<=tol+1e-9}
+$$('.numq').forEach(function(q){
+  var inp=$('input',q), btn=$('button',q), w=$('.why',q), base=w.innerHTML;
+  function chk(){ if(inp.value===''){return} var ok=gradeNum(inp,+q.dataset.ans,+q.dataset.tol);
+    w.hidden=false; w.className='why '+(ok?'ok':'no'); w.innerHTML=(ok?'<b>對。</b>':'<b>不對，算法是：</b>')+base }
+  btn.addEventListener('click',chk); inp.addEventListener('keydown',function(e){if(e.key==='Enter')chk()});
+});
+
+/* ---------- M1 讀題標記 ---------- */
+(function(){
+  var box=$('#tagger'); if(!box)return; var pick=null, names={hard:'硬條件',room:'空間需求',issue:'議題',draw:'圖面要求'};
+  var phs=$$('#qtext span[data-a]').map(function(s){var b=el('span',{'class':'ph',role:'button',tabindex:'0'}); b.innerHTML=s.innerHTML; b.dataset.a=s.dataset.a; s.parentNode.replaceChild(b,s); return b});
+  $('#tagN').textContent=phs.length;
+  $$('#tagPick .pill').forEach(function(p){p.setAttribute('aria-pressed','false'); p.addEventListener('click',function(){pick=p.dataset.c; $$('#tagPick .pill').forEach(function(x){x.setAttribute('aria-pressed',x===p?'true':'false'); x.style.outline=x===p?'3px solid var(--ink)':''})})});
+  function paint(b,c){b.className='ph'+(c?' c-'+c:''); b.dataset.u=c||''}
+  phs.forEach(function(b){b.addEventListener('click',function(){ var out=$('#tagOut');
+    if(!pick){out.hidden=false;out.className='verdict mid';out.textContent='先在上面選一種標記，再點文字。';return}
+    paint(b,b.dataset.u===pick?'':pick); b.classList.remove('miss') }); b.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click()}})});
+  $('#tagCheck').addEventListener('click',function(){
+    var out=$('#tagOut'), un=phs.filter(function(b){return !b.dataset.u}).length, ok=0, miss=[];
+    phs.forEach(function(b){b.classList.remove('miss'); if(b.dataset.u===b.dataset.a)ok++; else if(b.dataset.u){b.classList.add('miss'); miss.push(b)}});
+    out.hidden=false;
+    if(un){out.className='verdict mid'; out.textContent='還有 '+un+' 處沒標。標完的 '+(phs.length-un)+' 處裡，對了 '+ok+' 處。'; return}
+    if(ok===phs.length){out.className='verdict ok'; out.innerHTML='<b>'+ok+' / '+phs.length+' 全對。</b>注意硬條件有 8 處，是四類裡最多的。這 8 條就是你交卷前要逐條檢查的清單。'}
+    else{out.className='verdict no'; out.innerHTML='<b>對了 '+ok+' / '+phs.length+'。</b>畫波浪底線的是標錯的，再點一次可以改。判斷方法：有數字或「應、須、不得」的是硬條件；空間名稱加面積是空間需求；描述希望達成的效果是議題；圖名加比例是圖面要求。'}
+  });
+  $('#tagReset').addEventListener('click',function(){phs.forEach(function(b){paint(b,'');}); $('#tagOut').hidden=true});
+})();
+
+/* ---------- M2 量體計算機 ---------- */
+(function(){
+  var svg=$('#mcSvg'); if(!svg)return; var ids=['mcA','mcB','mcF','mcN','mcL'];
+  function draw(){
+    var A=+$('#mcA').value||0,B=(+$('#mcB').value||0)/100,F=(+$('#mcF').value||0)/100,N=+$('#mcN').value||0,L=+$('#mcL').value||1;
+    $('#mcLv').textContent=L; var maxFp=A*B,maxGfa=A*F,per=N/L, okB=per<=maxFp+0.5, okF=N<=maxGfa+0.5, minL=maxFp>0?Math.ceil(N/maxFp-1e-9):0;
+    // 俯視：基地正方形邊長 180px
+    var S=180, r=A>0?Math.sqrt(Math.min(per/A,1)):0, rm=Math.sqrt(Math.min(B,1)), fp=S*r, fm=S*rm, x0=40,y0=30,cx=x0+S/2,cy=y0+S/2;
+    var h='<rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'" class="f-paper s-ink" stroke-width="2"/>'
+     +'<rect x="'+(cx-fm/2)+'" y="'+(cy-fm/2)+'" width="'+fm+'" height="'+fm+'" class="s-blue" stroke-dasharray="6 4" stroke-width="1.5"/>'
+     +'<rect x="'+(cx-fp/2)+'" y="'+(cy-fp/2)+'" width="'+fp+'" height="'+fp+'" class="'+(okB?'f-soft s-ink':'f-bad s-bad')+'" stroke-width="2"/>'
+     +'<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" font-size="13" font-weight="700">每層 '+fmt(per)+' ㎡</text>'
+     +'<text x="'+cx+'" y="20" text-anchor="middle" class="dim">俯視：虛線＝建蔽率上限 '+fmt(maxFp)+' ㎡</text>'
+     +'<text x="'+cx+'" y="228" text-anchor="middle" class="dim">法定空地至少 '+fmt(A-maxFp)+' ㎡</text>';
+    // 側視
+    var gx=330,gw=340,gy=205, fh=Math.min(22,170/L), bw=Math.max(40,gw*0.75*r/Math.max(rm,0.01)*rm); bw=Math.min(bw,gw*0.9);
+    h+='<line x1="'+(gx-20)+'" y1="'+gy+'" x2="'+(gx+gw+20)+'" y2="'+gy+'" class="s-ink" stroke-width="3"/>';
+    for(var i=0;i<L;i++){h+='<rect x="'+(gx+gw/2-bw/2)+'" y="'+(gy-(i+1)*fh)+'" width="'+bw+'" height="'+fh+'" class="'+((okB&&okF)?'f-soft s-ink':'f-bad s-bad')+'" stroke-width="1.5"/>';
+      if(fh>=13)h+='<text x="'+(gx+gw/2)+'" y="'+(gy-i*fh-fh/2+4)+'" text-anchor="middle" font-size="11">'+(i+1)+'F</text>'}
+    h+='<text x="'+(gx+gw/2)+'" y="20" text-anchor="middle" class="dim">側視：'+L+' 層 × '+fmt(per)+' ㎡ ＝ '+fmt(N)+' ㎡</text>'
+     +'<text x="'+(gx+gw/2)+'" y="228" text-anchor="middle" class="dim">容積率上限 '+fmt(maxGfa)+' ㎡</text>';
+    svg.innerHTML=h;
+    $('#mcOut').innerHTML='<div><small>最大建築面積</small><b>'+fmt(maxFp)+' ㎡</b></div><div><small>最大容積樓地板</small><b>'+fmt(maxGfa)+' ㎡</b></div>'
+      +'<div class="'+(okB?'flag-ok':'flag-bad')+'"><small>每層面積</small><b>'+fmt(per)+' ㎡</b></div>'
+      +'<div><small>實際建蔽率</small><b>'+(A?(per/A*100).toFixed(1):'0')+'%</b></div><div><small>實際容積率</small><b>'+(A?(N/A*100).toFixed(1):'0')+'%</b></div><div><small>最少要幾層</small><b>'+minL+' 層</b></div>';
+    var v=$('#mcVerdict');
+    if(!okF){v.className='verdict no';v.textContent='超過容積率：需要 '+fmt(N)+' ㎡，上限只有 '+fmt(maxGfa)+' ㎡。層數救不了，只能減少樓地板。'}
+    else if(!okB){v.className='verdict no';v.textContent='超過建蔽率：每層 '+fmt(per)+' ㎡ 大於上限 '+fmt(maxFp)+' ㎡。把層數加到 '+minL+' 層以上。'}
+    else if(per<maxFp*0.5&&L>minL){v.className='verdict mid';v.textContent='合法，但每層只用到建蔽率上限的 '+Math.round(per/maxFp*100)+'%。樓層多代表樓梯電梯佔比高、動線長，可以考慮減少層數。'}
+    else{v.className='verdict ok';v.textContent='合法。每層 '+fmt(per)+' ㎡，留下 '+fmt(A-per)+' ㎡ 空地可以做廣場、綠地和退讓。'}
+  }
+  ids.forEach(function(i){$('#'+i).addEventListener('input',draw)}); draw();
+})();
+
+/* ---------- M3 定量表 ---------- */
+var ROOMS=[['一般閱覽區',500,'靜、需採光'],['兒童閱覽區',200,'半公共、低樓層'],['樂齡教室 ×4',240,'半公共、每間 60'],['多功能廳',250,'公共、夜間獨立、需挑高'],['共餐廚房與用餐',120,'公共、需卸貨'],['行政辦公',90,'內部'],['社區咖啡',80,'公共、臨街']];
+(function(){
+  var t=$('#pcTable'); if(!t)return;
+  ROOMS.forEach(function(r,i){var tr=el('tr'); tr.innerHTML='<td><label for="pc'+i+'">'+r[0]+'</label></td><td class="n"><input type="number" id="pc'+i+'" value="'+r[1]+'" min="0" step="10" inputmode="decimal" style="width:6em;text-align:right"></td><td>'+r[2]+'</td>'; t.appendChild(tr)});
+  function calc(){var net=0; ROOMS.forEach(function(r,i){net+=(+$('#pc'+i).value||0)}); var k=+$('#pcK').value, g=net*k, cap=3200, fp=1000;
+    $('#pcKv').textContent=k.toFixed(2);
+    $('#pcOut').innerHTML='<div><small>淨面積加總</small><b>'+fmt(net)+' ㎡</b></div><div><small>需要的樓地板</small><b>'+fmt(g)+' ㎡</b></div><div class="'+(g<=cap?'flag-ok':'flag-bad')+'"><small>容積使用</small><b>'+Math.round(g/cap*100)+'%</b></div><div><small>蓋 3 層時每層</small><b>'+fmt(g/3)+' ㎡</b></div>';
+    var v=$('#pcVerdict');
+    if(g>cap){v.className='verdict no';v.textContent='超過容積上限 3,200 ㎡。題目的空間不能刪，只能降低係數（走廊更省）或檢查是否算錯。'}
+    else if(g/3>fp){v.className='verdict mid';v.textContent='容積沒問題，但 3 層放不下（每層超過建蔽率上限 1,000 ㎡），要蓋 4 層。'}
+    else{v.className='verdict ok';v.textContent='沒有超過容積上限，3 層每層 '+fmt(g/3)+' ㎡ 也在建蔽率上限 1,000 ㎡ 以內。'}
+  }
+  $$('input',t).concat([$('#pcK')]).forEach(function(i){i.addEventListener('input',calc)}); calc();
+})();
+
+/* ---------- M3 分層 ---------- */
+(function(){
+  var pool=$('#znPool'); if(!pool)return;
+  var items=[['多功能廳',250,[1],'要夜間獨立開放、人多，放一樓臨街。'],['社區咖啡',80,[1],'最公共，要讓路人看得到，放一樓。'],['共餐廚房與用餐',120,[1],'食材要卸貨、長者進出方便，放一樓。'],
+    ['兒童閱覽區',200,[2],'幼兒宜在低樓層；一樓已被三個公共空間用滿，放二樓，並和樂齡教室同層來回應「世代相遇」。'],['樂齡教室 ×4',240,[2],'半公共，有電梯可達；和兒童閱覽同層。'],
+    ['一般閱覽區',500,[3],'最需要安靜，放頂樓。'],['行政辦公',90,[3,2],'內部空間，放二樓或三樓都可以；放三樓可讓二樓面積寬鬆。']];
+  var sel=null, place={};
+  items.forEach(function(it,i){var b=el('button',{type:'button','class':'pill','aria-pressed':'false','data-i':i},it[0]+'　<span class="fig">'+it[1]+'</span>'); pool.appendChild(b);
+    b.addEventListener('click',function(){sel=i; $$('.pill',pool).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')})})});
+  function render(){
+    $$('#znBuckets .bucket').forEach(function(bk){$$('.in',bk).forEach(function(n){n.remove()}); var f=+bk.dataset.f,sum=0;
+      items.forEach(function(it,i){if(place[i]===f){sum+=it[1]; var s=el('span',{'class':'in','data-i':i},it[0]+' '+it[1]); bk.appendChild(s)}});
+      $('[data-sum]',bk).textContent='淨面積 '+sum+' ㎡'});
+    $$('.pill',pool).forEach(function(p){p.classList.toggle('placed',place[+p.dataset.i]!=null)});
+  }
+  $$('#znBuckets .bucket').forEach(function(bk){bk.addEventListener('click',function(){ if(sel==null)return; place[sel]=+bk.dataset.f; sel=null; $$('.pill',pool).forEach(function(x){x.setAttribute('aria-pressed','false')}); render(); $('#znOut').hidden=true })});
+  $('#znCheck').addEventListener('click',function(){var out=$('#znOut'),n=0,msg=[]; out.hidden=false;
+    var un=items.filter(function(_,i){return place[i]==null}).length; if(un){out.className='verdict mid';out.textContent='還有 '+un+' 個空間沒放。';return}
+    items.forEach(function(it,i){var ok=it[2].indexOf(place[i])>=0; var s=$('#znBuckets .in[data-i="'+i+'"]'); if(s)s.classList.toggle('no',!ok); if(ok)n++; else msg.push('<b>'+it[0]+'</b>：'+it[3])});
+    if(n===items.length){out.className='verdict ok';out.innerHTML='<b>全部合理。</b>一樓是熱鬧的街道層，二樓讓小孩和長者相遇，三樓安靜閱讀。這個分層本身就回應了題目的兩個議題。'}
+    else{out.className='verdict no';out.innerHTML='<b>'+n+' / '+items.length+' 合理。</b>紅框的再想一下：<br>'+msg.join('<br>')}
+  });
+  $('#znReset').addEventListener('click',function(){place={};sel=null;render();$('#znOut').hidden=true});
+  render();
+})();
+
+/* ---------- M4 基地四決定 ---------- */
+(function(){
+  var svg=$('#sqSvg'); if(!svg)return;
+  var base='<rect x="0" y="270" width="720" height="70" class="f-line"/><text x="560" y="312" text-anchor="middle" font-size="13">15 m 道路（主要）</text>'
+   +'<rect x="170" y="0" width="50" height="270" class="f-line"/><text x="195" y="150" text-anchor="middle" font-size="12" transform="rotate(-90 195 150)">8 m 道路（次要）</text>'
+   +'<rect x="428" y="10" width="160" height="260" class="f-ok"/><text x="520" y="60" text-anchor="middle" font-size="13">社區公園</text>'
+   +'<text x="85" y="24" text-anchor="middle" font-size="12" class="t-mut">北側：4 層住宅</text>'
+   +'<rect x="220" y="10" width="208" height="260" class="f-sheet s-ink" stroke-width="2.5"/>'
+   +'<rect x="240.8" y="25.6" width="171.6" height="223.6" class="s-blue" stroke-dasharray="6 4" stroke-width="1"/>'
+   +'<circle cx="400" cy="240" r="22" class="f-ok s-ok" stroke-width="1.5"/><text x="400" y="244" text-anchor="middle" font-size="11">老樹</text>'
+   +'<rect x="300" y="278" width="54" height="18" class="f-sheet s-ink"/><text x="327" y="291" text-anchor="middle" font-size="11">公車站</text>'
+   +'<text x="640" y="30" font-size="13" font-weight="700">N ↑</text>';
+  var Q=[
+   {p:'決定 1／4：車道出入口開在哪裡？',pts:[
+     {k:'A',x:270,y:270,t:'南側 15 m 道路中段',why:'主要道路車多人多，旁邊就是公車站，車輛進出會和上下車的人衝突。'},
+     {k:'B',x:222,y:262,t:'西南角路口',why:'路口 5 m 內不能設車道出入口，轉彎車輛看不到。'},
+     {k:'C',x:220,y:36,t:'西側 8 m 道路北段',ok:1,why:'次要道路、離路口最遠、離公車站和主要人流最遠。車從這裡沿北側下地下室。'},
+     {k:'D',x:428,y:120,t:'東側，從公園進來',why:'公園不是道路，車不能從公園進出。'}]},
+   {p:'決定 2／4：24 × 32 m 的建築量體放在哪裡？',rects:1,pts:[
+     {k:'A',x:303,y:130,r:[240.8,46.4,124.8,166.4],t:'靠西，北側退 7 m，東側留 12 m',ok:1,why:'東側留出 12 m 寬的綠帶接公園、北側多退讓住宅、南側留 11 m 深的入口廣場，也避開老樹。'},
+     {k:'B',x:350,y:130,r:[287.6,46.4,124.8,166.4],t:'靠東，貼著公園',why:'建築貼著公園反而擋住連接，西側剩下的空地臨路又西曬，沒有用處；也壓到老樹範圍。'},
+     {k:'C',x:326,y:88,r:[240.8,25.6,166.4,124.8],t:'轉 90 度橫放，貼北側',why:'離北側住宅只有 3 m，壓迫最大，正好違反題目要求。'},
+     {k:'D',x:326,y:140,r:[261.6,57,124.8,166.4],t:'放正中央，四周平均留空',why:'四周各剩一小條，沒有一塊夠大的開放空間，也沒有回應任何一側鄰地。'}]},
+   {p:'決定 3／4：行人主入口開在建築的哪一面？',keep:[240.8,46.4,124.8,166.4],pts:[
+     {k:'A',x:303,y:213,t:'南面，朝向 15 m 道路和公車站',ok:1,why:'主要人流從南邊來，入口前有廣場緩衝。'},
+     {k:'B',x:241,y:130,t:'西面，朝向 8 m 道路',why:'可以當次要入口或夜間獨立入口，但不是主要人流方向，而且靠近車道。'},
+     {k:'C',x:303,y:46,t:'北面，朝向住宅',why:'人要繞到建築背後，還會干擾北側住戶，車道也在這一側。'},
+     {k:'D',x:366,y:130,t:'東面，朝向公園',why:'很適合做次要入口連接公園，但從街上看不到，不適合當主入口。'}]},
+   {p:'決定 4／4：剩下的空地怎麼安排？',keep:[240.8,46.4,124.8,166.4],pts:[
+     {k:'A',t:'四周平均種一圈樹當緩衝',why:'空地被切成四條，每條都只能當通道，沒有一塊能辦活動。'},
+     {k:'B',t:'南側做入口廣場，東側做綠帶和平台接公園並包住老樹，北側密植喬木',ok:1,why:'每塊空地都有名字和用途，並且各自回應一個議題：廣場接人流、綠帶接公園、樹帶護住宅。'},
+     {k:'C',t:'全部鋪成地面停車場，方便使用者',why:'題目已要求地下停車。空地拿來停車，等於放棄回應所有議題。'}]}
+  ];
+  var qi=0, done=false;
+  function render(){
+    var q=Q[qi], h=base; done=false;
+    if(q.keep)h+='<rect x="'+q.keep[0]+'" y="'+q.keep[1]+'" width="'+q.keep[2]+'" height="'+q.keep[3]+'" class="f-soft s-ink" stroke-width="2.5"/><text x="303" y="100" text-anchor="middle" font-size="13" font-weight="700">3F 建築</text>';
+    if(qi>0)h+='<path d="M196 27 L226 27" class="s-bad" stroke-width="3"/><text x="232" y="22" font-size="10">車道</text>';
+    q.pts.forEach(function(p){ if(p.r)h+='<rect data-k="'+p.k+'" x="'+p.r[0]+'" y="'+p.r[1]+'" width="'+p.r[2]+'" height="'+p.r[3]+'" class="s-mut" stroke-dasharray="3 3" style="display:none;fill:var(--blue-soft);opacity:.85"/>' });
+    q.pts.forEach(function(p){ if(p.x!=null)h+='<g data-k="'+p.k+'" tabindex="0" role="button" aria-label="選項 '+p.k+'" style="cursor:pointer"><circle cx="'+p.x+'" cy="'+p.y+'" r="13" class="f-ink"/><text x="'+p.x+'" y="'+(p.y+5)+'" text-anchor="middle" font-size="13" font-weight="700" class="t-sheet">'+p.k+'</text></g>' });
+    svg.innerHTML=h; $('#sqPrompt').innerHTML='<b>'+q.p+'</b>　點圖上的字母或下面的選項。';
+    var o=$('#sqOpts'); o.innerHTML=''; o.className='opts';
+    q.pts.forEach(function(p){var b=el('button',{type:'button','data-k':p.k},'<b>'+p.k+'</b>　'+p.t); o.appendChild(b); b.addEventListener('click',function(){pickOpt(p.k)})});
+    $$('g[data-k]',svg).forEach(function(g){g.addEventListener('click',function(){pickOpt(g.dataset.k)}); g.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();pickOpt(g.dataset.k)}})});
+    $('#sqWhy').hidden=true; $('#sqNext').hidden=true;
+  }
+  function pickOpt(k){ if(done)return; var q=Q[qi], p=q.pts.filter(function(x){return x.k===k})[0], w=$('#sqWhy');
+    $$('rect[data-k]',svg).forEach(function(r){r.style.display=r.dataset.k===k?'':'none'});
+    $$('#sqOpts button').forEach(function(b){b.classList.remove('wrong'); if(b.dataset.k===k)b.classList.add(p.ok?'right':'wrong')});
+    w.hidden=false; w.className='why '+(p.ok?'ok':'no'); w.innerHTML=(p.ok?'<b>對。</b>':'<b>不理想。</b>')+p.why;
+    if(p.ok){done=true; $$('#sqOpts button').forEach(function(b){b.disabled=true}); var n=$('#sqNext'); n.hidden=false; n.textContent=qi<Q.length-1?'下一個決定 →':'再做一次'}
+  }
+  $('#sqNext').addEventListener('click',function(){qi=(qi+1)%Q.length;render()});
+  render();
+})();
+
+/* ---------- M4 示範播放 ---------- */
+(function(){
+  var box=$('#siteAnim'); if(!box)return;
+  var caps=['看基地：南邊是主要道路和公車站，西邊是次要道路，東邊是公園，北邊是住宅，東南角有老樹。','畫退縮線：南、西各退 4 m，北、東各退 3 m。虛線內才能蓋。','標人流：公車站來的人從南邊，公園的人從東邊，居民從西邊。','先定車道：開在西側道路最北端，離路口和公車站最遠，沿北側下地下室。','放量體：24 × 32 m 靠西放，北側退到 7 m，東側留出 12 m。','開入口：主入口朝南面對廣場；西南角給多功能廳夜間獨立入口；東面開門通往公園。','安排空地：南側入口廣場、東側綠帶與平台接公園並保護老樹、北側種一排喬木隔開住宅。'];
+  var n=1, timer=null, N=caps.length, playBtn=$('[data-act="play"]',box);
+  function set(k){n=Math.max(1,Math.min(N,k)); $$('[data-s]',box).forEach(function(g){g.classList.toggle('on',+g.dataset.s<=n)}); $('[data-n]',box).textContent=n+'/'+N; $('[data-cap]',box).textContent=caps[n-1]}
+  function stop(){clearInterval(timer);timer=null;playBtn.textContent='▶ 播放'}
+  box.addEventListener('click',function(e){var b=e.target.closest('[data-act]'); if(!b)return; var a=b.dataset.act;
+    if(a==='next'){stop();set(n+1)} else if(a==='prev'){stop();set(n-1)}
+    else if(timer){stop()} else{ if(n>=N)set(1); playBtn.textContent='❚❚ 暫停'; timer=setInterval(function(){ if(n>=N){stop();return} set(n+1) },3200) }});
+  set(N);
+})();
+
+/* ---------- M5 樓梯 ---------- */
+(function(){
+  var svg=$('#stSvg'); if(!svg)return;
+  function draw(){
+    var H=(+$('#stH').value||0)*100, R=+$('#stR').value||16, T=+$('#stT').value||28, W=+$('#stW').value||1.5;
+    if(H<=0||R<=0){return}
+    var n=Math.ceil(H/R-1e-9); if(n%2)n++; var r=H/n, per=n/2, run=(per-1)*T/100, len=run+2*W, wid=W*2+0.2;
+    var sc=Math.min(60,640/len,150/wid), x0=40,y0=30, L=len*sc, Wd=wid*sc, w=W*sc, t=T/100*sc;
+    var h='<rect x="'+x0+'" y="'+y0+'" width="'+L+'" height="'+Wd+'" class="f-sheet s-ink" stroke-width="2.5"/>';
+    h+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+Wd+'" class="f-paper s-ink"/><rect x="'+(x0+L-w)+'" y="'+y0+'" width="'+w+'" height="'+Wd+'" class="f-paper s-ink"/>';
+    for(var i=0;i<per;i++){var x=x0+w+i*t; h+='<line x1="'+x+'" y1="'+y0+'" x2="'+x+'" y2="'+(y0+w)+'" class="s-ink"/><line x1="'+x+'" y1="'+(y0+Wd-w)+'" x2="'+x+'" y2="'+(y0+Wd)+'" class="s-ink"/>'}
+    h+='<rect x="'+(x0+w)+'" y="'+(y0+w)+'" width="'+(run*sc)+'" height="'+(Wd-2*w)+'" class="f-ink"/>';
+    h+='<path d="M'+(x0+L-w/2)+' '+(y0+Wd-w/2)+' H'+(x0+w/2)+' V'+(y0+w/2)+' H'+(x0+L-w*0.7)+'" class="s-blue" stroke-width="2"/><text x="'+(x0+L-w/2)+'" y="'+(y0+Wd-w/2+4)+'" text-anchor="middle" font-size="11" class="t-blue">上</text>';
+    h+='<text x="'+(x0+w/2)+'" y="'+(y0+Wd/2+4)+'" text-anchor="middle" font-size="11">平台</text><text x="'+(x0+L-w/2)+'" y="'+(y0+Wd/2+4)+'" text-anchor="middle" font-size="11">樓層</text>';
+    h+='<text x="'+(x0+L/2)+'" y="'+(y0+Wd+18)+'" text-anchor="middle" class="dim">總長 '+len.toFixed(2)+' m（平台 '+W.toFixed(1)+' ＋ 梯段 '+run.toFixed(2)+' ＋ 平台 '+W.toFixed(1)+'）</text>';
+    h+='<text x="'+(x0+L+8)+'" y="'+(y0+Wd/2+4)+'" class="dim">寬 '+wid.toFixed(1)+' m</text>';
+    svg.innerHTML=h;
+    var okT=T>=26, okW=W>=1.4;
+    $('#stOut').innerHTML='<div><small>總級數</small><b>'+n+' 級</b></div><div><small>每級高度</small><b>'+r.toFixed(1)+' cm</b></div><div><small>每段級數</small><b>'+per+' 級</b></div>'
+     +'<div class="'+(okT?'':'flag-bad')+'"><small>級深'+(okT?'':'（不足 26）')+'</small><b>'+T+' cm</b></div><div class="'+(okW?'':'flag-bad')+'"><small>梯寬'+(okW?'':'（不足 1.4）')+'</small><b>'+W.toFixed(1)+' m</b></div><div><small>樓梯間淨尺寸</small><b>'+wid.toFixed(1)+' × '+len.toFixed(1)+' m</b></div>';
+  }
+  ['stH','stR','stT','stW'].forEach(function(i){$('#'+i).addEventListener('input',draw)}); draw();
+})();
+
+/* ---------- M7 配速 ---------- */
+(function(){
+  var bar=$('#paceBar'); if(!bar)return;
+  var S=[['讀題',30,'a','標記過的題目、硬條件清單'],['計算與計畫',60,'a','量體算式、對策表、定量表、泡泡圖（直接寫在正圖上）'],['草圖',60,'b','配置和各層平面的小草圖，定案'],['配置與平面',150,'c','配置圖、各層平面正圖（先柱格、核、牆，後家具）'],['剖面立面',60,'c','剖面圖、立面圖'],['透視',40,'c','透視圖'],['標註上色',50,'d','圖名、比例、尺寸、空間名稱、陰影、重點上色'],['檢查',30,'d','檢查表逐條打勾，補漏']];
+  var acc=0, tb=$('#paceTable');
+  S.forEach(function(s,i){var d=el('div',{'class':s[2],style:'flex:'+s[1]},s[0]); bar.appendChild(d); s.start=acc; acc+=s[1]; s.end=acc; s.node=d;
+    var tr=el('tr'); tr.innerHTML='<td>'+(i+1)+'. '+s[0]+'</td><td class="n">'+s[1]+' 分</td><td class="n">'+Math.floor(acc/60)+':'+('0'+acc%60).slice(-2)+'</td><td>'+s[3]+'</td>'; tb.appendChild(tr)});
+  function upd(){var t=+$('#paceT').value; $('#paceTv').textContent=Math.floor(t/60)+':'+('0'+t%60).slice(-2);
+    var c=S.filter(function(s){return t>=s.start&&t<s.end})[0]||S[S.length-1]; S.forEach(function(s){s.node.classList.toggle('now',s===c)});
+    $('#paceNow').innerHTML=t>=480?'<b>時間到，交卷。</b>':'現在應該在：<b>'+c[0]+'</b>。這個階段還剩 '+(c.end-t)+' 分鐘，要交出：'+c[3]+'。'}
+  $('#paceT').addEventListener('input',upd); upd();
+})();
+
+/* ---------- M8 實戰 ---------- */
+(function(){
+  var box=$('#drill'); if(!box)return;
+  var steps=[{t:'讀題',m:5,task:'用四種標記讀上面的題目，在紙上列出硬條件清單，並圈出議題。',a:'dr-a1'},
+    {t:'量體計算',m:4,task:'算出下面五個數字，填進去。係數用 1.4。',b:'dr-b2',a:'dr-a2'},
+    {t:'分層與對策',m:4,task:'在紙上寫：一樓放哪些空間、二樓放哪些空間。再用「把＿＿放在＿＿，讓＿＿」寫兩條對策。',a:'dr-a3'},
+    {t:'配置草圖',m:8,task:'在紙上畫配置草圖，比例 1/300（30 m 畫 10 cm、40 m 畫約 13 cm）。依序決定：車從哪進、量體放哪、人從哪進、空地怎麼用。',a:'dr-a4'}];
+  var i=0, left=0, timer=null, clock=$('#drClock');
+  function tpl(id){return $('#'+id).content.cloneNode(true)}
+  function load(){var s=steps[i]; clearInterval(timer); timer=null; left=s.m*60;
+    $('#drStepNo').textContent='第 '+(i+1)+' 關／共 '+steps.length+' 關'; $('#drTitle').textContent=s.t+'（'+s.m+' 分鐘）'; $('#drTask').textContent=s.task;
+    var b=$('#drBody'); b.innerHTML=''; if(s.b)b.appendChild(tpl(s.b));
+    $('#drAnswer').hidden=true; $('#drAnswer').innerHTML=''; $('#drStart').hidden=false; $('#drReveal').hidden=true; $('#drNext').hidden=true; clock.textContent=mmss(left); clock.style.color=''}
+  $('#drStart').addEventListener('click',function(){ $('#drStart').hidden=true; $('#drReveal').hidden=false;
+    timer=setInterval(function(){left--; clock.textContent=mmss(left); if(left<=0){clearInterval(timer);timer=null;clock.textContent='時間到';clock.style.color='var(--bad)'}},1000)});
+  $('#drReveal').addEventListener('click',function(){ clearInterval(timer); timer=null; var s=steps[i], a=$('#drAnswer'); a.appendChild(tpl(s.a)); a.hidden=false; $('#drReveal').hidden=true;
+    $$('#drBody input[data-ans]').forEach(function(inp){var ok=gradeNum(inp,+inp.dataset.ans,+inp.dataset.tol); inp.style.borderColor=ok?'var(--ok)':'var(--bad)'; inp.style.background=ok?'var(--okbg)':'var(--badbg)'});
+    var sc=$('#drScore',a); if(sc)sc.addEventListener('click',function(){var n=$$('#drRubric input:checked',a).length, o=$('#drScoreOut',a); o.hidden=false;
+      if(n>=7){o.className='verdict ok';o.innerHTML='<b>'+n+' / 8。</b>流程已經會了。接下來是把它練快，並把後半段（平面、剖面、立面、透視）接上去。'}
+      else if(n>=5){o.className='verdict mid';o.innerHTML='<b>'+n+' / 8。</b>大方向對了。沒勾到的項目，回單元 4 的「配置圖上一定要標的東西」再看一次。'}
+      else{o.className='verdict no';o.innerHTML='<b>'+n+' / 8。</b>先別灰心，第一次都是這樣。回到單元 4 把示範播放再看一遍，然後重畫這一關。'}});
+    var nx=$('#drNext'); nx.hidden=false; nx.textContent=i<steps.length-1?'下一關 →':'重新挑戰'});
+  $('#drNext').addEventListener('click',function(){i=(i+1)%steps.length;load()});
+  load();
+})();
+
+/* ---------- 啟動 ---------- */
+refresh();
+var h0=location.hash.slice(1);
+show(h0&&document.getElementById('v-'+h0)?h0:'home',true);
+if(!h0&&st.last&&st.last!=='home'){ var hint=$('#v-home .navrow .go'); var lm=mods.filter(function(m){return m.id===st.last})[0]; if(hint&&lm){hint.dataset.go=lm.id; hint.textContent='回到上次的位置：'+lm.title+' →'} }
+})();
+</script>
+
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
+</body>
+</html>
