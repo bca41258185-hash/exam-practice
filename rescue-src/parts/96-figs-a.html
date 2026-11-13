@@ -1,0 +1,252 @@
+<style>
+/* figsA：文字底襯，讓文字壓在線或填充上時仍清楚 */
+svg .fa-h{paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
+</style>
+<script>
+/* figsA：M2、M5 講義圖（建蔽率容積率、基地現況、二層平面、停車模組），用 K.draw 在載入時畫出 */
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.draw)return;
+var D=K.draw(false);
+function r(n){return Math.round(n*100)/100}
+function T(x,y,s,cls,anc,rot){return '<text x="'+r(x)+'" y="'+r(y)+'" text-anchor="'+(anc||'middle')+'" class="'+cls+'"'+(rot?' transform="rotate('+rot+' '+r(x)+' '+r(y)+')"':'')+'>'+s+'</text>'}
+function P(d,cls,st){return '<path d="'+d+'" class="'+cls+'"'+(st?' style="'+st+'"':'')+'/>'}
+function Rc(x,y,w,h,cls,st){return '<rect x="'+r(x)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(h)+'" class="'+cls+'"'+(st?' style="'+st+'"':'')+'/>'}
+function soft(s,op){return '<g style="opacity:'+(op||.35)+'">'+s+'</g>'}
+function put(id,svg){var e=document.getElementById(id); if(e)e.innerHTML=svg}
+
+/* ========== 1. 建蔽率與容積率：配置圖＋剖面圖 ========== */
+(function(){
+  var s='', k=4.4, px=70, py=40, sw=40*k, sh=50*k;
+  var bx=px+4*k, by=py+7*k, bw=24*k, bh=32*k, pp=1.1*k;
+  // 配置（屋頂平面）
+  s+=D.hatch(px,py,sw,sh,'grass');
+  s+=Rc(bx,by,bw,bh,'f-void')+soft(D.hatch(bx,by,bw,bh,'hatch'),.55);
+  s+=Rc(bx,by,bw,bh,'lw-out')+Rc(bx+pp,by+pp,bw-2*pp,bh-2*pp,'lw-thin');
+  s+=Rc(px,py,sw,sh,'lw-site');
+  s+=D.tree(px+sw-12,py+sh-12,10);
+  s+=T(bx+bw/2,by+bh/2-12,'建築面積','t-room fa-h')+T(bx+bw/2,by+bh/2+2,'24 × 32 ＝ 768 ㎡','t-area fa-h')+T(bx+bw/2,by+bh/2+16,'RC 3F / B1','t-dim fa-h');
+  s+=T(px+sw/2-6,by+bh+22,'法定空地','t-room fa-h')+T(px+sw/2-6,by+bh+35,'2,000 − 768 ＝ 1,232 ㎡','t-area fa-h');
+  s+=D.dim(px,py,px+sw,py,'40 m',-12)+D.dim(px,py+sh,px,py,'50 m',-12);
+  s+=D.north(274,64,11);
+  s+=D.scale(px,280,k,[0,5,10,20]);
+  s+=D.title(px+sw/2,322,'配置圖（屋頂平面）',null);
+  s+=T(px+sw/2,350,'建蔽率 ＝ 768 ÷ 2,000 ≒ 38％（上限 50％）','t-dim');
+
+  // 剖面
+  var q=9, PLw=316, W=352, E=W+24*q, PLe=PLw+40*q, GL=220;
+  var F2=GL-4.5*q, F3=F2-3.6*q, RF=F3-3.6*q, PT=RF-1.1*q, B1=GL+3.6*q, BB=B1+5.6, ST=3.6, wt=3.6;
+  // 計入容積的樓層底色
+  [[F2,GL],[F3,F2],[RF,F3]].forEach(function(f){s+=Rc(W,f[0]+ST,E-W,f[1]-f[0]-ST,'f-soft')});
+  // 土壤
+  s+=D.hatch(300,GL,W-2.5-300,52,'earth')+D.hatch(E+2.5,GL,700-E-2.5,52,'earth')+D.hatch(W-2.5,BB,E-W+5,272-BB,'earth');
+  s+=P('M300 '+GL+' H'+(W-2.5)+' M'+(E+2.5)+' '+GL+' H700','lw-out');
+  // 看到的柱（未剖到）
+  var cols=[W+8*q,W+16*q];
+  [[GL,B1],[F2,GL],[F3,F2],[RF,F3]].forEach(function(f){cols.forEach(function(cx){s+=Rc(cx-3.6,f[0]+ST+6.3,7.2,f[1]-f[0]-ST-6.3,'lw-vis')})});
+  // 剖到的樓板與梁
+  [GL,F2,F3,RF].forEach(function(y){s+=Rc(W,y,E-W,ST,'poche'); cols.forEach(function(cx){s+=Rc(cx-2.5,y+ST,5,6.3,'poche')})});
+  s+=Rc(W-2.5,B1,E-W+5,BB-B1,'poche');
+  // 地下室外牆
+  s+=Rc(W-5,GL,5,BB-GL,'poche')+Rc(E,GL,5,BB-GL,'poche');
+  // 地上外牆：窗台、梁、窗玻璃
+  [[F2,GL],[F3,F2],[RF,F3]].forEach(function(f){var top=f[0],bot=f[1],sill=bot-0.9*q,head=top+ST+0.7*q;
+    [W,E].forEach(function(x){s+=Rc(x-wt/2,sill,wt,bot-sill,'poche')+Rc(x-wt/2,top,wt,head-top,'poche')+P('M'+r(x-1)+' '+r(head)+' V'+r(sill)+' M'+r(x+1)+' '+r(head)+' V'+r(sill),'lw-thin')})});
+  // 女兒牆
+  s+=Rc(W-wt/2,PT,wt,RF-PT,'poche')+Rc(E-wt/2,PT,wt,RF-PT,'poche');
+  // 樓層名稱
+  var mx=(W+E)/2;
+  s+=T(mx,(RF+ST+F3)/2+4,'3F　一般閱覽・行政','t-room fa-h')+T(mx,(F3+ST+F2)/2+4,'2F　兒童閱覽・樂齡教室','t-room fa-h')+T(mx,(F2+ST+GL)/2+4,'1F　門廳・多功能廳','t-room fa-h');
+  s+=T(mx,(GL+ST+B1)/2+4,'B1　停車（不計容積）','t-room fa-h');
+  // 高程
+  var lx=E+16;
+  s+=D.level(lx,RF,'RFL +11700')+D.level(lx,F3,'3FL +8100')+D.level(lx,F2,'2FL +4500')+D.level(lx,GL,'GL ±0');
+  s+=D.level(lx,B1,'<tspan class="fa-h">B1FL −3600</tspan>');
+  // 樓高尺寸鏈（西側）
+  s+=D.dimChain([B1,GL,F2,F3,RF],338,['3600','4500','3600','3600'],true);
+  // 境界線
+  [PLw,PLe].forEach(function(x){s+=P('M'+x+' 196 V236','lw-site')+T(x,190,'PL','t-dim')});
+  s+=D.treeE(PLe-34,GL,36)+D.person(PLe-14,GL,15);
+  s+=D.scale(W,280,q,[0,5,10,20]);
+  s+=Rc(562,281,14,9,'f-soft')+Rc(562,281,14,9,'lw-thin')+T(581,289,'計入容積','t-dim','start');
+  s+=D.title((PLw+700)/2,322,'剖面圖',null);
+  s+=T((PLw+700)/2,350,'容積率 ＝ (1F＋2F＋3F) ÷ 基地 ＝ 768 × 3 ÷ 2,000 ≒ 115％（上限 160％）','t-dim');
+  put('figA-ratio',s);
+})();
+
+/* ========== 2. 基地現況圖 ========== */
+(function(){
+  var s='', k=5, x0=260, y0=70, x1=x0+40*k, y1=y0+50*k;
+  // 公園、北側鄰地
+  s+=D.hatch(x1,0,720-x1,y1,'grass');
+  s+=Rc(270,6,180,24,'f-void')+soft(D.hatch(270,6,180,24,'hatch'),.3)+Rc(270,6,180,24,'lw-vis');
+  s+=T(360,22,'北側鄰地　4F 集合住宅','t-dim fa-h');
+  // 道路
+  s+=Rc(220,0,40,y1,'f-line')+D.hatch(220,0,40,y1,'road')+Rc(0,y1,720,75,'f-line')+D.hatch(0,y1,720,75,'road');
+  s+=P('M240 0 V'+y1,'lw-axis')+P('M0 '+(y1+37.5)+' H720','lw-axis');
+  s+=P('M220 0 V'+y1+' H0 M260 0 V'+y1+' M260 '+y1+' H720 M0 '+(y1+75)+' H720','lw-vis');
+  s+=T(234,150,'8 m 道路','t-dim fa-h','middle',-90)+D.dim(220,250,260,250,'8 m',0);
+  s+=T(600,y1+55,'15 m 道路（主要道路）','t-dim fa-h')+D.dim(150,y1,150,y1+75,'15 m',0);
+  // 公車站
+  s+=Rc(300,y1+2,36,7,'lw-vis')+P('M300 '+(y1+2)+' L336 '+(y1+9)+' M336 '+(y1+2)+' L300 '+(y1+9),'lw-thin')+T(318,y1+21,'公車站','t-dim fa-h');
+  // 可建範圍
+  var bx=x0+4*k, by=y0+3*k, bw=33*k, bh=43*k;
+  s+=Rc(bx,by,bw,bh,'f-soft')+soft(D.hatch(bx,by,bw,bh,'hatch'),.22)+Rc(bx,by,bw,bh,'lw-setb');
+  s+=Rc(x0,y0,40*k,50*k,'lw-site');
+  s+=T(bx+bw/2-8,by+bh/2-14,'可建範圍','t-room fa-h')+T(bx+bw/2-8,by+bh/2,'33 × 43 ＝ 1,419 ㎡','t-area fa-h')+T(bx+bw/2-8,by+bh/2+14,'基地 40 × 50 ＝ 2,000 ㎡','t-area fa-h');
+  // 退縮標示
+  s+=T(330,y1-7,'退縮 4 m（人行步道）','t-area fa-h')+T(x0+12,195,'退縮 4 m','t-area fa-h','middle',-90)+T(360,y0+11,'退縮 3 m','t-area fa-h')+T(x1-6,170,'退縮 3 m','t-area fa-h','middle',90);
+  // 公園樹木
+  [[540,46,16],[612,28,13],[680,70,18],[560,140,15],[652,150,16],[700,236,13],[566,256,17],[634,292,12]].forEach(function(t){s+=D.tree(t[0],t[1],t[2])});
+  s+=T(616,214,'社區公園','t-room fa-h');
+  // 老榕樹
+  var tx=x1-24, ty=y1-24;
+  s+=D.tree(tx,ty,30);
+  s+=P('M'+(tx+18)+' '+(ty+20)+' L'+(tx+40)+' '+(y1+18)+' H'+(tx+46),'lw-thin')+T(tx+48,y1+21,'老榕樹（保留，樹冠約 ø12 m）','t-dim fa-h','start');
+  // 尺寸
+  s+=D.dimChain([x0,bx,bx+bw,x1],y0,['4','33','3'],false,-12)+D.dim(x0,y0,x1,y0,'40 m',-26);
+  s+=D.dimChain([y0,by,by+bh,y1],x1,['3','43','4'],true,-14)+D.dim(x1,y0,x1,y1,'50 m',-32);
+  // 圖例、指北、比例尺
+  s+=T(110,300,'西側街廓','t-dim');
+  s+=D.north(110,64,16);
+  s+=P('M30 150 H70','lw-site')+T(78,153,'基地境界線','t-dim','start');
+  s+=P('M30 172 H70','lw-setb')+T(78,175,'退縮線','t-dim','start');
+  s+=D.scale(30,240,k,[0,5,10,20]);
+  s+=D.title(360,428,'基地現況圖','1/500');
+  put('figA-site',s);
+})();
+
+/* ========== 3. 二層平面圖 ========== */
+(function(){
+  var S=14, x0=210, y0=86, s='';
+  function X(m){return x0+m*S} function Y(m){return y0+m*S}
+  var EXT=5, INT=3;
+  function wallH(y,a,b,t){return Rc(X(a),Y(y)-t/2,(b-a)*S,t,'poche')}
+  function wallV(x,a,b,t){return Rc(X(x)-t/2,Y(a),t,(b-a)*S,'poche')}
+  // 軸線
+  s+=D.grid([X(0),X(8),X(16),X(24)],[Y(0),Y(8),Y(16),Y(24),Y(32)],[158,34,556,544]);
+  // 廁所地磚
+  s+=D.hatch(X(0),Y(6.5),5.6*S,4*S,'tile')+D.hatch(X(0),Y(10.5),5.6*S,4*S,'tile')+D.hatch(X(0),Y(14.5),5.6*S,2.8*S,'tile');
+  // 外牆
+  s+=Rc(X(0)-EXT/2,Y(0)-EXT/2,24*S+EXT,EXT,'poche')+Rc(X(0)-EXT/2,Y(32)-EXT/2,24*S+EXT,EXT,'poche')+Rc(X(0)-EXT/2,Y(0),EXT,32*S,'poche')+Rc(X(24)-EXT/2,Y(0),EXT,32*S,'poche');
+  // 內牆
+  s+=wallV(5.6,0,32,INT);
+  [6.5,10.5,14.5,17.3,19.8,25.5].forEach(function(y){s+=wallH(y,0,5.6,INT)});
+  s+=wallV(3.1,17.3,19.8,INT);
+  s+=wallV(8,0,7.5,INT)+wallV(8,12,32,INT);
+  s+=wallH(7.5,8,24,INT)+wallH(12,8,24,INT)+wallH(19.5,8,24,INT);
+  s+=wallV(16,0,7.5,INT)+wallV(16,12,19.5,INT);
+  // 窗
+  function wh(y,a,b){s+=D.win(X(a),Y(y),X(b),Y(y),EXT)} function wv(x,a,b){s+=D.win(X(x),Y(a),X(x),Y(b),EXT)}
+  wh(0,5.9,7.7); wh(0,9,15); wh(0,17,23); wh(32,5.9,7.7); wh(32,9,15); wh(32,17,23);
+  wv(24,1,6.8); wv(24,8.8,11.4); wv(24,12.6,15.3); wv(24,16.7,19); wv(24,20.2,23.3); wv(24,24.7,31.3);
+  wv(0,1.8,4.6); wv(0,27.6,30.4);
+  // 樓梯（自繪：landTop 表示中間平台在北端）
+  function stair(x,y,w,h,landTop){var o='', L=1.5, fw=(w-0.2)/2, f0=landTop?y+L:y, f1=landTop?y+h:y+h-L, i, n=Math.round((f1-f0)/0.28), st=(f1-f0)/n;
+    for(i=0;i<=n;i++){var yy=Y(f0+i*st); o+=P('M'+r(X(x))+' '+r(yy)+' H'+r(X(x+fw))+' M'+r(X(x+fw+0.2))+' '+r(yy)+' H'+r(X(x+w)),'lw-thin')}
+    o+=Rc(X(x+fw),Y(f0),0.2*S,(f1-f0)*S,'lw-vis');
+    var bm=(f0+f1)/2; o+=P('M'+r(X(x))+' '+r(Y(bm+0.6))+' L'+r(X(x+w*0.45))+' '+r(Y(bm-0.1))+' l3 -5 l-2 9 L'+r(X(x+w))+' '+r(Y(bm-0.6)),'lw-vis');
+    var ax=x+fw/2, a0=landTop?f1-0.3:f0+0.3, a1=landTop?f0-L/2:f1+L/2, sg=landTop?-1:1;
+    o+='<circle cx="'+r(X(ax))+'" cy="'+r(Y(a0))+'" r="1.8" class="poche"/>'+P('M'+r(X(ax))+' '+r(Y(a0))+' V'+r(Y(a1))+' H'+r(X(x+w-fw/2))+' V'+r(Y(a1-sg*(L/2+0.8))),'lw-thin');
+    var ty=Y(a1-sg*(L/2+0.8)); o+=P('M'+r(X(x+w-fw/2)-3)+' '+r(ty+sg*5)+' L'+r(X(x+w-fw/2))+' '+r(ty)+' L'+r(X(x+w-fw/2)+3)+' '+r(ty+sg*5),'lw-thin');
+    o+=T(X(ax),Y(a0)+(landTop?11:-5),'UP','t-dim fa-h'); return o}
+  s+=stair(0.15,0.15,3.3,4.85,true)+stair(0.15,27,3.3,4.85,false);
+  s+=P('M'+X(0)+' '+Y(5)+' H'+X(3.5)+' M'+X(0)+' '+Y(27)+' H'+X(3.5),'lw-thin');
+  // 廁所設備
+  function wc(x,y){return Rc(X(x),Y(y)-0.3*S,0.22*S,0.6*S,'lw-vis')+'<ellipse cx="'+r(X(x+0.55))+'" cy="'+r(Y(y))+'" rx="'+r(0.33*S)+'" ry="'+r(0.22*S)+'" class="lw-vis"/>'}
+  function basin(x,y){return '<ellipse cx="'+r(X(x))+'" cy="'+r(Y(y))+'" rx="'+r(0.24*S)+'" ry="'+r(0.17*S)+'" class="lw-thin"/>'}
+  function stalls(y,n){var o=''; for(var i=0;i<n;i++){var yy=y+i*1.2; o+=wc(0.05,yy+0.6); o+=P('M'+X(0)+' '+r(Y(yy+1.2))+' H'+X(1.5),'lw-vis')}
+    o+=P('M'+X(1.5)+' '+Y(y)+' V'+r(Y(y+n*1.2)),'lw-vis'); return o}
+  s+=stalls(6.6,3)+Rc(X(2.6),Y(6.5)+1.5,2.4*S,0.55*S,'lw-thin')+basin(3.2,6.85)+basin(4.4,6.85);
+  s+=stalls(10.6,2)+Rc(X(2.6),Y(10.5)+1.5,2.4*S,0.55*S,'lw-thin')+basin(3.2,10.85)+basin(4.4,10.85);
+  [2.0,2.8,3.6].forEach(function(u){s+=P('M'+r(X(u-0.2))+' '+r(Y(14.5)-1.5)+' v-3 q'+r(0.2*S)+' -5 '+r(0.4*S)+' 0 v3','lw-vis')});
+  // 無障礙廁所
+  s+=wc(0.05,15.2)+P('M'+X(0.25)+' '+r(Y(14.5)+3)+' H'+X(1.2)+' M'+r(X(1.25))+' '+r(Y(14.8))+' V'+r(Y(15.7)),'lw-thin')+basin(1.9,14.85);
+  s+='<circle cx="'+X(3.1)+'" cy="'+Y(16.15)+'" r="'+(0.75*S)+'" class="lw-hid"/>';
+  s+=Rc(X(5.6)-2,Y(15.3),4,1.1*S,'f-void')+Rc(X(5.6)+2,Y(15.1),2,1.2*S,'lw-vis');
+  s+=P('M'+r(X(2.4))+' '+r(Y(16.4))+' L132 350 H126','lw-thin')+T(124,347,'無障礙廁所','t-dim','end')+T(124,360,'迴轉圓 ø1500','t-dim','end');
+  // 電梯
+  s+=D.elev(X(3.25),Y(17.45),2.2*S,2.2*S)+Rc(X(5.6)-2,Y(17.9),4,1.2*S,'f-void')+P('M'+r(X(5.6)-1)+' '+Y(17.9)+' v'+(1.2*S),'lw-vis');
+  // 門
+  s+=D.door(X(5.6),Y(5.2),15.4,'v',-1,1,INT)+D.door(X(5.6),Y(25.8),15.4,'v',-1,1,INT);
+  s+=D.door(X(5.6),Y(9.2),14,'v',-1,1,INT)+D.door(X(5.6),Y(13.2),14,'v',-1,1,INT)+D.door(X(5.6),Y(21.4),14,'v',-1,1,INT);
+  s+=D.door(X(8),Y(5.6),15.4,'v',1,1,INT)+D.door(X(17),Y(7.5),15.4,'h',1,-1,INT);
+  s+=D.door(X(8),Y(13),15.4,'v',1,1,INT)+D.door(X(17),Y(12),15.4,'h',1,1,INT);
+  s+=D.door(X(8),Y(20.4),15.4,'v',1,1,INT)+D.door(X(8),Y(29.4),15.4,'v',1,1,INT);
+  // 兒童閱覽家具
+  s+=Rc(X(9.5),Y(29.6),4.6*S,0.6*S,'lw-thin')+Rc(X(17.5),Y(29.6),4.6*S,0.6*S,'lw-thin');
+  [[11.5,21.8],[20.5,21.8]].forEach(function(c){s+='<circle cx="'+X(c[0])+'" cy="'+Y(c[1])+'" r="'+(0.7*S)+'" class="lw-thin"/>'});
+  // 柱
+  [0,8,16,24].forEach(function(cx){[0,8,16,24,32].forEach(function(cy){s+=D.col(X(cx),Y(cy),11)})});
+  // 室名
+  s+=D.room(X(12),Y(3.9),'樂齡教室 1','8 × 7.5 ＝ 60 ㎡')+D.room(X(20),Y(3.9),'樂齡教室 2','8 × 7.5 ＝ 60 ㎡');
+  s+=D.room(X(12),Y(14.7),'樂齡教室 3','8 × 7.5 ＝ 60 ㎡')+D.room(X(20),Y(14.7),'樂齡教室 4','8 × 7.5 ＝ 60 ㎡');
+  s+=D.room(X(16),Y(9.9),'故事角（開放）','16 × 4.5 ＝ 72 ㎡')+D.room(X(16),Y(26.2),'兒童閱覽','16 × 12.5 ＝ 200 ㎡');
+  s+=T(X(6.8)+4,Y(24),'走廊','t-room fa-h','middle',-90);
+  s+=D.room(X(3.5),Y(8.95),'女廁','22 ㎡')+D.room(X(3.5),Y(12.6),'男廁','22 ㎡');
+  s+=T(X(1.55),Y(18.75),'PS','t-area')+T(X(4.35),Y(18.75),'EV','t-area fa-h');
+  s+=D.room(X(2.8),Y(22.5),'儲藏','32 ㎡')+T(X(4.55),Y(2.7),'樓梯','t-area')+T(X(4.55),Y(30),'樓梯','t-area');
+  // 尺寸
+  s+=D.dimChain([X(0),X(8),X(16),X(24)],Y(0)-2.5,['8000','8000','8000'],false,-16)+D.dim(X(0),Y(0)-2.5,X(24),Y(0)-2.5,'24000',-32);
+  s+=D.dimChain([X(0),X(5.6),X(8),X(16),X(24)],Y(32)+2.5,['5600','2400','8000','8000'],false,18);
+  s+=D.dimChain([Y(32),Y(24),Y(16),Y(8),Y(0)],X(0)-2.5,['8000','8000','8000','8000'],true,-16)+D.dim(X(0)-2.5,Y(32),X(0)-2.5,Y(0),'32000',-32);
+  s+=D.dimChain([Y(0),Y(7.5),Y(12),Y(19.5),Y(32)],X(24)+2.5,['7500','4500','7500','12500'],true,-16);
+  // 剖切
+  function cutEnd(x,y,lab){return P('M'+(x-10)+' '+y+' H'+(x+10),'lw-cut')+P('M'+x+' '+y+' V'+(y-11),'lw-vis')+P('M'+(x-4)+' '+(y-10)+' L'+x+' '+(y-18)+' L'+(x+4)+' '+(y-10)+' Z','poche')+T(x,y+14,lab,'t-axis')}
+  s+=cutEnd(118,Y(28.5),'A')+cutEnd(600,Y(28.5),'A′');
+  s+=T(100,250,'西側（8 m 道路）','t-dim','middle',-90)+T(612,300,'東側（社區公園）','t-dim','middle',90);
+  s+=D.north(650,100,16);
+  s+=D.scale(588,566,S,[0,2,4,8]);
+  s+=D.title(376,598,'二層平面圖','1/200');
+  put('figA-plan2',s);
+})();
+
+/* ========== 4. 地下停車模組 ========== */
+(function(){
+  var S=22, x0=170, y0=84, s='';
+  function X(m){return x0+m*S} function Y(m){return y0+m*S}
+  // 軸線
+  s+=D.grid([X(0),X(8),X(16)],[Y(0),Y(16.5)],[100,40,X(17.6),Y(17.9)]);
+  // 下車區、步道斜線
+  s+=soft(D.hatch(X(12.25),Y(11),1.5*S,6*S,'hatch'),.45)+soft(D.hatch(X(8.25),Y(11),1.5*S,5.5*S,'hatch'),.25);
+  // 牆（北、南），兩端折斷
+  s+=Rc(X(-1),Y(-0.3),18*S,0.3*S,'poche')+Rc(X(-1),Y(17),18*S,0.3*S,'poche');
+  function brk(x){return P('M'+x+' '+Y(-0.8)+' V'+Y(8)+' l-5 4 l10 6 l-5 4 V'+Y(17.8),'lw-thin')}
+  s+=brk(X(-1))+brk(X(17));
+  // 車位線
+  var o='';
+  [0.25,2.75,5.25,7.75,8.25,10.75,13.25,15.75].forEach(function(x){o+='M'+r(X(x))+' '+Y(0)+' V'+Y(5.5)+' '});
+  [0.25,2.75,5.25,7.75,8.25,9.75,12.25].forEach(function(x){o+='M'+r(X(x))+' '+Y(11)+' V'+Y(16.5)+' '});
+  o+='M'+X(0.25)+' '+Y(16.5)+' H'+X(12.25)+' ';
+  o+='M'+X(12.25)+' '+Y(11)+' V'+Y(17)+' M'+X(13.75)+' '+Y(11)+' V'+Y(17)+' M'+X(15.75)+' '+Y(11)+' V'+Y(17)+' ';
+  s+=P(o,'lw-thin');
+  // 車道中心、行車方向
+  s+=P('M'+X(-1)+' '+Y(8.25)+' H'+X(17),'lw-hid');
+  function arrow(xa,xb,y){var d=xb>xa?1:-1; return P('M'+X(xa)+' '+Y(y)+' H'+X(xb),'lw-vis')+P('M'+(X(xb)-d*9)+' '+(Y(y)-4)+' L'+X(xb)+' '+Y(y)+' L'+(X(xb)-d*9)+' '+(Y(y)+4)+' Z','poche')}
+  s+=arrow(1.5,5,7.1)+arrow(14.5,11,9.4);
+  s+=T(X(8),Y(8.25)+4,'車道 5.5 m（雙向）','t-room fa-h');
+  // 車
+  function car(cx,y,len){var w=1.8*S,l=len*S,xx=cx-w/2;
+    return '<rect x="'+r(xx)+'" y="'+r(y)+'" width="'+r(w)+'" height="'+r(l)+'" rx="7" class="lw-vis"/>'
+      +P('M'+r(xx+4)+' '+r(y+l*0.3)+' Q'+r(cx)+' '+r(y+l*0.25)+' '+r(xx+w-4)+' '+r(y+l*0.3)+' L'+r(xx+w-5)+' '+r(y+l*0.45)+' H'+r(xx+5)+' Z','lw-thin')
+      +P('M'+r(xx+5)+' '+r(y+l*0.78)+' H'+r(xx+w-5)+' L'+r(xx+w-4)+' '+r(y+l*0.88)+' Q'+r(cx)+' '+r(y+l*0.92)+' '+r(xx+4)+' '+r(y+l*0.88)+' Z','lw-thin')}
+  // 北排車頭朝車道（下），南排車頭朝車道（上）
+  s+='<g transform="translate(0,'+r(Y(0.45)+Y(5.05))+') scale(1,-1)">'+car(X(4),Y(0.45),4.6)+car(X(12),Y(0.45),4.6)+'</g>';
+  s+=car(X(11),Y(11.45),4.6);
+  // 無障礙標誌
+  var ix=X(14.75), iy=Y(13.6);
+  s+='<g transform="translate('+r(ix)+','+r(iy)+')"><rect x="-13" y="-13" width="26" height="26" class="lw-vis"/><circle cx="-1" cy="-8" r="2.2" class="poche"/><path d="M-1 -5 V2 H6 L8 8" class="lw-vis"/><path d="M-1 -2 H4" class="lw-vis"/><path d="M-4 -1 A6.5 6.5 0 1 0 5 5" class="lw-vis"/></g>';
+  s+=T(ix,Y(15.4),'無障礙','t-area fa-h')+T(X(13),Y(14),'下車區','t-area fa-h','middle',-90)+T(X(9),Y(13.75),'步道','t-area fa-h','middle',-90);
+  // 柱
+  [0,8,16].forEach(function(cx){[0,16.5].forEach(function(cy){s+=D.col(X(cx),Y(cy),11)})});
+  // 尺寸
+  s+=D.dimChain([X(0),X(8),X(16)],Y(-0.3),['8000','8000'],false,-14);
+  s+=D.dimChain([Y(16.5),Y(11),Y(5.5),Y(0)],X(-1),['5500','5500','5500'],true,-20)+D.dim(X(-1),Y(16.5),X(-1),Y(0),'16500',-36);
+  s+=D.dimChain([Y(0),Y(5.5),Y(11),Y(17)],X(17),['5500','5500','6000'],true,-16);
+  s+=D.dimChain([X(0.25),X(2.75),X(5.25),X(7.75)],Y(17.3),['2500','2500','2500'],false,18)+D.dimChain([X(8.25),X(9.75),X(12.25),X(15.75)],Y(17.3),['1500','2500','3500'],false,18);
+  s+=D.scale(562,510,S,[0,1,2,5]);
+  s+=D.title(340,530,'B1 停車模組平面圖','1/200');
+  put('figA-park',s);
+})();
+})();
+</script>

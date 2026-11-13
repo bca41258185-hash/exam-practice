@@ -1,0 +1,308 @@
+<style>
+#gSpot .spReq{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--bp-hi);border-radius:4px;padding:8px 12px;font-size:14px;line-height:1.6;margin:0 0 10px}
+#gSpot .spReq b{font:600 11px var(--f-data);letter-spacing:.12em;color:var(--bp-hi);margin-right:8px}
+#gSpot figure{margin:0}
+#gSpot svg.spot{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:4px;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+#gSpot .spRing{fill:rgba(255,216,77,.08);stroke:var(--bp-hi);stroke-width:2.5;pointer-events:none}
+#gSpot .spTag{pointer-events:none}
+#gSpot .spTag circle{fill:var(--bp-hi)}
+#gSpot .spTag text{font:700 10px var(--f-data);fill:#1b2330}
+#gSpot .spMiss{stroke:var(--bad);stroke-width:2.5;fill:none;pointer-events:none;animation:spFade 1s ease-out forwards}
+@keyframes spFade{0%{opacity:1}70%{opacity:1}100%{opacity:0}}
+@media (max-width:600px){#gSpot figure{overflow-x:auto;-webkit-overflow-scrolling:touch}#gSpot svg.spot{width:640px;max-width:none}}
+#gSpot .finds li{padding-left:0}
+#gSpot .finds li::before{content:none}
+#gSpot .finds li b{font-family:var(--f-data);color:var(--bp-hi);margin-right:6px}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels||!K.draw)return;
+var $=K.$, el=K.el, hud=K.hud, svgPt=K.svgPt;
+/* ============ GAME 04 圖面找碴：三張有錯的考生圖 ============ */
+(function(){
+  var box=$('#gSpot'); if(!box)return;
+  var D=K.draw(true);
+  /* ---- 小工具 ---- */
+  function T(x,y,t,cls,anchor,rot){return '<text x="'+x+'" y="'+y+'" text-anchor="'+(anchor||'middle')+'" class="'+(cls||'t-dim')+'"'+(rot?' transform="rotate('+rot+' '+x+' '+y+')"':'')+'>'+t+'</text>'}
+  function L(d,cls){return '<path d="'+d+'" class="'+(cls||'lw-thin')+'"/>'}
+  function R(x,y,w,h,cls){return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" class="'+(cls||'lw-thin')+'"/>'}
+  /* 軸線：xs 的圓圈在上方 by，ys 的圓圈在左方 bx；線延伸到 x1／y1 */
+  function grid(xs,ys,by,bx,x1,y1){var s='',Rr=8;
+    xs.forEach(function(x,i){s+=L('M'+x+' '+(by+Rr)+' V'+y1,'lw-axis')+'<circle cx="'+x+'" cy="'+by+'" r="'+Rr+'" class="lw-vis f-void"/>'+T(x,by+3.2,String(i+1),'t-axis')});
+    ys.forEach(function(y,i){s+=L('M'+(bx+Rr)+' '+y+' H'+x1,'lw-axis')+'<circle cx="'+bx+'" cy="'+y+'" r="'+Rr+'" class="lw-vis f-void"/>'+T(bx,y+3.2,String.fromCharCode(65+i),'t-axis')});
+    return s}
+  function cols(pts,sz){return pts.map(function(p){return D.col(p[0],p[1],sz||7)}).join('')}
+  function wc(x,y){return R(x-4,y-2,8,4)+'<ellipse cx="'+x+'" cy="'+(y-7)+'" rx="3.4" ry="4.6" class="lw-thin"/>'}
+  function sink(x,y){return R(x-5,y-3,10,6)+'<circle cx="'+x+'" cy="'+y+'" r="1.6" class="lw-thin"/>'}
+  function table(x,y,w,h,n){var s=R(x,y,w,h); for(var i=0;i<(n||0);i++){var cx=x+w*(i+.5)/n; s+=R(cx-2.5,y-5,5,3.5)+R(cx-2.5,y+h+1.5,5,3.5)} return s}
+  function rtable(x,y,r){return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" class="lw-thin"/>'}
+  function arrowV(x,y1,y2){var d=y2>y1?1:-1; return L('M'+x+' '+y1+' V'+y2)+L('M'+(x-3)+' '+(y2-d*5)+' L'+x+' '+y2+' L'+(x+3)+' '+(y2-d*5))}
+
+  /* =========================================================
+     第 1 小關：配置暨一樓平面（1 m = 8 px，地界 X 80–400、Y 60–460）
+     ========================================================= */
+  function drawSite(){var s='',t=4,w=2.5,i;
+    /* 鄰地、道路、公園 */
+    s+=R(90,8,300,22,'lw-vis')+T(240,22.5,'北側鄰地　4 層住宅','t-area');
+    s+=D.road(16,0,64,460,'8 m 計畫道路',true);
+    s+=D.road(0,460,470,120,'15 m 計畫道路',false);
+    s+=R(300,465,50,9,'lw-vis f-void')+T(325,488,'公車站');
+    s+=D.hatch(400,60,70,400,'grass')+R(400,60,70,400)+D.tree(432,108,13)+D.tree(440,186,11)+D.tree(428,400,14)+T(452,290,'東側　社區公園','t-area','middle',-90);
+    /* 基地內草地、鋪面 */
+    s+=D.hatch(308,64,88,84,'grass')+D.hatch(372,212,24,244,'grass');
+    s+=D.hatch(236,342,68,86,'tile')+D.hatch(254,428,38,32,'tile')+L('M254 428 V460 M292 428 V460');
+    /* 車道與停車場 */
+    s+=D.hatch(104,342,132,42,'conc')+D.hatch(104,384,44,76,'conc')+L('M104 342 H236 M148 384 V460 M104 342 V460','lw-vis');
+    s+=arrowV(118,446,400)+arrowV(134,400,446)+T(126,474,'車道出入口');
+    s+=D.park(148,384,3,20,44,'h')+R(208,380,28,48)+L('M208 380 L236 428 M222 380 L236 404 M208 404 L222 428')+T(225,412,'無障礙','t-area','middle',-90);
+    /* 建築底色與老樹（樹畫在牆下面，看得出被壓到） */
+    s+=R(112,84,192,256,'f-void')+R(304,152,88,56,'f-void')+R(304,276,64,144,'f-void');
+    s+=D.tree(344,396,32);
+    /* 軸線 */
+    s+=grid([112,176,240,304],[84,148,212,276,340],42,94,314,350);
+    /* 外牆 */
+    s+=D.wall(112,84,304,84,t)+D.wall(112,340,304,340,t)+D.wall(112,84,112,340,t)+D.wall(304,84,304,152,t)+D.wall(304,208,304,340,t);
+    s+=D.wall(304,152,392,152,t)+D.wall(304,208,392,208,t)+D.wall(392,152,392,208,t);
+    s+=D.wall(304,276,368,276,t)+D.wall(368,276,368,420,t)+D.wall(304,420,368,420,t)+D.wall(304,340,304,420,t);
+    /* 內牆 */
+    s+=D.wall(176,84,176,212,w)+D.wall(112,160,176,160,w)+D.wall(140,160,140,212,w)+D.wall(168,160,168,212,w);
+    s+=D.wall(112,212,304,212,w)+D.wall(112,220,244,220,w)+D.wall(282,220,304,220,w);
+    s+=D.wall(176,220,176,340,w)+D.wall(240,220,240,340,w)+D.wall(208,220,208,276,w)+D.wall(176,276,240,276,w);
+    s+=D.wall(282,220,282,244,w)+D.wall(282,244,288,244,w)+D.wall(298,244,304,244,w);
+    s+=D.hatch(169,161,6,50,'hatch');
+    s+=cols([[112,84],[176,84],[240,84],[304,84],[112,148],[176,148],[304,148],[112,212],[176,212],[240,212],[304,212],[112,276],[176,276],[240,276],[304,276],[112,340],[176,340],[240,340],[304,340]]);
+    /* 門 */
+    s+=D.door(116,212,11,'h',1,-1,w)+D.door(144,212,11,'h',1,-1,w)+D.door(176,118,11,'v',-1,1,w)+D.door(188,212,12,'h',1,-1,w)+D.door(272,212,12,'h',1,-1,w);
+    s+=D.door(148,220,11,'h',1,1,w)+D.door(182,220,10,'h',1,1,w)+D.door(214,220,10,'h',1,1,w)+D.door(240,300,12,'v',-1,1,w)+D.door(304,296,12,'v',1,1,t)+D.door(304,354,12,'v',1,1,t);
+    s+=D.door(256,340,12,'h',1,-1,t)+D.door(280,340,12,'h',-1,-1,t);
+    /* 窗 */
+    s+=D.win(190,84,230,84,t)+D.win(250,84,290,84,t)+D.win(124,84,164,84,t)+D.win(318,152,358,152,t)+D.win(318,208,358,208,t);
+    s+=D.win(112,236,112,266,t)+D.win(112,292,112,326,t)+D.win(124,340,164,340,t)+D.win(190,340,228,340,t)+D.win(368,292,368,330,t)+D.win(312,420,332,420,t);
+    /* 樓梯、電梯、設備、家具 */
+    s+=D.stair(114,162,24,48,'v',8)+D.stair(142,162,24,48,'v',8)+D.elev(285,223,16,18);
+    s+=wc(184,272)+wc(196,272)+sink(190,230)+L('M178 240 h4 M178 250 h4','lw-vis')+wc(216,272)+wc(228,272)+sink(230,230);
+    s+=L('M304 156 V204','lw-vis')+T(342,176,'舞台','t-room')+T(342,188,'88 ㎡','t-area');
+    for(i=0;i<4;i++)s+=L('M'+(196+i*20)+' 168 h12 M'+(196+i*20)+' 186 h12');
+    s+=table(120,240,22,10,3)+table(150,240,22,10,3)+table(120,300,22,10,3)+table(150,300,22,10,3)+table(190,300,36,14,0);
+    s+=rtable(322,310,5)+rtable(350,310,5)+rtable(322,336,5);
+    /* 室名 */
+    s+=T(144,120,'器材室','t-room')+T(208,118,'多功能廳','t-room')+T(208,130,'256 ㎡','t-area');
+    s+=T(144,290,'共餐','t-room')+T(144,334,'120 ㎡','t-area')+T(192,260,'男廁','t-area')+T(224,260,'女廁','t-area');
+    s+=T(208,322,'64 ㎡','t-area')+T(262,292,'門廳','t-room')+T(262,304,'120 ㎡','t-area')+T(293,256,'EV','t-area');
+    s+=T(336,292,'咖啡','t-room')+T(336,350,'144 ㎡','t-area')+T(342,446,'老榕樹（保留）','t-area');
+    s+=D.entry(268,356,0)+T(268,374,'主入口','t-area');
+    /* 標註 */
+    s+=D.dimChain([112,176,240,304],72,['8000','8000','8000'])+D.dim(330,60,330,84,'3000',0);
+    s+=D.dim(252,212,252,220,'',0)+T(256,236,'1000','t-dim','start');
+    s+='<rect x="112" y="84" width="264" height="344" class="lw-setb"/><rect x="80" y="60" width="320" height="400" class="lw-site"/>';
+    s+=T(352,128,'RC 3F／B1','t-area');
+    /* 右欄：指北針（錯）、比例尺、圖例、圖名（錯） */
+    s+='<circle cx="560" cy="56" r="16" class="lw-vis"/>'+L('M560 36 V76 M548 56 H572','lw-vis');
+    s+=D.scale(500,104,8,[0,5,10,20]);
+    s+=L('M500 156 H540','lw-site')+T(548,159.5,'地界線','t-dim','start')+L('M500 178 H540','lw-setb')+T(548,181.5,'退縮線（道路側 4 m、鄰地側 3 m）','t-dim','start');
+    s+=D.tree(520,204,8)+T(548,207.5,'保留樹木','t-dim','start')+D.hatch(504,222,32,12,'conc')+R(504,222,32,12)+T(548,231.5,'車道、停車場','t-dim','start');
+    s+=T(500,280,'基地面積　2,000 ㎡','t-area','start')+T(500,296,'構造　RC，地上 3 層、地下 1 層','t-area','start')+T(500,312,'一樓樓高 4,500','t-area','start');
+    s+=D.title(600,548,'配置暨一樓平面圖');
+    return s}
+
+  /* =========================================================
+     第 2 小關：二樓平面（1 m = 12 px，建築 X 96–384、Y 90–474）
+     ========================================================= */
+  function drawPlan(){var s='',t=4,w=2.5,i;
+    s+=R(96,90,288,384,'f-void');
+    s+=grid([96,192,288,384],[90,186,282,378,474],18,22,394,484);
+    /* 尺寸：上方（錯：總長寫 23000）、左方 */
+    s+=D.dimChain([96,192,288,384],70,['8000','8000','8000'])+D.dim(96,44,384,44,'23000',0);
+    s+=D.dimChain([90,186,282,378,474],70,['8000','8000','8000','8000'],true)+D.dim(46,90,46,474,'32000',0);
+    /* 外牆、內牆 */
+    s+=D.wall(96,90,384,90,t)+D.wall(96,474,384,474,t)+D.wall(96,90,96,474,t)+D.wall(384,90,384,474,t);
+    s+=D.wall(192,90,192,378,w)+D.wall(220.8,90,220.8,378,w);
+    s+=D.wall(96,186,192,186,w)+D.wall(96,282,192,282,w)+D.wall(96,378,192,378,w)+D.wall(144,378,144,474,w);
+    s+=D.wall(220.8,282,384,282,w)+D.wall(254.4,282,254.4,378,w)+D.wall(288,282,288,474,w)+D.wall(220.8,378,288,378,w)+D.wall(288,378,384,378,w);
+    s+=D.wall(352,90,352,122,w)+D.wall(352,122,358,122,w)+D.wall(378,122,384,122,w);
+    /* 柱：在軸線交點；(304.8,201.6)、(372,196) 偏離軸線（錯） */
+    s+=cols([[96,90],[192,90],[288,90],[384,90],[96,186],[192,186],[96,282],[288,282],[384,282],[96,378],[192,378],[288,378],[384,378],[96,474],[192,474],[288,474],[384,474]],8);
+    s+=D.col(304.8,201.6,8)+D.col(372,196,8);
+    /* 門 */
+    s+=D.door(192,160,12,'v',-1,1,w)+D.door(192,250,12,'v',-1,1,w)+D.door(192,276,14,'v',-1,1,w);
+    s+=D.door(220.8,110,12,'v',1,1,w)+D.door(220.8,236,12,'v',1,1,w)+D.door(318,282,12,'h',1,1,w);
+    s+=D.door(228,282,10,'h',1,-1,w)+D.door(262,282,10,'h',1,-1,w)+D.door(144,452,12,'v',1,-1,w)+D.door(288,398,12,'v',1,1,w);
+    s+=D.col(192,282,8);
+    /* 窗（樂齡教室 2 的外牆沒有窗） */
+    s+=D.win(116,90,172,90,t)+D.win(96,108,96,168,t)+D.win(96,300,96,360,t)+D.win(240,90,290,90,t)+D.win(306,90,340,90,t);
+    s+=D.win(384,136,384,176,t)+D.win(384,214,384,262,t)+D.win(384,300,384,360,t)+D.win(384,396,384,456,t)+D.win(304,474,368,474,t)+D.win(160,474,272,474,t);
+    /* 樓梯（每跑只有 5 階）、錯位的電梯 */
+    s+=D.stair(99,381,42,90,'v',5)+D.elev(355,93,26,26)+T(346,111,'EV','t-area','end');
+    /* 設備與家具 */
+    s+=wc(232,370)+wc(244,370)+sink(238,300)+wc(266,370)+wc(278,370)+sink(272,300);
+    s+=table(116,126,52,14,4)+table(116,222,52,14,4)+table(116,318,52,14,4)+table(308,412,52,14,4);
+    for(i=0;i<3;i++)s+=R(232,214+i*16,40,6);
+    s+=R(316,126,34,20)+R(316,236,34,20)+'<circle cx="336" cy="336" r="20" class="lw-thin"/>';
+    /* 室名 */
+    s+=T(144,112,'樂齡教室 1','t-room')+T(144,156,'64 ㎡','t-area')+T(144,208,'樂齡教室 2','t-room')+T(144,252,'64 ㎡','t-area');
+    s+=T(144,304,'樂齡教室 3','t-room')+T(144,350,'64 ㎡','t-area')+T(258,150,'兒童閱覽','t-room')+T(258,162,'218 ㎡','t-area');
+    s+=T(238,340,'男廁','t-area')+T(271,340,'女廁','t-area')+T(336,306,'故事角','t-room')+T(336,370,'64 ㎡','t-area');
+    s+=T(336,400,'樂齡教室 4','t-room')+T(336,446,'64 ㎡','t-area')+T(222,420,'梯廳','t-room')+T(222,432,'96 ㎡','t-area');
+    s+=T(209,330,'走廊','t-area','middle',-90);
+    /* 樓梯註記、剖切線（只有一端） */
+    s+=L('M110 474 V488')+T(96,500,'樓梯 10 階／樓高 3,600','t-dim','start');
+    s+=L('M336 480 V494','lw-out')+'<path d="M336 492 l-9 3 l0 -6 z" class="poche"/>'+T(346,500,'A','t-axis');
+    /* 右欄 */
+    s+=D.north(450,60,16)+D.scale(430,430,12,[0,5,10]);
+    s+=T(430,130,'2FL +4,500','t-dim','start')+T(430,148,'本層樓高 3,600','t-dim','start')+T(430,166,'柱 80 × 80，柱距 8 m','t-dim','start');
+    s+=D.title(560,500,'二樓平面圖','1/200');
+    return s}
+
+  /* =========================================================
+     第 3 小關：剖面（1 m = 12 px；X=110+12s，Y=270-12z；左北右南）
+     ========================================================= */
+  function drawSec(){var s='',X=function(m){return 110+12*m},Y=function(z){return 270-12*z};
+    var y2=Y(4.5),y3=Y(8.1),yr=Y(11.7),yb=Y(-3.6);
+    function slab(x1,x2,y,th){return '<rect x="'+x1+'" y="'+y+'" width="'+(x2-x1)+'" height="'+(th||3)+'" class="poche"/>'}
+    function beam(x,y){return '<rect x="'+(x-3)+'" y="'+(y+3)+'" width="6" height="8" class="poche"/>'}
+    function col(x,ya,yb2){return '<rect x="'+(x-3.5)+'" y="'+ya+'" width="7" height="'+(yb2-ya)+'" class="lw-vis"/>'}
+    function ext(x,ya,yb2){var sill=yb2-11, head=ya+14; return '<rect x="'+(x-2)+'" y="'+ya+'" width="4" height="'+(head-ya)+'" class="poche"/><rect x="'+(x-2)+'" y="'+sill+'" width="4" height="'+(yb2-sill)+'" class="poche"/>'+L('M'+(x-2)+' '+head+' V'+sill+' M'+x+' '+head+' V'+sill+' M'+(x+2)+' '+head+' V'+sill)}
+    function flight(x1,x2,ya,ybot,n,cls){var d='M'+x1+' '+ybot, dx=(x2-x1)/n, dy=(ybot-ya)/n, i; for(i=0;i<n;i++){d+=' V'+(ybot-dy*(i+1))+' H'+(x1+dx*(i+1))} return L(d,cls||'lw-vis')}
+    /* 地面：南側（右）正確；北側（左）沒有地面線和土壤（錯） */
+    s+=D.hatch(302,320,192,16,'earth')+D.hatch(494,272,216,64,'earth');
+    s+='<path d="M494 270 L624 270 L494 313.2 Z" class="f-paper"/>'+D.hatch(498,322,124,14,'earth');
+    s+=L('M624 270 H712','lw-cut')+L('M494 313.2 L624 270','lw-cut')+L('M494 320.2 L644 270','lw-vis');
+    s+=L('M8 282 H104');
+    /* 軸線 */
+    var gx=[0,8,16,24,32].map(X); s+=gx.map(function(x,i){return L('M'+x+' 104 V337','lw-axis')+'<circle cx="'+x+'" cy="345" r="8" class="lw-vis f-void"/>'+T(x,348.2,'ABCDE'.charAt(i),'t-axis')}).join('');
+    /* 樓板、梁（剖到）；B 軸二樓沒有梁也沒有柱（錯） */
+    s+=slab(X(0),X(32),270)+slab(X(0),X(32),y2)+slab(X(0),X(32),y3)+slab(X(0),X(32),yr)+slab(X(16),X(32),yb,7);
+    [y3,yr].forEach(function(y){gx.forEach(function(x){s+=beam(x,y)})});
+    [X(0),X(16),X(24),X(32)].forEach(function(x){s+=beam(x,y2)});
+    s+=beam(X(16),270)+beam(X(24),270)+beam(X(32),270);
+    /* 看到的柱 */
+    s+=col(X(8),y3+11,y2)+col(X(8),yr+11,y3);
+    [X(16),X(24)].forEach(function(x){s+=col(x,y2+11,270)+col(x,y3+11,y2)+col(x,yr+11,y3)}); s+=col(X(24),281,yb);
+    /* 外牆（剖到）與窗；地下室牆 */
+    [[yr,y3],[y3,y2],[y2,270]].forEach(function(f){s+=ext(X(0),f[0]+3,f[1])+ext(X(32),f[0]+3,f[1])});
+    s+='<rect x="'+(X(16)-2)+'" y="273" width="4" height="47" class="poche"/><rect x="'+(X(32)-2)+'" y="273" width="4" height="12" class="poche"/>';
+    s+='<rect x="'+(X(32)-2)+'" y="'+(yr-13.2)+'" width="4" height="13.2" class="poche"/>';
+    /* 樓梯（D 軸與 E 軸之間）：二到三樓的梯段只到 +3.0 m（錯） */
+    var sx1=X(24.6), sx2=X(29.4);
+    s+=flight(sx1,sx2,243,270,9)+flight(sx2,sx1,y2,243,9,'lw-hid')+L('M'+sx2+' 243 H'+X(30),'lw-vis');
+    s+=flight(sx1,sx2,y2-18,y2,6)+flight(sx2,sx1,y2-36,y2-18,6,'lw-hid')+L('M'+sx2+' '+(y2-18)+' H'+X(30),'lw-vis');
+    s+=flight(sx1,sx2,y3-21.6,y3,7)+flight(sx2,sx1,yr+3,y3-21.6,7,'lw-hid')+L('M'+sx2+' '+(y3-21.6)+' H'+X(30),'lw-vis');
+    s+=L('M'+(sx1+4)+' '+(y2-34)+' L512 '+(y2-46)+' H566')+T(512,y2-50,'梯：級高 150 × 20 階','t-dim','start')+T(512,y2-36,'＝3,000','t-dim','start');
+    /* 屋頂：樓梯間、南側女兒牆；北側屋頂花園沒有女兒牆（錯） */
+    s+='<rect x="'+(X(24)-2)+'" y="'+(yr-36)+'" width="4" height="36" class="poche"/><rect x="'+(X(30)-2)+'" y="'+(yr-36)+'" width="4" height="36" class="poche"/>'+slab(X(24)-2,X(30)+2,yr-36);
+    s+=T(X(27),yr-14,'樓梯間','t-area');
+    s+=R(X(1.5),yr-7,40,7,'lw-vis')+D.treeE(X(3.2),yr-7,22)+D.person(X(0.8),yr,20)+R(X(9),yr-7,40,7,'lw-vis')+D.treeE(X(10.7),yr-7,22);
+    s+=T(X(14.5),yr-18,'屋頂花園','t-room');
+    /* 一樓多功能廳：天花只有 2.1 m（錯） */
+    s+=L('M'+(X(0)+2)+' 244.8 H'+(X(16)-4),'lw-hid')+T(X(13),240,'天花 CH 2100','t-dim')+D.person(X(13.5),270,20)+D.person(X(3),270,20);
+    /* 室名（二樓整層沒寫，錯） */
+    s+=T(X(7),262,'多功能廳','t-room')+T(X(20),258,'門廳','t-room')+T(X(8),160,'一般閱覽','t-room')+T(X(20),160,'行政','t-room')+T(X(20),300,'停車場','t-room');
+    s+=D.person(X(18.5),y3,20)+D.person(X(4),y3,20)+D.person(X(26),yb,20);
+    /* 高程（左）、樓高尺寸（右，少了三樓那段） */
+    s+=D.level(30,yr,'RFL +11700')+D.level(30,y3,'3FL +8100')+D.level(30,y2,'2FL +4500')+D.level(30,270,'1FL ±0')+D.level(30,yb,'B1FL −3600');
+    s+=D.dim(650,yb,650,270,'3600',0)+D.dim(650,270,650,y2,'4500',0)+D.dim(650,y2,650,y3,'3600',0);
+    s+=L('M'+(X(32)+8)+' '+y3+' H654 M'+(X(32)+8)+' '+y2+' H654 M'+(X(32)+150)+' 270 H654');
+    /* 坡道（1:3，錯）、配景、比例尺、圖名（錯） */
+    s+=T(566,262,'車道坡道 1:3','t-dim')+D.treeE(694,270,40)+D.person(672,270,20);
+    s+=D.scale(560,362,12,[0,5,10]);
+    s+=D.title(360,390,'A－A′ 立面圖','1/200');
+    return s}
+
+  /* ---- 三小關資料：每個錯有點選範圍（圖面座標）、說明、提示 ---- */
+  var LV=[
+   {name:'配置圖',vb:[720,590],draw:drawSite,
+    req:'基地 40 × 50 m，南臨 15 m 道路（有公車站）、西臨 8 m 道路。退縮：道路側 4 m、鄰地側 3 m。東南角老榕樹要保留。停車 8 輛（含無障礙 1 輛）。各層設無障礙廁所。',
+    Z:[
+     {s:[{r:[96,392,52,74]}],m:'車道出入口開在西南角路口旁邊，轉彎的車和進出的車會撞在一起。車道口要離路口遠一點，改到西側道路北段。',h:'看看車子從哪裡進出基地。'},
+     {s:[{r:[362,146,38,68]}],m:'舞台往東凸出，越過東側 3 m 退縮線。建築要整個留在退縮線內。',h:'藍色虛線是退縮線，有沒有東西越線？'},
+     {s:[{c:[344,396,24]}],m:'咖啡廳蓋在題目要保留的老榕樹上。樹冠範圍內不能有建築。',h:'題目要保留的東西，現在還好嗎？'},
+     {s:[{r:[112,160,58,43]}],m:'兩座樓梯緊貼在一起，等於只有一個逃生方向。兩座樓梯要分在建築兩端。',h:'找到樓梯，再看它們的位置。'},
+     {s:[{r:[112,204,192,28]}],m:'走廊只標 1000，也就是 1 m。公共建築的走廊，這門課一律畫 2.4 m。',h:'有一個尺寸數字太小了。'},
+     {s:[{r:[180,280,58,58]}],m:'這個房間只寫了面積，沒有名稱。每個空間都要寫名字，閱卷者才知道你排了什麼。',h:'每個房間都有名字嗎？'},
+     {s:[{r:[150,380,86,52]}],m:'只畫了 4 個車位，題目要 8 輛。停車數不夠就是沒做到硬條件。',h:'把車位數一數，再對照題目要求。'},
+     {s:[{r:[180,234,58,40]}],m:'只有男廁和女廁，沒有無障礙廁所。題目要求每層都要有。',h:'看看廁所有哪幾間。'},
+     {s:[{r:[500,524,200,32]}],m:'圖名沒有寫比例。每張圖都要有圖名和比例。',h:'看看圖名那一行。'},
+     {s:[{c:[560,56,24]}],m:'指北針沒有 N，也沒有箭頭，看不出哪邊是北。',h:'這張圖的北方在哪裡？'}
+    ]},
+   {name:'平面圖',vb:[720,520],draw:drawPlan,
+    req:'二樓：兒童閱覽、樂齡教室 4 間、故事角、男女廁所。柱距 8 m。樓高 3.6 m，級高最多 16 cm。兩座樓梯分在兩端，電梯在梯廳旁。剖面位置要標在平面上。',
+    Z:[
+     {s:[{r:[192,92,29,158]}],m:'走廊往北走到底沒有出口，從北端要往回走 24 m 才到樓梯，死巷太長。',h:'沿著走廊走到盡頭，看看能去哪裡。'},
+     {s:[{r:[96,380,48,94]}],m:'整層只有這一座樓梯。另一端也要有一座，兩個方向都能逃生。',h:'數數這一層有幾座樓梯。'},
+     {s:[{r:[92,482,150,28]}],m:'樓高 3,600 只有 10 階，每階 36 cm，根本爬不上去。級高 16 cm 以內，至少要 23 階。',h:'把樓高除以階數算算看。'},
+     {s:[{c:[192,283,18]}],m:'柱子畫在教室門口正中間，門打不開。門要讓開柱位。',h:'看看每扇門開得開嗎。'},
+     {s:[{c:[304.8,201.6,18]},{c:[372,196,16]}],m:'這兩根柱沒有落在軸線交點上。柱一定要對齊軸線，上下樓層才接得起來。',h:'柱子都在虛線交叉的地方嗎？'},
+     {s:[{r:[98,192,88,70]}],m:'樂齡教室 2 靠外牆，卻一扇窗都沒畫。教室需要採光和通風。',h:'比較四間教室的外牆。'},
+     {s:[{r:[222,262,66,36]}],m:'廁所門直接開進兒童閱覽室。廁所門要開向走廊或前室。',h:'廁所的門開向哪裡？'},
+     {s:[{r:[348,90,40,36]}],m:'電梯塞在兒童閱覽室的角落，離梯廳最遠。電梯要放在梯廳旁，和一樓門廳上下對齊。',h:'電梯在哪裡？從梯廳走得到嗎？'},
+     {s:[{r:[196,26,88,32]}],m:'8000 ＋ 8000 ＋ 8000 是 24000，總長卻寫 23000。尺寸鏈一定要加得起來。',h:'把上方的尺寸加起來。'},
+     {s:[{r:[318,476,44,36]}],m:'剖切線只畫了一端，沒有另一端的 A′，看不出剖面切在哪裡、往哪個方向看。',h:'找找剖面記號。'}
+    ]},
+   {name:'剖面圖',vb:[720,405],vy:80,draw:drawSec,
+    req:'剖面要有：粗地面線和土壤、各層樓板與梁、每層樓高尺寸、高程、室名、女兒牆 1.1 m。樓高：B1 3.6 m、1F 4.5 m、2F 與 3F 3.6 m。車道坡道 1:6。屋頂作屋頂花園。',
+    Z:[
+     {s:[{r:[100,276,200,30]}],m:'北側沒有畫地面線和土壤，一樓樓板下面是空的，建築看起來浮在半空。地面線要最粗，並延伸到建築外。',h:'建築站在什麼上面？'},
+     {s:[{r:[396,176,200,36]}],m:'二樓到三樓的樓梯只有 20 階 × 15 cm＝3 m，樓高是 3.6 m，梯段接不到三樓樓板。',h:'把樓梯的註記和樓高對一對。'},
+     {s:[{c:[206,222,16]}],m:'B 軸的柱到二樓就斷了，二樓樓板跨 16 m 卻沒有梁。上面的柱要有梁或柱接住。',h:'沿著 B 軸的柱往下看。'},
+     {s:[{r:[102,96,62,34]}],m:'屋頂花園有人會上去，北側邊緣卻沒有女兒牆。要畫 1.1 m 高的女兒牆。',h:'屋頂上的人，旁邊有什麼保護？'},
+     {s:[{r:[496,250,130,68]}],m:'坡道標 1:3，太陡，車子上不去。車道坡道要 1:6，長度要加倍。',h:'看看地下室的坡道。'},
+     {s:[{r:[628,132,40,40]}],m:'右側樓高尺寸少了三樓那一段。每一層都要標樓高。',h:'右邊的尺寸鏈每層都有嗎？'},
+     {s:[{r:[112,176,280,28]}],m:'二樓整層沒有寫室名，看不出剖到哪些空間。',h:'每一層都有室名嗎？'},
+     {s:[{r:[250,368,220,32]}],m:'這張是剖面，圖名卻寫「立面圖」。圖名要和內容一致。',h:'看看圖名。'},
+     {s:[{r:[232,232,70,36]}],m:'多功能廳的天花只有 2.1 m，人一舉手就碰到。公共大廳的淨高至少要 3 m 左右。',h:'一樓大廳的人抬頭會看到什麼？'}
+    ]}
+  ];
+
+  /* ---- 重建遊戲內容（保留 .ghead 與 .gdesc） ---- */
+  var head=$('.ghead',box), desc=$('.gdesc',box);
+  Array.prototype.slice.call(box.children).forEach(function(c){if(c!==head&&c!==desc)box.removeChild(c)});
+  desc.textContent='三張考生畫的圖，每張都藏了好幾個會被扣分的錯。先看題目要求，再直接點圖上有問題的地方。點錯三次以後，每次扣 4 分。';
+  var unit=$('.hud small',head);
+  var req=el('p',{'class':'spReq'}), fig=el('figure'), msg=el('p',{'class':'verdict mid','aria-live':'polite'}), ul=el('ul',{'class':'finds'}), row=el('div',{'class':'frow'});
+  var svg=document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('class','spot'); svg.setAttribute('role','application'); svg.id='spSvg'; fig.appendChild(svg);
+  var bHint=el('button',{type:'button','class':'ghost',id:'spHint'},'給我一個提示'), bReset=el('button',{type:'button','class':'ghost',id:'spReset'},'重來這一關'), bNext=el('button',{type:'button','class':'go',id:'spNext',hidden:''},'下一小關 →');
+  row.appendChild(bHint); row.appendChild(bReset); row.appendChild(bNext);
+  [req,fig,msg,ul,row].forEach(function(n){box.appendChild(n)});
+
+  var LVL, cur=0, lv, found, order, miss, hintI, over;
+  function inShape(z,p){ if(z.c){var dx=p.x-z.c[0],dy=p.y-z.c[1]; return dx*dx+dy*dy<=z.c[2]*z.c[2]}
+    return p.x>=z.r[0]&&p.x<=z.r[0]+z.r[2]&&p.y>=z.r[1]&&p.y<=z.r[1]+z.r[3] }
+  function ring(z){ return z.c?'<circle class="spRing" cx="'+z.c[0]+'" cy="'+z.c[1]+'" r="'+z.c[2]+'"/>':'<rect class="spRing" x="'+z.r[0]+'" y="'+z.r[1]+'" width="'+z.r[2]+'" height="'+z.r[3]+'" rx="6"/>' }
+  function tagAt(z,n){var x=z.c?z.c[0]+z.c[2]*.72:z.r[0]+z.r[2], y=z.c?z.c[1]-z.c[2]*.72:z.r[1];
+    return '<g class="spTag"><circle cx="'+x+'" cy="'+y+'" r="8"/><text x="'+x+'" y="'+(y+3.5)+'" text-anchor="middle">'+n+'</text></g>'}
+  function score(){return Math.max(0,Math.round(order.length/lv.Z.length*100)-Math.max(0,miss-3)*4)}
+  function paint(){ var h='';
+    order.forEach(function(zi,k){ lv.Z[zi].s.forEach(function(z){h+=ring(z)}); h+=tagAt(lv.Z[zi].s[0],k+1) });
+    svg.querySelector('#spOver').innerHTML=h; hud(box,order.length);
+    ul.innerHTML=''; order.forEach(function(zi,k){ul.appendChild(el('li',null,'<b>'+(k+1)+'</b>'+lv.Z[zi].m))}) }
+  function say(t,c){msg.className='verdict '+(c||'mid'); msg.textContent=t}
+  function status(){return '已找到 '+order.length+' / '+lv.Z.length+'，誤點 '+miss+' 次，目前 '+score()+' 分。'}
+  function start(i){ cur=i; lv=LV[i]; found=lv.Z.map(function(){return false}); order=[]; miss=0; hintI=-1; over=false;
+    svg.setAttribute('viewBox','0 '+(lv.vy||0)+' '+lv.vb[0]+' '+(lv.vb[1]-(lv.vy||0))); svg.setAttribute('aria-label','有錯誤的'+lv.name+'，點選有問題的地方');
+    svg.innerHTML='<g>'+lv.draw()+'</g><g id="spOver"></g><g id="spMissG"></g>';
+    req.innerHTML='<b>題目要求</b>'+lv.req; if(unit)unit.textContent='/'+lv.Z.length+' 處';
+    bNext.hidden=true; paint(); say('第 '+(i+1)+' 張：'+lv.name+'，共 '+lv.Z.length+' 個錯。'+status()) }
+  function missMark(p){var m=document.createElementNS('http://www.w3.org/2000/svg','path');
+    m.setAttribute('d','M'+(p.x-6)+' '+(p.y-6)+' L'+(p.x+6)+' '+(p.y+6)+' M'+(p.x+6)+' '+(p.y-6)+' L'+(p.x-6)+' '+(p.y+6)); m.setAttribute('class','spMiss');
+    svg.querySelector('#spMissG').appendChild(m); setTimeout(function(){if(m.parentNode)m.parentNode.removeChild(m)},1000)}
+  svg.addEventListener('click',function(e){
+    if(over)return; var p=svgPt(svg,e);
+    for(var i=0;i<lv.Z.length;i++){ if(lv.Z[i].s.some(function(z){return inShape(z,p)})){
+        if(found[i]){say('這一處已經找到了。'+status());return}
+        found[i]=true; order.push(i); paint(); var sc=score(), passed=LVL.done(cur,sc);
+        if(order.length===lv.Z.length){ over=true; say('全部 '+lv.Z.length+' 處都找到了，誤點 '+miss+' 次，得 '+sc+' 分。'+(passed?(cur<LV.length-1?'可以進下一小關。':'三張圖都看完了。'):'分數不到 75，按「重來這一關」，少點幾次錯。'),passed?'ok':'no') }
+        else say('找到了：'+lv.Z[i].m+' '+status(),'ok');
+        if(passed&&cur<LV.length-1)bNext.hidden=false;
+        return } }
+    miss++; missMark(p); say('這裡沒有問題。'+status()+(miss>3?'誤點超過 3 次，每次扣 4 分。':''),'no');
+  });
+  bHint.addEventListener('click',function(){ if(over)return; var left=[]; lv.Z.forEach(function(z,i){if(!found[i])left.push(i)}); if(!left.length)return;
+    hintI=(hintI+1)%left.length; say('提示：'+lv.Z[left[hintI]].h+'（還剩 '+left.length+' 處）') });
+  bReset.addEventListener('click',function(){K.stampOff(box); start(cur)});
+  bNext.addEventListener('click',function(){LVL.next()});
+  LVL=K.levels(box,{key:'g:spot',names:LV.map(function(v){return v.name}),pass:75,start:start});
+  box._spot={LV:LV,cur:function(){return cur}};
+})();
+})();
+</script>

@@ -1,0 +1,63 @@
+<header class="top"><div class="top-in">
+  <button class="tbtn" id="menuBtn" type="button" aria-controls="rail" aria-expanded="false">課表</button>
+  <button class="brand" type="button" data-go="home">建築師考試急救<small>4 小時．建築計畫與設計</small></button>
+  <div class="meter" aria-label="課程進度"><div class="bar"><i id="barFill"></i></div><span id="barTxt">0 / 240 分</span></div>
+  <div class="lv" id="lvChip" title="經驗值與等級"><i id="lvXp">0 XP</i><b id="lvName">小白</b></div>
+  <button class="tbtn" id="sayBtn" type="button" aria-pressed="false" title="朗讀目前這一頁">朗讀</button>
+</div></header>
+<div class="scrim" id="scrim" hidden></div>
+<div class="wrap">
+<nav class="rail" id="rail" aria-label="課表">
+  <h2>四小時課表</h2>
+  <ol id="railList"></ol>
+  <h2>隨時查</h2>
+  <ol>
+    <li><button type="button" data-go="play"><span class="dot">★</span><span>遊戲場</span><span class="min"></span></button></li>
+    <li><button type="button" data-go="cheat"><span class="dot">≡</span><span>考場小抄</span><span class="min"></span></button></li>
+    <li><button type="button" data-go="home"><span class="dot">⌂</span><span>課程首頁</span><span class="min"></span></button></li>
+  </ol>
+</nav>
+<main id="main">
+
+<!-- ================= 首頁 ================= -->
+<article class="view" id="v-home">
+  <div class="bp hero">
+    <div>
+      <p class="eyebrow">CRASH COURSE · 240 MIN</p>
+      <h1>四小時，從零到<em>畫完一張大設計</em></h1>
+      <p>給第一次碰建築師考試、又很容易無聊的人。九個關卡全部用玩的：拖建築、拼平面、抓別人的錯，畫完還能拍照給 AI 閱卷委員講評。</p>
+      <button class="cta" type="button" data-go="m0" id="heroGo">開始第一關 →</button>
+      <ul class="stats"><li><b>240</b><span>分鐘</span></li><li><b>9</b><span>關卡</span></li><li><b>14</b><span>遊戲</span></li><li><b>7</b><span>次動手畫</span></li></ul>
+    </div>
+    <svg viewBox="0 0 360 300" role="img" aria-label="自動描繪的配置圖">
+      <path class="ln thin" pathLength="1" d="M10 250 H350 M10 290 H350 M40 10 V250 M80 10 V250"/>
+      <path class="ln" pathLength="1" d="M80 20 H300 V250 H80 Z"/>
+      <path class="ln thin t2" pathLength="1" stroke-dasharray="none" d="M100 36 H284 V232 H100 Z" style="stroke-dasharray:.012 .012"/>
+      <rect class="fl" x="100" y="58" width="124" height="150"/>
+      <path class="ln t2" pathLength="1" d="M100 58 H224 V208 H100 Z M141 58 V208 M182 58 V208 M100 108 H224 M100 158 H224"/>
+      <path class="ln t3" pathLength="1" d="M162 226 L172 210 L182 226 Z M80 44 H190 M262 232 a22 22 0 1 0 .1 0"/>
+      <path class="ln thin t3" pathLength="1" d="M236 70 V200 M250 70 V200 M264 70 V200"/>
+      <text x="162" y="136" text-anchor="middle">3F</text><text x="190" y="274" text-anchor="middle">15 m 道路</text><text x="318" y="34">N↑</text>
+      <text x="262" y="214" text-anchor="middle">樹</text><text x="60" y="140" text-anchor="middle" transform="rotate(-90 60 140)">8 m</text>
+    </svg>
+  </div>
+  <div class="key" style="margin-top:20px"><b>你需要準備：</b>A3 白紙 5 張、鉛筆或代針筆、一支螢光筆、直尺、計算機。課程中有 7 次要你停下來動手畫。</div>
+
+  <h2 class="h">九個關卡</h2>
+  <ul class="home-grid" id="homeGrid"></ul>
+  <p class="hint">進度存在這台裝置的瀏覽器裡。中途關掉再開，會回到上次的位置。</p>
+
+  <h2 class="h">這堂課怎麼上</h2>
+  <ol class="t">
+    <li><b>每一關一進去就是遊戲。</b>先玩，玩錯了系統會告訴你為什麼。想看完整解釋，再打開最下面的「完整說明與圖解」。</li>
+    <li><b>照順序過關。</b>同一道例題從第 1 關用到第 7 關，後面的關卡會用到前面的結果。</li>
+    <li><b>卡住就按右下角的「問教練」。</b>那是 AI，什麼都可以問。（需要在 Claude 的頁面裡開啟才會出現。）</li>
+    <li><b>說明裡的「動手」請真的畫在紙上。</b>大設計考的是手。第 8 關畫完可以拍照給 AI 講評。</li>
+    <li><b>上完後</b>去「術科模擬考場」用真正的歷屆試題計時練習，這堂課給你的是流程，手感要靠那裡練。</li>
+  </ol>
+
+  <h2 class="h">這堂課不教什麼</h2>
+  <p>四小時教不完六科。這裡沒有結構計算、構造細部、環控公式和法規條文背誦，也不教畫得漂亮。這堂課的目標是「及格線的流程」：畫完、不違規、有回應題目。表現法和設計深度，是之後幾個月的事。</p>
+  <div class="warnbox"><b>數字的使用方式：</b>課程裡的法規數字（樓梯、走廊、停車位等）是考場常用的速記值，足夠畫圖使用。正式條文與每年考試規定，以現行《建築技術規則》和考選部當年公告為準。</div>
+  <div class="navrow"><span></span><button class="go" type="button" data-go="m0">開始第一關 →</button></div>
+</article>

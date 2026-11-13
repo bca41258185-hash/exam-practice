@@ -1,0 +1,122 @@
+<style>
+#gMass .mrooms{margin:4px 0 0;padding:0 0 0 1.2em;font-size:14.5px;line-height:1.6}
+#gMass .mrooms .fig{color:var(--bp-hi)}
+#gMass figure{margin:0}
+#gMass .msite{margin:10px 0 0}
+#gMass .mprog{font:600 13px var(--f-data);color:var(--mut)}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels||!K.draw)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, fmt=K.fmt, gameBox=K.gameBox;
+/* ============ GAME 蓋樓（單元 2）：三小關 ============ */
+var gMass=gameBox('gMass','GAME','蓋到剛好合法','分','用 ＋ − 決定蓋幾層，要用最少的層數把需要的面積蓋完，而且不能超過建蔽率、容積率和樓層限制。有些基地根本蓋不出來，那就按「蓋不出來」。');
+(function(){
+  /* a 基地面積、b 建蔽率、f 容積率、n 需要的樓地板、cap 樓層上限、max 設計至容積上限；
+     第 3 關：w×d 基地尺寸(m)、sb 退縮 [北,東,南,西]、rd 臨路 [邊,路寬]、rooms 淨面積 */
+  var LV=[
+   [{a:1000,b:60,n:1500},{a:2000,b:40,n:1600},{a:1500,b:50,n:3100}],
+   [{a:2000,b:50,f:160,n:2100,cap:4},{a:800,b:60,f:200,n:1700},{a:1500,b:40,f:150,n:1800,max:1},{a:1000,b:40,f:200,n:1900,cap:4}],
+   [{t:'社區圖書館',w:30,d:40,b:60,f:200,cap:4,sb:[3,4,8,3],rd:[['s',15],['e',8]],nb:{n:'鄰地 4 層住宅',w:'鄰地'},note:'南側退縮 8 m 留設廣場、東側退縮 4 m',rooms:[['多功能廳',250],['教室 3 間，每間 60',180],['閱覽區',350],['行政辦公',80],['社區咖啡',120]]},
+    {t:'樂齡日照中心',w:40,d:25,b:50,f:160,cap:3,sb:[2,2,4,2],rd:[['s',10]],nb:{n:'鄰地',e:'鄰地',w:'鄰地'},note:'臨路退縮 4 m、鄰地側各退縮 2 m',rooms:[['日間活動室',240],['午休室',100],['復健室',120],['共餐廚房與餐廳',180],['行政護理',80],['家屬交誼',40]]},
+    {t:'市場暨社區客廳',w:30,d:30,b:60,f:200,cap:2,sb:[2,2,6,6],rd:[['s',12],['w',8]],nb:{n:'鄰地',e:'鄰地'},note:'兩側臨路各退縮 6 m、鄰地側各退縮 2 m',rooms:[['市場攤位區',360],['熟食區',140],['社區客廳',120],['管理室',60],['公廁',40]]}]];
+  LV[2].forEach(function(l){l.a=l.w*l.d; l.net=l.rooms.reduce(function(s,r){return s+r[1]},0); l.n=l.net*1.4; l.bw=l.w-l.sb[1]-l.sb[3]; l.bd=l.d-l.sb[0]-l.sb[2]; l.ba=l.bw*l.bd});
+  function calc(l){var fp=l.a*l.b/100, g=l.f?l.a*l.f/100:Infinity, fe=l.ba?Math.min(fp,l.ba):fp, need=l.max?Math.max(l.n,g):l.n, m=Math.ceil(need/fe-1e-9), s=m;
+    if(need>g+.5)s=0; else if(l.cap&&m>l.cap)s=0; return {fp:fp,g:g,fe:fe,need:need,m:m,s:s}}
+  var lv=0, i, fl, tries, pts, body=el('div'), L; gMass.appendChild(body);
+  /* 量體剖面：剖到的樓板與外牆塗黑、地面土壤斜線、高程標記、女兒牆 */
+  function tower(l,reveal){var c=calc(l), D=K.draw(true), GL=226, PX=5.6, cx=165, W0=150, per=c.need/fl, ok=per<=c.fe+.5, show=reveal||lv<2,
+      w=Math.min(1.3,per/c.fe)*W0, x0=cx-w/2, x1=cx+w/2, T=2.6, y=[GL], k, s;
+    for(k=0;k<fl;k++)y.push(y[k]-(k===0?4.5:3.6)*PX);
+    var top=y[fl], par=top-1.1*PX, lx=Math.max(x1,cx+W0/2)+12;
+    s='<svg viewBox="0 0 380 290" role="img" aria-label="量體剖面：'+fl+' 層，每層 '+fmt(per)+' 平方公尺">';
+    s+=D.hatch(8,GL,364,28,'earth')+'<path d="M8 '+GL+' H372" class="lw-cut"/>';
+    s+='<path d="M'+(cx-W0/2)+' '+(GL+26)+' V18 M'+(cx+W0/2)+' '+(GL+26)+' V18" class="lw-setb"/><text x="'+cx+'" y="14" text-anchor="middle" class="t-dim">虛線＝可蓋的最大樓地板（'+(show?fmt(c.fe)+' ㎡':'？')+'）</text>';
+    if(l.cap){var yc=GL-(4.5+3.6*(l.cap-1))*PX; s+='<path d="M14 '+yc+' H'+(lx-14)+'" class="lw-hid"/><text x="16" y="'+(yc-4)+'" class="t-dim">樓層上限 '+l.cap+'F</text>'}
+    for(k=0;k<fl;k++){s+='<rect x="'+x0+'" y="'+y[k+1]+'" width="'+w+'" height="'+(y[k]-y[k+1])+'" class="'+(show&&!ok?'f-bad':'f-soft')+'"/>';
+      s+='<text x="'+cx+'" y="'+((y[k]+y[k+1])/2+4)+'" text-anchor="middle" class="t-room">'+(k+1)+'F</text>'}
+    /* 樓板、外牆、女兒牆 */
+    for(k=1;k<=fl;k++)s+='<rect x="'+(x0-1)+'" y="'+(y[k]-T/2)+'" width="'+(w+2)+'" height="'+T+'" class="poche"/>';
+    s+='<rect x="'+(x0-1)+'" y="'+(GL-T/2)+'" width="'+(w+2)+'" height="'+T+'" class="poche"/>';
+    s+='<rect x="'+(x0-1)+'" y="'+par+'" width="'+T+'" height="'+(GL-par)+'" class="poche"/><rect x="'+(x1-T+1)+'" y="'+par+'" width="'+T+'" height="'+(GL-par)+'" class="poche"/>';
+    if(show&&!ok)s+='<path d="M'+x0+' '+top+' L'+x1+' '+GL+' M'+x1+' '+top+' L'+x0+' '+GL+'" class="s-bad" style="stroke-width:1.2"/>';
+    /* 高程 */
+    for(k=0;k<=fl;k++){var lab=k===0?'GL ±0':(k===fl?'RFL':(k+1)+'FL')+' +'+Math.round((4.5+3.6*(k-1))*1000); s+=D.level(lx,y[k],lab)}
+    /* 樓高尺寸鏈：細線加斜撇，數字橫寫在左側 */
+    var dx=x0-14; s+='<path d="M'+dx+' '+GL+' V'+top+'" class="lw-thin"/>';
+    for(k=0;k<=fl;k++)s+='<path d="M'+(dx-3)+' '+(y[k]+3)+' L'+(dx+3)+' '+(y[k]-3)+'" class="lw-vis"/>';
+    for(k=0;k<fl;k++)s+='<text x="'+(dx-4)+'" y="'+((y[k]+y[k+1])/2+3.5)+'" text-anchor="end" class="t-dim">'+(k===0?'4500':'3600')+'</text>';
+    if(dx-48>14)s+=D.treeE(dx-48,GL,30)+D.person(dx-34,GL,10);
+    s+='<text x="'+cx+'" y="'+(par-7)+'" text-anchor="middle" class="t-room">每層 '+fmt(per)+' ㎡</text>';
+    s+='<g transform="translate('+cx+',278)">'+D.title(0,0,'量體剖面','')+'</g>';
+    return s+'</svg>'}
+  /* 第 3 關的配置圖：地界線、退縮線、道路、尺寸（mm） */
+  function site(l){var D=K.draw(true), S=Math.min(210/l.w,190/l.d), W=l.w*S, H=l.d*S, ox=80, oy=52, s, rd={};
+    l.rd.forEach(function(r){rd[r[0]]=r[1]});
+    var vbw=ox+W+(rd.e?rd.e*S*.6+10:30)+70, vbh=oy+H+(rd.s?rd.s*S*.6+12:26)+30;
+    s='<svg viewBox="0 0 '+Math.round(vbw)+' '+Math.round(vbh)+'" role="img" aria-label="基地配置與退縮">';
+    if(rd.s)s+=D.road(ox-(rd.w?rd.w*S*.6:20),oy+H,W+(rd.w?rd.w*S*.6:20)+(rd.e?rd.e*S*.6:20),rd.s*S*.6,rd.s+' m 道路');
+    if(rd.e)s+=D.road(ox+W,oy-20,rd.e*S*.6,H+20,rd.e+' m 道路',true);
+    if(rd.w)s+=D.road(ox-rd.w*S*.6,oy-20,rd.w*S*.6,H+20,rd.w+' m 道路',true);
+    var bx=ox+l.sb[3]*S, by=oy+l.sb[0]*S, bw=l.bw*S, bh=l.bd*S;
+    s+='<rect x="'+bx+'" y="'+by+'" width="'+bw+'" height="'+bh+'" class="f-ok"/><path d="M'+bx+' '+by+' h'+bw+' v'+bh+' h'+(-bw)+' z" class="lw-setb"/>';
+    s+='<text x="'+(bx+bw/2)+'" y="'+(by+bh/2)+'" text-anchor="middle" class="t-room">可建範圍</text><text x="'+(bx+bw/2)+'" y="'+(by+bh/2+13)+'" text-anchor="middle" class="t-area">? × ? m</text>';
+    s+='<path d="M'+ox+' '+oy+' h'+W+' v'+H+' h'+(-W)+' z" class="lw-site"/>';
+    s+=D.dim(ox,oy,ox+W,oy,String(l.w*1000),-16)+D.dim(ox,oy,ox,oy+H,String(l.d*1000),16);
+    /* 退縮尺寸 */
+    if(l.sb[0])s+=D.dim(bx+bw*.7,oy,bx+bw*.7,by,String(l.sb[0]*1000),0);
+    if(l.sb[2])s+=D.dim(bx+bw*.7,by+bh,bx+bw*.7,oy+H,String(l.sb[2]*1000),0);
+    if(l.sb[3])s+=D.dim(ox,by+bh*.35,bx,by+bh*.35,String(l.sb[3]*1000),0);
+    if(l.sb[1])s+=D.dim(bx+bw,by+bh*.35,ox+W,by+bh*.35,String(l.sb[1]*1000),0);
+    if(l.nb.n)s+='<text x="'+(ox+W/2)+'" y="'+(oy-34)+'" text-anchor="middle" class="t-dim">'+l.nb.n+'</text>';
+    if(l.nb.w)s+='<text x="'+(ox-36)+'" y="'+(oy+H/2)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 '+(ox-36)+' '+(oy+H/2)+')">'+l.nb.w+'</text>';
+    if(l.nb.e)s+='<text x="'+(ox+W+14)+'" y="'+(oy+H/2)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 '+(ox+W+14)+' '+(oy+H/2)+')">'+l.nb.e+'</text>';
+    s+=D.north(vbw-26,34,11);
+    return s+'</svg>'}
+  function spec(l){var h='<li class="mprog">第 '+(i+1)+' / '+LV[lv].length+' 塊基地'+(l.t?'：'+l.t:'')+'</li>';
+    if(lv<2)h+='<li>基地面積 <b>'+fmt(l.a)+'</b> ㎡</li>';
+    else h+='<li>基地 <b>'+l.w+' × '+l.d+'</b> m（'+fmt(l.a)+' ㎡）</li><li>'+l.note+'</li>';
+    h+='<li>建蔽率 <b>'+l.b+'%</b>'+(l.f?'　容積率 <b>'+l.f+'%</b>':'')+'</li>';
+    if(lv<2)h+='<li>'+(l.max?'空間需求約 <b>'+fmt(l.n)+'</b> ㎡':'需要的樓地板 <b>'+fmt(l.n)+'</b> ㎡')+'</li>';
+    if(l.cap)h+='<li>地上不得超過 <b>'+l.cap+'</b> 層</li>';
+    if(l.max)h+='<li>題目要求「<b style="font-size:inherit">設計至容積上限</b>」</li>';
+    if(lv===2)h+='<li>空間需求（淨面積，係數用 1.4）：<ul class="mrooms">'+l.rooms.map(function(r){return '<li>'+r[0]+'　<span class="fig">'+r[1]+'</span> ㎡</li>'}).join('')+'</ul></li>';
+    return '<ul class="mspec">'+h+'</ul>'}
+  function show(){ if(i>=LV[lv].length){done();return} var l=LV[lv][i]; tries=0; fl=1;
+    body.innerHTML='<div class="mwrap"><div>'+spec(l)+(lv===2?'<figure class="msite">'+site(l)+'</figure><p class="hint">尺寸單位 mm。綠色是退縮後可以蓋的範圍。</p>':'')
+      +'<div class="stepper"><button type="button" data-d="-1" aria-label="少一層">−</button><b id="gmF">1</b><span>層</span><button type="button" data-d="1" aria-label="多一層">＋</button></div>'
+      +'<div class="frow"><button type="button" class="go" id="gmGo">蓋！</button><button type="button" class="ghost" id="gmNo">蓋不出來</button></div></div><figure id="gmFig"></figure></div><p class="verdict mid" id="gmMsg" hidden></p><div id="gmMore"></div>';
+    $('#gmFig',body).innerHTML=tower(l);
+    $$('.stepper button',body).forEach(function(b){b.addEventListener('click',function(){fl=Math.max(1,Math.min(8,fl+(+b.dataset.d))); $('#gmF',body).textContent=fl; $('#gmFig',body).innerHTML=tower(l)})});
+    $('#gmGo',body).addEventListener('click',function(){judge(fl)}); $('#gmNo',body).addEventListener('click',function(){judge(0)}) }
+  function judge(v){var l=LV[lv][i], c=calc(l), m=$('#gmMsg',body), why, per=v?c.need/v:0; m.hidden=false; tries++;
+    if(v)$('#gmFig',body).innerHTML=tower(l,true);
+    if(v===c.s){var p=tries===1?100:tries===2?60:30; pts+=p; hud(gMass,Math.round(pts/LV[lv].length)); m.className='verdict ok'; var e='';
+      if(lv===2)e='可建範圍 '+l.bw+' × '+l.bd+' ＝ '+fmt(l.ba)+' ㎡，建蔽率允許 '+fmt(c.fp)+' ㎡，取小的 '+fmt(c.fe)+' ㎡。淨面積 '+fmt(l.net)+' × 1.4 ＝ '+fmt(c.need)+' ㎡。';
+      else if(l.max)e='設計至容積上限，要蓋 '+fmt(l.a)+' × '+l.f+'% ＝ '+fmt(c.g)+' ㎡，不是 '+fmt(l.n)+' ㎡。';
+      if(c.s)e+=fmt(c.need)+' ÷ '+fmt(c.fe)+' ＝ '+(c.need/c.fe).toFixed(2)+'，進位成 '+c.s+' 層。';
+      else if(c.need>c.g+.5)e+='容積上限只有 '+fmt(c.g)+' ㎡，需要 '+fmt(c.need)+' ㎡，加幾層都沒用。考場上遇到這種情況，回頭檢查係數是不是抓太大。';
+      else e+='最少要 '+fmt(c.need)+' ÷ '+fmt(c.fe)+' ＝ '+(c.need/c.fe).toFixed(2)+'，進位 '+c.m+' 層，超過 '+l.cap+' 層的限制。';
+      m.innerHTML='<b>對'+(tries===1?'，一次就中':'')+'。</b>'+e;
+      $$('.stepper button,.frow button',body).forEach(function(b){b.disabled=true});
+      var n=el('button',{type:'button','class':'go'},i<LV[lv].length-1?'下一塊基地 →':'看結果'); n.style.marginTop='10px'; $('#gmMore',body).appendChild(n); n.addEventListener('click',function(){i++;show()}); return}
+    if(v===0){why=c.s?'這塊其實蓋得出來。先算最大建築面積和最大樓地板，再試試層數。':''}
+    else if(c.need>c.g+.5)why='需要 '+fmt(c.need)+' ㎡，但容積率只允許 '+fmt(c.g)+' ㎡。加層數解決不了容積率。';
+    else if(per>c.fe+.5){
+      if(lv===2&&per<=c.fp+.5)why='每層 '+fmt(per)+' ㎡ 沒超過建蔽率的 '+fmt(c.fp)+' ㎡，但退縮後可建範圍只有 '+l.bw+' × '+l.bd+' ＝ '+fmt(l.ba)+' ㎡。';
+      else if(lv===2&&v===Math.ceil(l.net/c.fe-1e-9))why='淨面積還要乘 1.4（走廊、樓梯、廁所）才是需要的樓地板。每層 '+fmt(per)+' ㎡，超過可蓋的 '+fmt(c.fe)+' ㎡。';
+      else if(l.max&&v===Math.ceil(l.n/c.fe-1e-9))why='題目要求設計至容積上限，要蓋到 '+fmt(c.g)+' ㎡，不是 '+fmt(l.n)+' ㎡。';
+      else why='每層 '+fmt(per)+' ㎡，超過可蓋的 '+fmt(c.fe)+' ㎡。層數太少。'}
+    else if(l.cap&&v>l.cap)why='超過樓層限制 '+l.cap+' 層。';
+    else why='合法，但不是最少的層數。層數越多，樓梯電梯佔的比例越高。';
+    m.className='verdict no'; m.innerHTML='<b>再試一次。</b>'+why }
+  function done(){var sc=Math.round(pts/LV[lv].length), pass=L.done(lv,sc);
+    body.innerHTML='<p class="fq">'+sc+' / 100。'+(pass?['建蔽率會算了。','容積率和樓高也會看了。','連淨面積和退縮都算進去了。'][lv]:'再蓋一輪。每塊基地都先算兩個上限，80 分過關。')+'</p><div class="frow"></div>';
+    var fr=$('.frow',body), a=el('button',{type:'button','class':pass?'ghost':'go'},'再蓋一輪'); a.addEventListener('click',function(){start(lv)}); fr.appendChild(a);
+    if(pass&&lv<L.count-1){var nx=el('button',{type:'button','class':'go'},'下一小關 →'); nx.addEventListener('click',function(){L.next()}); fr.appendChild(nx)} }
+  function start(n){lv=n; i=0; pts=0; hud(gMass,0); K.stampOff(gMass); show()}
+  L=K.levels(gMass,{key:'g:mass',names:['建蔽率','容積樓高','淨面積退縮'],pass:80,start:start});
+})();
+})();
+</script>

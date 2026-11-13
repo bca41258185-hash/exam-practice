@@ -1,0 +1,141 @@
+<style>
+.rx-card{background:var(--paper);border:2px solid var(--line);border-radius:10px;padding:22px 16px;min-height:120px;display:grid;place-items:center;text-align:center;font-family:var(--f-hand);font-size:clamp(22px,4.4vw,30px);line-height:1.4}
+.rx-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.rx-two button{border:0;border-radius:10px;padding:18px 8px;font-family:var(--f-hand);font-size:24px;min-height:66px;color:#1b2330}
+.rx-two .ok{background:#86e3b6}.rx-two .ng{background:#ffaaa0}
+.rx-lives{font:600 15px var(--f-data);letter-spacing:.2em;color:var(--bp-hi)}
+.rx-sym{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:16px;align-items:center}
+.rx-sym svg{width:100%;height:auto;background:var(--paper);border:1px solid var(--line);border-radius:8px}
+.rx-pick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rx-pick button{border:2px solid var(--line);background:var(--paper);border-radius:8px;padding:4px;min-height:0}
+.rx-pick button.right{border-color:var(--ok);background:var(--okbg)}.rx-pick button.wrong{border-color:var(--bad);background:var(--badbg)}
+.rx-pick svg{width:100%;height:auto;display:block}
+.rx-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.rx-tiles button{border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:14px 10px;min-height:62px;font-size:15.5px;line-height:1.35;position:relative}
+.rx-tiles button.hit{border-color:var(--ok);background:var(--okbg)}
+.rx-tiles button.hit::before{content:attr(data-n);position:absolute;left:8px;top:4px;font:600 12px var(--f-data);color:var(--ok)}
+.rx-tiles button.miss{animation:rxshake .3s}
+@keyframes rxshake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@media (max-width:560px){.rx-sym{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.rx-tiles button.miss{animation:none}}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, shuffle=K.shuffle, gameBox=K.gameBox;
+var play=K.view('play'); if(!play)return;
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+function best(k){return (K.st.sc&&K.st.sc[k])||0}
+function setBest(k,v){K.st.sc=K.st.sc||{}; if(v>best(k)){K.st.sc[k]=v; K.save(); return true} return false}
+
+/* ============ 合法還是違規：每題 4 秒，三條命。只用法規數字 ============ */
+(function(){
+  var box=gameBox('gLegal','GAME','合法還是違規','題','畫面會閃出一個你畫在圖上的數字。4 秒內判斷它合法還是違規，錯三次結束。依據是建築技術規則和無障礙設施設計規範；有些規定隨建築用途不同，所以題目只出「不論哪種用途都一定合法」或「一定違規」的數字。鍵盤可用 ← →。');
+  play.appendChild(box);
+  function th(label,vals,ok,unit,why){return function(){var v=pick(vals); return {t:label+' '+v+unit,ok:ok(v),y:why}}}
+  var G=[
+   th('樓梯級高',[14,15,16,21,22,24],function(v){return v<=16},' cm','法規最寬鬆的情況也只到 20 cm，最嚴格是 16 cm'),
+   th('樓梯級深',[18,20,26,28,30],function(v){return v>=26},' cm','法規最寬鬆的情況也要 21 cm，最嚴格是 26 cm'),
+   th('樓梯寬',[0.6,0.7,1.4,1.5,1.8],function(v){return v>=1.4},' m','法規最寬鬆的情況也要 0.75 m，最嚴格是 1.4 m'),
+   function(){var n=pick([3,4,5,6,8,10]); return {t:'車道坡道 1：'+n,ok:n>=6,y:'車道坡度不得超過 1：6'}},
+   function(){var n=pick([6,8,10,12,15,20]); return {t:'無障礙坡道 1：'+n,ok:n>=12,y:'無障礙坡道坡度不得大於 1：12'}},
+   function(){var p=pick([[2,5],[2.1,5.5],[2.5,5.5],[2.5,6],[3,6]]); return {t:'汽車位 '+p[0]+' × '+p[1]+' m',ok:p[0]>=2.5&&p[1]>=5.5,y:'停車位為寬 2.5 m、長 5.5 m'}},
+   function(){var p=pick([[3.5,6],[2.5,5.5],[3,6],[3.5,5],[4,6]]); return {t:'無障礙汽車位 '+p[0]+' × '+p[1]+' m',ok:p[0]>=3.5&&p[1]>=6,y:'單一無障礙停車位寬 3.5 m、長 6 m 以上'}},
+   th('雙車道寬',[4,5,5.5,6],function(v){return v>=5.5},' m','雙車道寬度 5.5 m 以上'),
+   th('單車道寬',[2.5,3,3.5,4],function(v){return v>=3.5},' m','單車道寬度 3.5 m 以上'),
+   th('三層樓屋頂的欄杆高',[0.6,0.9,1.0,1.1,1.2,1.5],function(v){return v>=1.1},' m','欄杆扶手高度不得小於 1.1 m'),
+   th('無障礙廁所迴轉空間直徑',[1.0,1.2,1.5,1.8],function(v){return v>=1.5},' m','迴轉空間直徑不得小於 1.5 m'),
+   th('車道出入口距離道路交叉口',[2,3,5,8,20],function(v){return v>=5},' m','交叉口起 5 m 以內不得設置'),
+   th('走廊寬',[0.8,0.9,1.0,2.4,2.5,3.0],function(v){return v>=2.4},' m','法規最寬鬆的情況也要 1.2 m，最嚴格是 2.4 m'),
+   th('居室到直通樓梯的步行距離',[15,25,30,70,80],function(v){return v<=30},' m','法規依用途為 30 m 或 50 m'),
+   function(){var s=pick([1000,1500,2000,3000]),b=pick([40,50,60]),p=pick([-.08,-.03,.04,.1]),fp=Math.round(s*(b/100+p)/10)*10; return {t:'基地 '+s.toLocaleString('en-US')+' ㎡、建蔽率 '+b+'%，建築面積 '+fp.toLocaleString('en-US')+' ㎡',ok:fp<=s*b/100,y:'上限是 '+(s*b/100).toLocaleString('en-US')+' ㎡'}},
+   function(){var s=pick([1000,1500,2000]),r=pick([120,160,200,240]),p=pick([-.3,-.1,.1,.25]),g=Math.round(s*(r/100+p)/10)*10; return {t:'基地 '+s.toLocaleString('en-US')+' ㎡、容積率 '+r+'%，容積樓地板 '+g.toLocaleString('en-US')+' ㎡',ok:g<=s*r/100,y:'上限是 '+(s*r/100).toLocaleString('en-US')+' ㎡'}},
+   function(){var lim=pick([3,4,5]),n=lim+pick([-1,0,1]); return {t:'題目限 '+lim+' 層，你畫了地上 '+n+' 層',ok:n<=lim,y:'樓層數不能超過限制'}},
+   function(){var req=pick([3,4,6]),d=req+pick([-2,-1,0,1,3]); return {t:'題目要求臨路退縮 '+req+' m，你退了 '+d+' m',ok:d>=req,y:'退縮只能多不能少'}},
+   function(){var req=pick([20,30,40]),d=req+pick([-6,-2,0,4]); return {t:'題目要 '+req+' 部車位，你畫了 '+d+' 部',ok:d>=req,y:'車位數只能多不能少'}}
+  ];
+  var body=el('div'); box.appendChild(body);
+  var cur,score,lives,timer=null,left,busy=false;
+  function idle(msg){clearInterval(timer);timer=null; body.innerHTML=(msg||'')+'<div class="frow"><button type="button" class="go" id="lgGo">開始</button><span class="hint">最高紀錄：'+best('legal')+' 題</span></div>'; $('#lgGo',body).addEventListener('click',start)}
+  function start(){score=0;lives=3;hud(box,0);K.stampOff(box);
+    body.innerHTML='<div class="frow" style="justify-content:space-between"><span class="rx-lives" id="lgL"></span></div><div class="ftime"><i id="lgBar"></i></div><div class="rx-card" id="lgC"></div><div class="rx-two"><button type="button" class="ng" id="lgN">違規</button><button type="button" class="ok" id="lgY">合法</button></div><p class="verdict mid" id="lgM" hidden></p>';
+    $('#lgY',body).addEventListener('click',function(){ans(true)}); $('#lgN',body).addEventListener('click',function(){ans(false)}); next()}
+  function next(){busy=false; var pm=$('#lgM',body); if(pm)pm.hidden=true; cur=pick(G)(); $('#lgC',body).textContent=cur.t; $('#lgL',body).textContent='●●●'.slice(0,lives)+'○○○'.slice(0,3-lives); left=40; $('#lgBar',body).style.width='100%';
+    clearInterval(timer); timer=setInterval(function(){left--; var b=$('#lgBar',body); if(b)b.style.width=(left/40*100)+'%'; if(left<=0)ans(null)},100)}
+  function ans(v){ if(busy||!timer)return; busy=true; clearInterval(timer); var ok=v===cur.ok, m=$('#lgM',body); m.hidden=false;
+    if(ok){score++; hud(box,score); m.className='verdict ok'; m.textContent='對。'+cur.y+'。'} else {lives--; m.className='verdict no'; m.textContent=(v===null?'太慢了。':'錯。')+'這個'+(cur.ok?'合法':'違規')+'：'+cur.y+'。'}
+    $('#lgL',body).textContent='●●●'.slice(0,lives)+'○○○'.slice(0,3-lives);
+    timer=setTimeout(function(){ if(lives<=0)end(); else next() },ok?350:1300) }
+  function end(){var rec=setBest('legal',score); K.award('g:legal',Math.min(100,score*4)); if(score>=20)K.stampOn(box,'過關');
+    idle('<p class="fq">連續判對 '+score+' 題'+(rec?'，新紀錄':'')+'。'+(score>=20?'這些數字你已經不用想了。':'20 題以上算過關。')+'</p>')}
+  document.addEventListener('keydown',function(e){ if(!document.body.contains(box)||box.closest('[hidden]')||!timer||busy)return; if(e.key==='ArrowRight'){e.preventDefault();ans(true)} else if(e.key==='ArrowLeft'){e.preventDefault();ans(false)} });
+  idle();
+})();
+
+/* ============ 圖例閃卡：看符號說名字，看名字找符號 ============ */
+(function(){
+  var box=gameBox('gSym','GAME','圖例閃卡','分','建築圖上的符號要一眼認得、隨手畫得出來。60 秒內，看符號選名稱，或看名稱選符號。連對有加成。');
+  play.appendChild(box);
+  var D=K.draw(true);
+  var S=[
+   ['單開門',function(){return D.wall(20,60,140,60,5)+D.door(60,60,40,'h',1,-1,5)}],
+   ['窗',function(){return D.wall(20,55,140,55,6)+D.win(50,55,110,55,6)}],
+   ['柱',function(){return D.col(80,55,22)+'<path d="M40 55 H120 M80 20 V90" class="lw-axis"/>'}],
+   ['折返梯',function(){return D.stair(45,12,70,86,'v',9)}],
+   ['電梯',function(){return D.elev(52,27,56,56)}],
+   ['指北針',function(){return D.north(80,60,30)}],
+   ['剖切符號',function(){return D.cut(30,70,130,70,'A',0,-1)}],
+   ['高程標記',function(){return D.level(50,70,'2FL +4500')}],
+   ['柱位軸線編號',function(){return D.grid([50,110],[],[40,34,120,100])}],
+   ['尺寸線',function(){return D.dim(30,70,130,70,'8000',-14)+'<path d="M30 80 V95 M130 80 V95" class="lw-out"/>'}],
+   ['地界線',function(){return '<path d="M15 55 H145" class="lw-site"/>'}],
+   ['退縮線',function(){return '<path d="M15 40 H145" class="lw-site"/><path d="M15 70 H145" class="lw-setb"/>'+D.dim(130,40,130,70,'4000',12)}],
+   ['入口',function(){return D.wall(20,45,140,45,5)+D.entry(80,66,0)}],
+   ['樹（平面）',function(){return D.tree(80,55,34)}],
+   ['停車格',function(){return D.park(35,25,3,30,60,'h')}],
+   ['剖到的牆（塗黑）',function(){return D.wall(30,20,30,95,10)+D.wall(30,90,140,90,10)}],
+   ['土壤填充',function(){return '<path d="M10 40 H150" class="lw-cut"/>'+D.hatch(10,42,140,50,'earth')}],
+   ['圖解比例尺',function(){return D.scale(25,50,5.5,[0,5,10,20])}],
+   ['輪椅迴轉空間',function(){return '<rect x="30" y="12" width="100" height="86" class="lw-vis"/><circle cx="80" cy="55" r="34" class="lw-hid"/><text x="80" y="58" text-anchor="middle" class="t-dim">Ø1500</text>'}],
+   ['圖名與比例',function(){return D.title(80,58,'平面圖','1/200')}]
+  ];
+  function svg(i){return '<svg viewBox="0 0 160 110" role="img" aria-label="圖例">'+S[i][1]()+'</svg>'}
+  var body=el('div'); box.appendChild(body); var score,streak,left,timer=null,lock,right,total;
+  function idle(msg){clearInterval(timer);timer=null; body.innerHTML=(msg||'')+'<div class="frow"><button type="button" class="go" id="syGo">開始 60 秒</button><span class="hint">最高紀錄：'+best('sym')+' 分</span></div>'; $('#syGo',body).addEventListener('click',start)}
+  function start(){score=0;streak=0;right=0;total=0;left=600;hud(box,0);K.stampOff(box); body.innerHTML='<div class="ftime"><i id="syBar"></i></div><div id="syQ"></div>'; next();
+    timer=setInterval(function(){left--; var b=$('#syBar',body); if(b)b.style.width=(left/6)+'%'; if(left<=0)end()},100)}
+  function next(){lock=false; var ids=shuffle(S.map(function(_,i){return i})).slice(0,3), a=ids[0], q=$('#syQ',body), rev=Math.random()<.5; ids=shuffle(ids);
+    if(!rev){q.innerHTML='<div class="rx-sym">'+svg(a)+'<div class="fopts" style="grid-template-columns:minmax(0,1fr)">'+ids.map(function(i){return '<button type="button" data-i="'+i+'">'+S[i][0]+'</button>'}).join('')+'</div></div>'}
+    else{q.innerHTML='<p class="fq">哪一個是「'+S[a][0]+'」？</p><div class="rx-pick">'+ids.map(function(i){return '<button type="button" data-i="'+i+'" aria-label="選項">'+svg(i)+'</button>'}).join('')+'</div>'}
+    $$('button[data-i]',q).forEach(function(b){b.addEventListener('click',function(){ if(lock||!timer)return; lock=true; total++; var ok=+b.dataset.i===a;
+      if(ok){streak++;right++;score+=streak>=6?3:streak>=3?2:1;b.classList.add('right')} else {streak=0;b.classList.add('wrong'); $$('button[data-i="'+a+'"]',q).forEach(function(x){x.classList.add('right')})}
+      hud(box,score); setTimeout(function(){if(timer)next()},ok?220:1000) })}) }
+  function end(){var rec=setBest('sym',score); K.award('g:sym',Math.min(100,score*4)); if(score>=25)K.stampOn(box,'過關'); idle('<p class="fq">答對 '+right+' / '+total+'，得 '+score+' 分'+(rec?'，新紀錄':'')+'。'+(score>=25?'圖例你都認得了。':'25 分以上算過關。')+'</p>')}
+  idle();
+})();
+
+/* ============ 順序連點：把流程按正確順序點完 ============ */
+(function(){
+  var box=gameBox('gOrder','GAME','順序連點','秒','考場上最怕做到一半忘記下一步。把打亂的步驟按正確順序點完，越快越好，點錯加 3 秒。');
+  play.appendChild(box);
+  var Q=[['考試八階段',['讀題','計算與計畫說明','草圖','配置與各層平面','剖面、立面','透視','標註與上色','檢查']],
+   ['量體四步驟',['最大建築面積','最大容積樓地板','需要的樓地板','層數與每層面積']],
+   ['配置四決定',['車道出入口','量體位置','人的入口','開放空間']],
+   ['平面四步驟',['柱格','服務核','走廊','房間']],
+   ['立面五步驟',['地面線與外輪廓','樓層線與柱位線','依空間開窗','入口與雨庇','陰影、材質、樹和人']],
+   ['透視五步驟',['視平線與兩個消點','最近的一條垂直邊','連到消點成盒子','樓層線','入口、樹、人']]];
+  var body=el('div'); box.appendChild(body); var L, idx, t0, pen, tick=null, seq;
+  function fmtT(){return ((Date.now()-t0)/1000+pen)}
+  function start(i){clearInterval(tick); seq=Q[i][1]; idx=0; pen=0; t0=0; hud(box,'0.0');
+    body.innerHTML='<p class="hint">'+Q[i][0]+'：共 '+seq.length+' 步，目標 '+(seq.length*1.5).toFixed(0)+' 秒內。點第一個步驟開始計時。</p><div class="rx-tiles" id="orT"></div><p class="verdict mid" id="orM" hidden></p><div class="frow"><button type="button" class="ghost" id="orR">重來</button><button type="button" class="go" id="orN" hidden>下一小關 →</button></div>';
+    shuffle(seq.map(function(s,k){return k})).forEach(function(k){var b=el('button',{type:'button','data-k':k},seq[k]); $('#orT',body).appendChild(b); b.addEventListener('click',function(){tap(b,k,i)})});
+    $('#orR',body).addEventListener('click',function(){start(i)}); $('#orN',body).addEventListener('click',function(){L.next()}) }
+  function tap(b,k,i){ if(idx>=seq.length||b.classList.contains('hit'))return; if(!t0){t0=Date.now(); tick=setInterval(function(){hud(box,fmtT().toFixed(1))},100)}
+    if(k===idx){b.classList.add('hit'); b.dataset.n=idx+1; idx++; if(idx===seq.length)fin(i)} else {pen+=3; b.classList.remove('miss'); void b.offsetWidth; b.classList.add('miss')} }
+  function fin(i){clearInterval(tick); var t=fmtT(), par=seq.length*1.5, sc=Math.max(0,Math.round(100-Math.max(0,t-par)*6)), m=$('#orM',body); hud(box,t.toFixed(1)); m.hidden=false;
+    var ok=L.done(i,sc); m.className='verdict '+(ok?'ok':'no'); m.textContent=t.toFixed(1)+' 秒'+(pen?'（含點錯加的 '+pen+' 秒）':'')+'，'+sc+' 分。'+(ok?'順序已經在手上了。':'再點一次，目標 '+par.toFixed(0)+' 秒內。'); if(ok&&i<Q.length-1)$('#orN',body).hidden=false }
+  L=K.levels(box,{key:'g:order',names:Q.map(function(q){return q[0]}),pass:70,start:start});
+})();
+})();
+</script>

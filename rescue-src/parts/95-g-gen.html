@@ -1,0 +1,25 @@
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, svgPt=K.svgPt, clamp=K.clamp, shuffle=K.shuffle,
+    gameBox=K.gameBox, view=K.view, aiReady=K.aiReady, aiMsg=K.aiMsg;
+/* ============ GAME 無限出題（單元 8） ============ */
+var gGen=gameBox('gGen','GAME','無限出題','連對','每按一次就出一塊新基地。算出四個數字，連續答對越多越好。係數一律用 1.4。');
+(function(){
+  var body=el('div'), q=null, streak=0; gGen.appendChild(body);
+  var TY=[['社區活動中心',['多功能廳',240],['教室 ×3',180],['里辦公室',80],['社區廚房',100],['圖書角',120]],['青年創業基地',['共同工作區',300],['會議室 ×4',160],['展示廳',200],['咖啡輕食',100],['管理室',60]],
+    ['樂齡日照中心',['日間活動室',240],['午休室',120],['復健室',100],['共餐廚房',120],['行政護理',80]],['兒童美術館',['常設展',320],['特展',200],['工作坊 ×2',160],['賣店',60],['行政典藏',120]],['市場暨社區客廳',['市場攤位區',400],['熟食區',160],['社區客廳',160],['管理室',60],['公廁',60]]];
+  function make(){var t=TY[Math.floor(Math.random()*TY.length)], a=[900,1200,1500,1800,2400,3000][Math.floor(Math.random()*6)], b=[40,50,60][Math.floor(Math.random()*3)], n=3+Math.floor(Math.random()*3), rooms=shuffle(t.slice(1)).slice(0,n), net=rooms.reduce(function(s,r){return s+r[1]},0), need=net*1.4, fp=a*b/100, fl=Math.ceil(need/fp-1e-9), f=[120,160,180,200,240].filter(function(x){return a*x/100>=need})[0]||240;
+    return {t:t[0],a:a,b:b,f:f,rooms:rooms,net:net,need:need,fp:fp,gfa:a*f/100,fl:fl}}
+  function show(){q=make();
+    body.innerHTML='<div class="qtext"><b>'+q.t+'</b>　基地 '+K.fmt(q.a)+' ㎡，建蔽率 '+q.b+'%，容積率 '+q.f+'%。<br>空間需求：'+q.rooms.map(function(r){return r[0]+' '+r[1]+' ㎡'}).join('、')+'。</div><div class="frow"><label for="gg1">最大建築面積 ㎡<input type="number" id="gg1" inputmode="decimal"></label><label for="gg2">最大容積樓地板 ㎡<input type="number" id="gg2" inputmode="decimal"></label><label for="gg3">需要的樓地板 ㎡<input type="number" id="gg3" inputmode="decimal"></label><label for="gg4">最少幾層<input type="number" id="gg4" inputmode="numeric"></label></div><div class="frow"><button type="button" class="go" id="ggGo">對答案</button><button type="button" class="ghost" id="ggNew">換一題</button></div><p class="verdict mid" id="ggMsg" hidden></p>';
+    $('#ggGo',body).addEventListener('click',function(){ if(q.done)show(); else check() }); $('#ggNew',body).addEventListener('click',function(){streak=0;hud(gGen,0);show()}) }
+  function check(){var A=[[q.fp,1],[q.gfa,1],[q.need,q.need*.04],[q.fl,0]], ok=0; A.forEach(function(x,k){var i=$('#gg'+(k+1),body), v=parseFloat(i.value), r=isFinite(v)&&Math.abs(v-x[0])<=x[1]+1e-9; if(r)ok++; i.style.borderColor=r?'var(--ok)':'var(--bad)'; i.style.background=r?'var(--okbg)':'var(--badbg)'});
+    var m=$('#ggMsg',body); m.hidden=false;
+    if(ok===4){streak++; hud(gGen,streak); K.award('g:gen',Math.min(100,streak*20)); if(streak>=3)K.stampOn(gGen,'連勝'); m.className='verdict ok'; m.innerHTML='<b>四個都對，連對 '+streak+' 題。</b>'; q.done=true; $('#ggGo',body).textContent='下一題 →'; $$('input',body).forEach(function(x){x.disabled=true}) }
+    else{streak=0; hud(gGen,0); K.stampOff(gGen); m.className='verdict no'; m.innerHTML='<b>對了 '+ok+' / 4。</b>答案：'+K.fmt(q.a)+' × '+q.b+'% ＝ '+K.fmt(q.fp)+'；'+K.fmt(q.a)+' × '+q.f+'% ＝ '+K.fmt(q.gfa)+'；淨面積 '+K.fmt(q.net)+' × 1.4 ＝ '+K.fmt(q.need)+'；'+K.fmt(q.need)+' ÷ '+K.fmt(q.fp)+' 進位 ＝ '+q.fl+' 層。'} }
+  show();
+})();
+})();
+</script>

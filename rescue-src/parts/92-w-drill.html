@@ -1,0 +1,178 @@
+<style>
+#drill .drnotes{font-size:12px}
+#drill #drBrief{margin-bottom:6px}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels||!K.draw)return;
+var $=K.$, $$=K.$$, el=K.el, gradeNum=K.gradeNum, mmss=K.mmss;
+/* ---------- M8 實戰：三道題，每道四關計時 ---------- */
+(function(){
+  var box=$('#drill'); if(!box)return;
+  /* 以公尺作圖的小工具 */
+  function M(S,ox,oy){var o={S:S,X:function(x){return ox+x*S},Y:function(y){return oy+y*S}};
+    o.r=function(x,y,w,h,cls,extra){return '<rect x="'+o.X(x)+'" y="'+o.Y(y)+'" width="'+w*S+'" height="'+h*S+'" class="'+cls+'"'+(extra||'')+'/>'};
+    o.t=function(x,y,txt,cls,rot){var X=o.X(x),Y=o.Y(y); return '<text x="'+X+'" y="'+Y+'" text-anchor="middle" class="'+(cls||'t-dim')+'"'+(rot?' transform="rotate('+rot+' '+X+' '+Y+')"':'')+'>'+txt+'</text>'};
+    return o}
+  function notes(x,y,lines){return '<g class="drnotes">'+lines.map(function(t,i){return '<text x="'+x+'" y="'+(y+i*19)+'" class="t-dim" style="font-size:11px">'+t+'</text>'}).join('')+'</g>'}
+  function arrow(x1,y1,x2,y2){var a=Math.atan2(y2-y1,x2-x1), h=7; return '<path d="M'+x1+' '+y1+' L'+x2+' '+y2+'" class="lw-vis"/><path d="M'+x2+' '+y2+' L'+(x2-h*Math.cos(a-.4))+' '+(y2-h*Math.sin(a-.4))+' L'+(x2-h*Math.cos(a+.4))+' '+(y2-h*Math.sin(a+.4))+' Z" class="poche"/>'}
+
+  /* 第 1 題：社區托育暨親子館 30 × 40 m */
+  function plan1(){var D=K.draw(true), m=M(7,110,50), s='<svg viewBox="0 0 720 460" role="img" aria-label="社區托育暨親子館參考配置圖">';
+    s+=D.road(30,330,410,84,'12 m 道路')+D.road(320,6,42,324,'6 m 巷道',true);
+    s+=D.hatch(30,50,66,280,'grass')+'<text x="63" y="190" text-anchor="middle" class="t-dim" transform="rotate(-90 63 190)">國小操場</text>';
+    [[115,180],[186,251],[257,318]].forEach(function(h){s+='<rect x="'+h[0]+'" y="4" width="'+(h[1]-h[0])+'" height="20" class="lw-vis"/>'}); s+='<text x="215" y="18" text-anchor="middle" class="t-dim">3 層透天住宅</text>';
+    /* 退縮帶與步道 */
+    s+=D.hatch(m.X(0),m.Y(37),210,21,'tile')+D.hatch(m.X(27),m.Y(0),21,259,'tile')+D.hatch(m.X(24.5),m.Y(12),17.5,175,'tile');
+    /* 車道與停車 */
+    s+=m.r(4,6.5,26,5.5,'f-line')+D.hatch(m.X(4),m.Y(6.5),182,38.5,'road')+'<path d="M'+m.X(4)+' '+m.Y(9.25)+' H'+m.X(30)+'" class="lw-axis"/>';
+    s+=D.park(m.X(9),m.Y(1),5,17.5,38.5,'h')+m.r(21.5,.5,3.5,6,'lw-thin')+'<path d="M'+m.X(21.5)+' '+m.Y(.5)+' L'+m.X(25)+' '+m.Y(6.5)+'" class="lw-thin"/>'+m.t(23.25,4.4,'無障','t-area');
+    s+=D.hatch(m.X(0),m.Y(0),63,45,'grass')+D.tree(m.X(2.5),m.Y(3),11)+D.tree(m.X(6.5),m.Y(3.5),11);
+    /* 接送臨停 */
+    s+=m.r(27,14,2.5,12,'f-line')+'<path d="M'+m.X(27)+' '+m.Y(14)+' v'+12*7+'" class="lw-vis"/>'+m.t(28.6,20,'接送臨停','t-area',-90);
+    /* 遊戲庭 */
+    s+=D.hatch(m.X(1),m.Y(32),164.5,35,'grass')+'<path d="M'+m.X(1)+' '+m.Y(32)+' V'+m.Y(36.6)+' H'+m.X(24.3)+' V'+m.Y(32)+'" class="lw-hid"/>'+m.t(11,34.6,'戶外遊戲庭 約 120 ㎡（圍籬）','t-area')+D.tree(m.X(21.5),m.Y(34.5),10);
+    /* 建築 */
+    s+=m.r(1,13,23.5,19,'f-soft')+'<path d="M'+m.X(1)+' '+m.Y(13)+' h164.5 v133 h-164.5 z" class="lw-out"/>';
+    s+=m.t(12.75,21.5,'托育暨親子館','t-room')+m.t(12.75,23.6,'RC 2F　23.5 × 19 m ≈ 450 ㎡','t-area')+m.t(12.75,26,'1F 托嬰室 ×3、社區廚房、門廳','t-area')+m.t(12.75,28,'2F 遊戲室、親職教室 ×2、行政','t-area');
+    s+=D.entry(m.X(24.5)+7,m.Y(17),-90)+'<text x="'+(m.X(24.5)-4)+'" y="'+(m.Y(17)+3)+'" text-anchor="end" class="t-dim">主入口</text>';
+    s+=D.entry(m.X(25.75),m.Y(38.5),0)+'<text x="'+m.X(25.75)+'" y="'+(m.Y(40)+12)+'" text-anchor="middle" class="t-dim">人行入口</text>';
+    s+=arrow(m.X(30)+38,m.Y(8),m.X(28),m.Y(8))+arrow(m.X(28),m.Y(10.5),m.X(30)+38,m.Y(10.5))+'<text x="'+(m.X(30)+44)+'" y="'+(m.Y(9.25)+3)+'" class="t-dim">車道出入口</text>';
+    s+=D.tree(m.X(4),m.Y(38.5),8)+D.tree(m.X(12),m.Y(38.5),8)+D.tree(m.X(20),m.Y(38.5),8);
+    /* 地界、退縮、尺寸 */
+    s+='<path d="M'+m.X(0)+' '+m.Y(0)+' h210 v280 h-210 z" class="lw-site"/><path d="M'+m.X(27)+' '+m.Y(0)+' V'+m.Y(37)+' H'+m.X(0)+'" class="lw-setb"/>';
+    s+=D.dim(m.X(0),m.Y(0),m.X(30),m.Y(0),'30000',-12)+D.dim(m.X(0),m.Y(0),m.X(0),m.Y(40),'40000',10);
+    s+=D.dim(m.X(16),m.Y(37),m.X(16),m.Y(40),'3000',0)+D.dim(m.X(27),m.Y(30),m.X(30),m.Y(30),'3000',0);
+    s+=D.north(670,52,13)+notes(450,70,['① 車從東側巷道北段進出，離路口最遠','② 6 部車（含無障礙 1 部）排在北側','③ 接送臨停緊貼主入口，家長不在 12 m 路上停車','④ 行人走東側步道進門，不穿越車道','⑤ 遊戲庭朝南、有圍籬，孩子不碰到車','⑥ 建築靠北靠西，陽光面留給庭院']);
+    s+=D.scale(450,380,7,[0,5,10,20])+D.title(560,430,'參考配置圖','1/300');
+    return s+'</svg>'}
+
+  /* 第 2 題：市場改建暨社區客廳 40 × 30 m 轉角 */
+  function plan2(){var D=K.draw(true), m=M(6.5,70,52), s='<svg viewBox="0 0 720 440" role="img" aria-label="市場改建暨社區客廳參考配置圖">';
+    s+=D.road(10,m.Y(30),m.X(50)-10+20,97.5,'15 m 道路（主要道路）')+D.road(m.X(40),6,65,m.Y(30)-6,'10 m 道路',true);
+    s+='<rect x="18" y="'+m.Y(1)+'" width="40" height="'+28*6.5+'" class="lw-vis"/><text x="38" y="'+m.Y(15)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 38 '+m.Y(15)+')">4 層住宅</text>';
+    [[72,140],[146,214],[220,288],[294,328]].forEach(function(h){s+='<rect x="'+h[0]+'" y="4" width="'+(h[1]-h[0])+'" height="20" class="lw-vis"/>'}); s+='<text x="180" y="18" text-anchor="middle" class="t-dim">3 層透天店鋪</text>';
+    /* 退縮帶、轉角廣場 */
+    s+=D.hatch(m.X(0),m.Y(26),260,26,'tile')+D.hatch(m.X(36),m.Y(0),26,169,'tile');
+    s+=D.hatch(m.X(32),m.Y(22),52,52,'tile')+D.tree(m.X(37.8),m.Y(24.8),9)+m.t(35.6,29.3,'轉角廣場','t-area');
+    /* 車道坡道、裝卸 */
+    s+=m.r(14,.3,22,3.4,'f-line')+D.hatch(m.X(14),m.Y(.3),143,22,'road');
+    for(var k=0;k<6;k++)s+='<path d="M'+m.X(32-k*3.2)+' '+m.Y(.8)+' l-6 '+(1.2*6.5)+' l6 '+(1.2*6.5)+'" class="lw-thin"/>';
+    s+=m.t(21,2.4,'車道往 B1','t-area');
+    s+=m.r(32,6,3.5,7,'lw-thin')+m.r(32,13,3.5,7,'lw-thin')+m.r(32,6,3.5,14,'f-line',' style="opacity:.6"')+m.t(34,13,'裝卸車位 ×2','t-area',-90);
+    /* 建築 */
+    s+=m.r(0,4,32,22,'f-soft')+'<path d="M'+m.X(0)+' '+m.Y(4)+' h208 v143 h-208 z" class="lw-out"/><path d="M'+m.X(24)+' '+m.Y(4)+' V'+m.Y(26)+'" class="lw-vis"/>';
+    s+=m.r(28,20,4,6,'lw-vis')+m.t(30,23.4,'梯廳','t-area');
+    s+=m.t(12,12.5,'市場暨社區客廳','t-room')+m.t(12,14.6,'RC 2F','t-area')+m.t(12,16.6,'1F 32 × 22 m ＝ 704 ㎡','t-area')+m.t(12,18.6,'2F 24 × 22 m','t-area')+m.t(28,12,'1F','t-room');
+    s+=D.entry(m.X(8),m.Y(26)+7,0)+D.entry(m.X(18),m.Y(26)+7,0)+m.t(13,28.8,'市場入口','t-dim');
+    s+=D.entry(m.X(32)+7,m.Y(23),-90)+'<text x="'+(m.X(40)+6)+'" y="'+(m.Y(30)+30)+'" class="t-dim">社區客廳夜間入口（梯廳面向廣場）</text><path d="M'+(m.X(40)+4)+' '+(m.Y(30)+26)+' L'+(m.X(33)+4)+' '+(m.Y(23)+4)+'" class="lw-thin"/>';
+    s+=arrow(m.X(40)+40,m.Y(1.2),m.X(37),m.Y(1.2))+arrow(m.X(37),m.Y(2.8),m.X(40)+40,m.Y(2.8))+arrow(m.X(40)+40,m.Y(9),m.X(36.2),m.Y(9));
+    s+=D.tree(m.X(3),m.Y(28),8)+D.tree(m.X(29),m.Y(28),8);
+    s+='<path d="M'+m.X(0)+' '+m.Y(0)+' h260 v195 h-260 z" class="lw-site"/><path d="M'+m.X(36)+' '+m.Y(0)+' V'+m.Y(22)+' M'+m.X(32)+' '+m.Y(26)+' H'+m.X(0)+' M'+m.X(32)+' '+m.Y(22)+' H'+m.X(36)+' M'+m.X(32)+' '+m.Y(22)+' V'+m.Y(26)+'" class="lw-setb"/>';
+    s+=D.dim(m.X(0),m.Y(0),m.X(40),m.Y(0),'40000',-10)+D.dim(m.X(0),m.Y(0),m.X(0),m.Y(30),'30000',8);
+    s+=D.dim(m.X(25),m.Y(26),m.X(25),m.Y(30),'4000',0)+D.dim(m.X(36),m.Y(21),m.X(40),m.Y(21),'4000',0)+D.dim(m.X(32),m.Y(30),m.X(40),m.Y(30),'8000',10);
+    s+=D.north(680,52,13)+notes(470,80,['① 車道（1：6 往 B1，汽車 12 部）和','　 裝卸都在東側道路北段，離路口 10 m 以上','② 轉角廣場只給人走，車不穿越','③ 社區客廳梯廳面向廣場，','　 晚上市場關門也能獨立進出','④ 市場主入口面向南側主要道路','⑤ 二樓縮在西側，轉角留出天空']);
+    s+=D.scale(470,300,6.5,[0,5,10,20])+D.title(575,350,'參考配置圖','1/300');
+    return s+'</svg>'}
+
+  /* 第 3 題：樂齡日照暨青年住宅 24 × 60 m 狹長基地 */
+  function plan3(){var D=K.draw(true), S=6, m=M(S,140,50), s='<svg viewBox="0 0 720 520" role="img" aria-label="樂齡日照暨青年住宅參考配置圖">';
+    s+=D.road(60,m.Y(60),300,54,'10 m 道路');
+    s+=D.hatch(60,4,300,m.Y(0)-14,'grass')+D.tree(80,22,9)+D.tree(330,20,9)+'<text x="210" y="20" text-anchor="middle" class="t-dim">河濱公園</text>';
+    s+='<rect x="72" y="'+m.Y(2)+'" width="52" height="'+54*S+'" class="lw-vis"/><text x="98" y="'+m.Y(30)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 98 '+m.Y(30)+')">5 層住宅</text>';
+    s+='<rect x="'+(m.X(24)+10)+'" y="'+m.Y(2)+'" width="52" height="'+54*S+'" class="lw-vis"/><text x="'+(m.X(24)+36)+'" y="'+m.Y(30)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 '+(m.X(24)+36)+' '+m.Y(30)+')">5 層住宅</text>';
+    /* 退縮帶、通道、中庭 */
+    s+=D.hatch(m.X(0),m.Y(0),24*S,3*S,'grass')+m.r(0,56,24,4,'f-line')+D.hatch(m.X(0),m.Y(56),24*S,4*S,'tile');
+    s+=D.hatch(m.X(20),m.Y(3),4*S,53*S,'tile')+m.t(22.4,30,'通道 4 m','t-area',-90);
+    s+=D.hatch(m.X(0),m.Y(22),20*S,14*S,'grass');
+    s+='<circle cx="'+m.X(7)+'" cy="'+m.Y(29)+'" r="'+5*S+'" class="lw-hid"/>'+D.tree(m.X(7),m.Y(29),4*S)+m.t(16,28.6,'老茄苳','t-area')+m.t(16,30.6,'保留','t-area');
+    /* 建築 */
+    s+=m.r(0,36,20,20,'f-soft')+'<path d="M'+m.X(0)+' '+m.Y(36)+' h'+20*S+' v'+20*S+' h'+(-20*S)+' z" class="lw-out"/>'+m.t(10,44.5,'樂齡日照','t-room')+m.t(10,46.8,'RC 2F','t-area')+m.t(10,48.8,'20 × 20 m ＝ 400 ㎡','t-area');
+    s+=m.r(4,3,16,19,'f-soft')+'<path d="M'+m.X(4)+' '+m.Y(3)+' h'+16*S+' v'+19*S+' h'+(-16*S)+' z" class="lw-out"/>'+m.t(12,11,'青年住宅','t-room')+m.t(12,13.3,'RC 4F','t-area')+m.t(12,15.3,'16 × 19 m','t-area')+m.t(12,17.3,'＝ 304 ㎡','t-area');
+    for(var k=0;k<6;k++)s+=m.r(.4,4.5+k*2.6,2,.8,'lw-thin'); s+=m.t(3.4,12.5,'自行車 20','t-area',-90);
+    s+=m.r(20.3,40,3.4,8,'lw-hid')+m.t(22.4,44,'接送停靠','t-area',-90);
+    s+=D.entry(m.X(20)+6,m.Y(44),-90)+D.entry(m.X(20)+6,m.Y(12),-90)+D.entry(m.X(14),m.Y(22)+7,0)+D.entry(m.X(10),m.Y(36)-7,180);
+    s+=arrow(m.X(22),m.Y(60)+30,m.X(22),m.Y(49));
+    s+=D.tree(m.X(4),m.Y(58),7)+D.tree(m.X(12),m.Y(58),7);
+    s+='<path d="M'+m.X(0)+' '+m.Y(0)+' h'+24*S+' v'+60*S+' h'+(-24*S)+' z" class="lw-site"/><path d="M'+m.X(0)+' '+m.Y(3)+' H'+m.X(24)+' M'+m.X(0)+' '+m.Y(56)+' H'+m.X(24)+'" class="lw-setb"/>';
+    s+=D.dim(m.X(0),m.Y(0),m.X(24),m.Y(0),'24000',-10)+D.dim(m.X(0),m.Y(0),m.X(0),m.Y(60),'60000',10)+D.dim(m.X(17),m.Y(56),m.X(17),m.Y(60),'4000',0)+D.dim(m.X(22),m.Y(0),m.X(22),m.Y(3),'3000',0);
+    s+=D.north(680,52,13)+notes(390,90,['① 老樹把基地切成南北兩塊：','　 南棟日照 2 層，北棟住宅 4 層','② 接送車從東側通道進來，停在日照門口，','　 上方二樓出挑遮雨','③ 住戶走同一條通道到北棟，','　 自己的門和樓梯電梯','④ 老樹下是兩棟共用的中庭','⑤ 老茄苳樹冠 ø10 m 範圍內不蓋、不挖','⑥ 建築面積 400 ＋ 304 ＝ 704 ≤ 720 ㎡']);
+    s+=D.scale(390,370,S,[0,5,10,20])+D.title(530,440,'參考配置圖','1/300');
+    return s+'</svg>'}
+
+  var PB=[
+  {name:'社區托育暨親子館', plan:plan1, scale:'30 m 畫 10 cm、40 m 畫約 13 cm', floorsQ:'你決定蓋幾層',
+   brief:'某社區年輕家庭增加，擬興建一處<b>讓家長安心托育、鄰里互相認識</b>的親子據點。<br><b>基地</b>　矩形，東西向 30 m、南北向 40 m，面積 1,200 ㎡，平坦。南側臨 12 m 道路，東側臨 6 m 巷道，西側緊鄰國小操場，北側為 3 層透天住宅。<br><b>法規</b>　建蔽率 60%、容積率 180%。臨道路側退縮 3 m。地上不得超過 3 層。<br><b>空間需求</b>　托嬰室 3 間，每間 60 ㎡；親子遊戲室 200 ㎡；親職教室 2 間，每間 60 ㎡；社區廚房 80 ㎡；行政辦公 60 ㎡。須設戶外遊戲庭。<b>托嬰室須設於地面層。</b><br><b>停車</b>　於法定空地設汽車位 6 部（含無障礙 1 部），須有家長接送臨停空間。<br><b>圖面</b>　配置圖 1/300、各層平面 1/200、剖面 1/200、立面、透視、計畫說明。',
+   hard:['建蔽率 ≤ 60%','容積率 ≤ 180%','南側、東側各退縮 3 m','地上 ≤ 3 層','托嬰室在地面層（3 間共 180 ㎡ 都要在一樓）','要有戶外遊戲庭','汽車 6 部含無障礙 1 部，設在地面的法定空地（不用挖地下室）','家長接送臨停空間'],
+   issues:'家長安心托育（安全、看得到孩子、接送不危險）；鄰里互相認識（廚房、遊戲室對社區開放）。',
+   ans:[720,2160,640,896,2], tol:[1,1,1,70,0],
+   calc:[['最大建築面積','1,200 × 60%','720 ㎡'],['最大容積樓地板','1,200 × 180%','2,160 ㎡'],['淨面積','60×3＋200＋60×2＋80＋60','640 ㎡'],['需要的樓地板','640 × 1.4','約 900 ㎡'],['層數','900 ÷ 2 層','每層 450 ㎡']],
+   calcTxt:'蓋 2 層、每層約 450 到 480 ㎡ 最合理。每層 450 遠小於上限 720，空地足夠放遊戲庭和 6 部車。蓋 3 層雖然不違規，但每層只剩 300 ㎡，而托嬰室 180 ㎡ 必須在一樓，一樓會放不下門廳和遊戲室；而且幼兒空間越低越好。蓋 1 層需要 900 ㎡，超過建蔽率上限。',
+   stack:[['1F','托嬰室 ×3、社區廚房、門廳','260 ㎡'],['2F','親子遊戲室、親職教室 ×2、行政','380 ㎡']],
+   stackTxt:'托嬰室題目指定在一樓。社區廚房放一樓臨街，對鄰里開放。如果你把親子遊戲室放一樓、廚房放二樓，也合理，重點是托嬰室三間都在一樓，而且兩層面積大致平衡（二樓可以用露台調整）。',
+   moves:['把接送臨停放在東側巷道，讓家長不用在 12 m 主要道路上停車，孩子下車不必過馬路。','把托嬰室放在一樓南側面向遊戲庭，讓幼兒直接走到戶外，行政辦公室看得到庭院。','把社區廚房放在一樓東南角臨街，讓路過的鄰居看得到裡面的活動。'],
+   rubric:['建築面積沒有超過 720 ㎡，並寫出層數','南側、東側都退了 3 m','車道或停車從 6 m 巷道進出，不在 12 m 道路的路口旁','6 部車和接送臨停都畫出來了','行人主入口和車的出入口是分開的','戶外遊戲庭是完整的一塊，不用穿越車道就能到','有指北針、道路名稱與寬度、鄰地標示','有入口 ▲ 符號、退縮尺寸'],
+   sol:'建築 1 棟 2 層，約 23.5 × 19 m，每層約 450 ㎡，靠北靠西。車從東側 6 m 巷道北段進出，6 部車（含無障礙 1 部）沿北側排列；接送臨停設在東側退縮帶，緊貼建築東側的主入口；行人從南側道路沿東側步道進門；戶外遊戲庭在建築南側約 120 ㎡，有圍籬，不用穿越車道。1F 托嬰室 ×3、社區廚房、門廳；2F 親子遊戲室、親職教室 ×2、行政。'},
+  {name:'市場改建暨社區客廳', plan:plan2, scale:'40 m 畫約 13 cm、30 m 畫 10 cm', floorsQ:'你決定蓋幾層',
+   brief:'某舊市區的公有零售市場老舊，卸貨車常擋住路口。市府擬拆除改建，<b>讓市場重新成為鄰里每天經過、願意停留的社區客廳</b>。<br><b>基地</b>　轉角基地，東西向 40 m、南北向 30 m，面積 1,200 ㎡，平坦。南側臨 15 m 道路（主要道路），東側臨 10 m 道路，西側為 4 層住宅，北側為 3 層透天店鋪。<br><b>法規</b>　建蔽率 60%、容積率 200%。臨道路側退縮 4 m。<b>東南轉角須留設 8 m × 8 m 的開放廣場。</b>地上不得超過 3 層。<br><b>空間需求</b>　生鮮攤位區 360 ㎡（36 攤）；熟食區 150 ㎡；社區客廳 160 ㎡，<b>須可於夜間獨立開放</b>；共享廚房 60 ㎡；市場管理與冷藏 70 ㎡。<br><b>停車</b>　地下層設汽車位 12 部（含無障礙 1 部）；地面設裝卸車位 2 部，卸貨動線不得穿越轉角廣場。<br><b>圖面</b>　配置圖 1/300、各層平面 1/200、剖面 1/200、立面、透視、計畫說明。',
+   hard:['建蔽率 ≤ 60%（建築面積 ≤ 720 ㎡）','容積率 ≤ 200%（總樓地板 ≤ 2,400 ㎡）','南側、東側各退縮 4 m','東南角留 8 × 8 m 開放廣場','地上 ≤ 3 層','社區客廳夜間獨立開放（自己的出入口、樓梯電梯）','地下汽車 12 部含無障礙 1 部，要有車道','地面裝卸車位 2 部，卸貨不穿越轉角廣場'],
+   issues:'市場成為社區客廳（每天經過、願意停留：入口、廣場、看得到人氣）；改善卸貨擋路口（車行出入口離開轉角）。',
+   ans:[720,2400,800,1120,2], tol:[1,1,1,80,0],
+   calc:[['最大建築面積','1,200 × 60%','720 ㎡'],['最大容積樓地板','1,200 × 200%','2,400 ㎡'],['淨面積','360＋150＋160＋60＋70','800 ㎡'],['需要的樓地板','800 × 1.4','1,120 ㎡'],['層數','1,120 ÷ 720 ＝ 1.56','進位 2 層']],
+   calcTxt:'蓋 2 層：一樓約 700 ㎡ 放市場，二樓約 500 ㎡。蓋 1 層需要 1,120 ㎡，超過建蔽率。蓋 3 層不違規，但熟食和社區客廳被拆到三樓，人就不會上去了。注意轉角廣場和退縮帶會吃掉可蓋的範圍：退縮後是 36 × 26 m，再扣掉廣場，仍然大於 720 ㎡，所以這題由建蔽率決定。',
+   stack:[['1F','生鮮攤位區、市場管理與冷藏、社區客廳梯廳','約 430 ㎡'],['2F','熟食區、社區客廳、共享廚房','370 ㎡']],
+   stackTxt:'生鮮要卸貨、有水和氣味，只能放一樓。社區客廳可以在二樓，只要一樓有自己的門、樓梯和電梯，晚上市場關門照樣能上去。把社區客廳放一樓轉角、熟食放二樓也合理，重點是夜間動線不穿過市場。',
+   moves:['把車道和裝卸車位放在東側道路北段，讓貨車不停在路口，也不穿過轉角廣場。','把社區客廳的梯廳放在轉角廣場旁，讓晚上市場關門後，鄰居照樣從廣場進出。','把熟食區放在二樓靠轉角的一側，開大窗對著廣場，讓路過的人看得到人氣。'],
+   rubric:['建築面積沒有超過 720 ㎡，並寫出層數','南側、東側都退了 4 m','東南角留了 8 × 8 m 廣場，沒有車穿越','車道和裝卸從東側道路北段進出，離路口遠','地下停車的車道和 2 部裝卸車位都畫出來了','社區客廳有自己的入口和樓梯電梯','有指北針、道路名稱與寬度、鄰地標示','有入口 ▲ 符號、退縮尺寸'],
+   sol:'建築 1 棟 2 層：1F 約 32 × 22 m ＝ 704 ㎡，2F 縮在西側約 24 × 22 m。東南角 8 × 8 m 轉角廣場只給人走。車道（1：6 往 B1，汽車 12 部）和 2 部裝卸車位都從東側 10 m 道路北段進出，不穿越廣場。1F 生鮮攤位區、市場管理與冷藏、社區客廳的獨立梯廳（面向廣場）；2F 熟食區、社區客廳、共享廚房。市場主入口面向南側 15 m 道路。'},
+  {name:'樂齡日照暨青年住宅', plan:plan3, scale:'24 m 畫 8 cm、60 m 畫 20 cm', floorsQ:'最少需要幾層',
+   brief:'某老社區長輩多、年輕人留不住，市府擬在一塊狹長的公有地上興建複合設施，<b>讓長輩白天有人照顧、年輕人住得起，兩代在日常中互相照應</b>。<br><b>基地</b>　狹長矩形，東西向 24 m、南北向 60 m，面積 1,440 ㎡，平坦。只有南側臨 10 m 道路；北側為河濱公園，東、西兩側為 5 層住宅。基地中段偏西有一棵老茄苳，樹冠直徑約 10 m，<b>須保留，樹冠範圍內不得建築或開挖。</b><br><b>法規</b>　建蔽率 50%、容積率 225%。臨道路側退縮 4 m，北側退縮 3 m。地上不得超過 5 層。<br><b>空間需求</b>　樂齡日照：日間活動室 200 ㎡、午休室 80 ㎡、復健室 100 ㎡、共餐廚房與餐廳 140 ㎡、護理與行政 60 ㎡，<b>須設於 1、2 樓</b>。青年住宅 24 戶，每戶 30 ㎡；住戶共享客廳 80 ㎡。<b>日照與住宅須有各自的出入口與樓梯電梯。</b><br><b>停車</b>　本案不設汽車停車位，但須設日照接送車停靠處 1 處（有遮雨）及自行車位 20 部。<br><b>圖面</b>　配置圖 1/300、各層平面 1/200、剖面 1/200、立面、透視、計畫說明。',
+   hard:['建蔽率 ≤ 50%（建築面積 ≤ 720 ㎡）','容積率 ≤ 225%（總樓地板 ≤ 3,240 ㎡）','南側退縮 4 m、北側退縮 3 m','地上 ≤ 5 層','老茄苳樹冠範圍內不蓋、不挖','日照在 1、2 樓','日照與住宅各有出入口與樓梯電梯','接送車停靠處（有遮雨）、自行車 20 部'],
+   issues:'長輩白天有人照顧（安全、無障礙、接送方便）；年輕人住得起（小坪數、共享客廳）；兩代互相照應（共用的中庭、看得到彼此）。',
+   ans:[720,3240,1380,1932,3], tol:[1,1,1,100,0],
+   calc:[['最大建築面積','1,440 × 50%','720 ㎡'],['最大容積樓地板','1,440 × 225%','3,240 ㎡'],['淨面積','200＋80＋100＋140＋60＋30×24＋80','1,380 ㎡'],['需要的樓地板','1,380 × 1.4','1,932 ㎡'],['最少層數','1,932 ÷ 720 ＝ 2.68','進位 3 層']],
+   calcTxt:'數字上最少 3 層。但老樹把基地切成南北兩塊，一棟方盒子放不下。參考解是南棟 2 層放日照（每層 400 ㎡），北棟 4 層放住宅（每層約 300 ㎡）。兩棟建築面積 400 ＋ 304 ＝ 704 ㎡，沒超過 720；總樓地板 800 ＋ 1,216 ＝ 2,016 ㎡，沒超過 3,240。',
+   stack:[['南棟 1F','共餐廚房與餐廳、復健室、接待','240 ㎡'],['南棟 2F','日間活動室、午休室、護理與行政','340 ㎡'],['北棟 1F','共享客廳、住宅門廳、自行車','80 ㎡'],['北棟 2F–4F','青年住宅每層 8 戶 × 30 ㎡','240 ㎡ × 3']],
+   stackTxt:'日照放臨路的南棟，接送車不用開進基地深處；活動室、午休室和護理站同一層。住宅放北棟，面向河濱公園，安靜。共享客廳放北棟一樓、面向老樹，長輩和年輕人都會經過。',
+   moves:['把接送車停靠處放在南棟東側的通道上，上方用二樓出挑遮雨，讓長輩下車直接進門。','把老茄苳下做成兩棟之間的中庭，讓日照的長輩和住宅的年輕人都看得到、走得到。','把住宅入口放在通道底端的北棟，讓住戶和長輩各走各的門，又會在中庭碰面。'],
+   rubric:['建築面積合計沒有超過 720 ㎡，並寫出每棟層數','南側退了 4 m、北側退了 3 m','老茄苳樹冠範圍內沒有建築，也沒有地下室','日照在 1、2 樓，接送停靠處有遮雨','日照和住宅各有自己的入口，住戶不穿過日照','自行車位畫出來了','有指北針、道路名稱與寬度、鄰地標示','有入口 ▲ 符號、退縮尺寸'],
+   sol:'老樹把基地切成南北兩塊。南棟 20 × 20 m、2 層，放樂齡日照（1F 共餐廚房與餐廳、復健室、接待；2F 日間活動室、午休室、護理與行政）。北棟 16 × 19 m、4 層，放青年住宅（1F 共享客廳與住宅門廳，2F 到 4F 每層 8 戶）。東側留 4 m 通道，接送車進來停在南棟門口，上方二樓出挑遮雨；住戶走同一條通道到北棟自己的入口。老茄苳下是兩棟共用的中庭，樹冠範圍內不蓋不挖。建築面積 704 ㎡ ≤ 720，總樓地板約 2,016 ㎡ ≤ 3,240。'}
+  ];
+  var LB=['最大建築面積 ㎡','最大容積樓地板 ㎡','淨面積加總 ㎡','需要的樓地板 ㎡'];
+  function plain(h){return h.replace(/<br>/g,'\n').replace(/<[^>]+>/g,'')}
+  function table(rows,head){return '<div class="tw"><table>'+(head?'<tr>'+head.map(function(t,i){return '<th'+(i===head.length-1?' class="n"':'')+'>'+t+'</th>'}).join('')+'</tr>':'')+rows.map(function(r){return '<tr><td>'+r[0]+'</td><td'+(head?'':' class="fig"')+'>'+r[1]+'</td><td class="n">'+r[2]+'</td></tr>'}).join('')+'</table></div>'}
+  var cur=0, i=0, left=0, timer=null, clock=$('#drClock'), L;
+  function steps(){var p=PB[cur]; return [
+    {t:'讀題',m:5,task:'用四種標記讀上面的題目，在紙上列出硬條件清單，並圈出議題。'},
+    {t:'量體計算',m:4,task:'算出下面五個數字，填進去。係數用 1.4。'},
+    {t:'分層與對策',m:4,task:'在紙上寫：每一層放哪些空間。再用「把＿＿放在＿＿，讓＿＿」寫兩條對策。'},
+    {t:'配置草圖',m:8,task:'在紙上畫配置草圖，比例 1/300（'+p.scale+'）。依序決定：車從哪進、量體放哪、人從哪進、空地怎麼用。'}]}
+  function body(k){var p=PB[cur];
+    if(k===1)return '<div class="frow">'+p.ans.map(function(a,j){return '<label for="dq'+(j+1)+'">'+(j<4?LB[j]:p.floorsQ)+'<input type="number" id="dq'+(j+1)+'" data-ans="'+a+'" data-tol="'+p.tol[j]+'" inputmode="'+(j<4?'decimal':'numeric')+'"></label>'}).join('')+'</div>';
+    return ''}
+  function answer(k){var p=PB[cur];
+    if(k===0)return '<p><b>參考的硬條件清單（'+p.hard.length+' 條）：</b></p><ul class="t">'+p.hard.map(function(t){return '<li>'+t+'</li>'}).join('')+'</ul><p><b>議題：</b>'+p.issues+'</p><div class="frow"><label for="drS1">你列出了幾條硬條件？<input type="number" id="drS1" min="0" max="'+p.hard.length+'" inputmode="numeric"></label></div>';
+    if(k===1)return table(p.calc)+'<p>'+p.calcTxt+'</p>';
+    if(k===2)return table(p.stack,['樓層','空間','淨面積'])+'<p>'+p.stackTxt+'</p><p><b>對策範例：</b></p><ul class="t">'+p.moves.map(function(t){return '<li>'+t+'</li>'}).join('')+'</ul>';
+    return '<figure>'+p.plan()+'<figcaption>參考配置之一，尺寸單位 mm。配置沒有唯一答案，用下面的檢查表替自己評分，60 分過關。</figcaption></figure><ul class="check" id="drRubric">'+p.rubric.map(function(t,j){return '<li><label><input type="checkbox" id="r'+(j+1)+'"><span>'+t+'</span></label></li>'}).join('')+'</ul><div class="frow"><button class="go" type="button" id="drScore">算分</button></div><p class="verdict" id="drScoreOut" hidden></p><div id="drMore"></div>'}
+  function load(){var s=steps()[i]; clearInterval(timer); timer=null; left=s.m*60;
+    $('#drStepNo').textContent='第 '+(i+1)+' 關／共 4 關'; $('#drTitle').textContent=s.t+'（'+s.m+' 分鐘）'; $('#drTask').textContent=s.task;
+    $('#drBody').innerHTML=body(i); $('#drAnswer').hidden=true; $('#drAnswer').innerHTML=''; $('#drStart').hidden=false; $('#drReveal').hidden=true; $('#drNext').hidden=true; clock.textContent=mmss(left); clock.style.color=''}
+  function start(n){cur=n; i=0; var p=PB[n]; $('#drName').textContent=p.name; $('#drBrief').innerHTML='<b>題目：'+p.name+'</b><br>'+p.brief;
+    K.drillBrief='題目：'+p.name+'\n'+plain(p.brief)+'\n\n合理的參考解：'+p.sol; load()}
+  $('#drStart').addEventListener('click',function(){ $('#drStart').hidden=true; $('#drReveal').hidden=false;
+    timer=setInterval(function(){left--; clock.textContent=mmss(left); if(left<=0){clearInterval(timer);timer=null;clock.textContent='時間到';clock.style.color='var(--bad)'}},1000)});
+  $('#drReveal').addEventListener('click',function(){ clearInterval(timer); timer=null; var a=$('#drAnswer'); a.innerHTML=answer(i); a.hidden=false; $('#drReveal').hidden=true;
+    $$('#drBody input[data-ans]').forEach(function(inp){var ok=gradeNum(inp,+inp.dataset.ans,+inp.dataset.tol); inp.style.borderColor=ok?'var(--ok)':'var(--bad)'; inp.style.background=ok?'var(--okbg)':'var(--badbg)'});
+    var sc=$('#drScore',a); if(sc)sc.addEventListener('click',function(){var n=$$('#drRubric input:checked',a).length, o=$('#drScoreOut',a), pct=Math.round(n/8*100), pass=L.done(cur,pct), more=$('#drMore',a); o.hidden=false; more.innerHTML='';
+      if(n>=7){o.className='verdict ok';o.innerHTML='<b>'+n+' / 8，'+pct+' 分。</b>流程已經會了。接下來是把它練快，並把後半段（平面、剖面、立面、透視）接上去。'}
+      else if(pass){o.className='verdict mid';o.innerHTML='<b>'+n+' / 8，'+pct+' 分，過關。</b>大方向對了。沒勾到的項目，回單元 4 的「配置圖上一定要標的東西」再看一次。'}
+      else{o.className='verdict no';o.innerHTML='<b>'+n+' / 8，'+pct+' 分。</b>還差一點，60 分過關。對照上面的參考配置，把沒勾到的項目補進你的草圖，再算一次分。'}
+      if(pass&&cur<L.count-1){var nx=el('button',{type:'button','class':'go'},'下一小關 →'); nx.addEventListener('click',function(){L.next(); box.scrollIntoView({block:'start'})}); more.appendChild(nx)}});
+    var nx=$('#drNext'); nx.hidden=i>=3; nx.textContent='下一關 →'});
+  $('#drNext').addEventListener('click',function(){if(i<3){i++;load()}});
+  L=K.levels(box,{key:'g:drill',names:['托育館','轉角市場','老樹長基地'],pass:60,start:start});
+})();
+})();
+</script>

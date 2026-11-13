@@ -1,0 +1,87 @@
+<!-- ================= M2 量體計算 ================= -->
+<article class="view mod" id="v-m2" data-min="30" data-title="量體計算" data-ds="建蔽率、容積率、要蓋幾層、一層多大" hidden>
+  <p class="eyebrow">單元 2 · 30 分鐘</p>
+  <h1>量體計算：先算出「盒子」能有多大</h1>
+  <ul class="goal"><li><b>學完你會：</b>三分鐘內算出最大建築面積、最大樓地板、需要幾層、每層多大</li></ul>
+
+  <p>還沒畫任何一條線之前，先用四則運算決定建築的大小。這一步算錯，後面八小時畫的都是違規的圖。</p>
+
+  <h2 class="h">兩個比率</h2>
+  <div class="formula">建蔽率 = 建築面積 ÷ 基地面積　　　容積率 = 容積總樓地板面積 ÷ 基地面積</div>
+  <ul class="t">
+    <li><b>建築面積</b>：建築物從正上方往下看，蓋住地面的面積。可以先理解成「一樓有多大」（上層若有突出，取最大投影）。</li>
+    <li><b>容積總樓地板面積</b>：地上各層樓地板加起來。考場上先這樣記：<mark>地下停車場和機房不算容積</mark>。</li>
+    <li><b>法定空地</b>：基地面積減掉建築面積，也就是一定要留白的地。</li>
+  </ul>
+  <p>建蔽率管「佔地多滿」，容積率管「總共蓋多少」。兩個都是上限，不能超過。</p>
+  <figure>
+    <svg id="figA-ratio" viewBox="0 0 720 366" role="img" aria-label="建蔽率與容積率示意：左為配置圖，右為剖面圖"></svg>
+    <figcaption>左：配置圖，斜線是建築面積，其餘是法定空地。右：剖面圖，藍底的地上三層計入容積，B1 停車不計。正式法規對容積的計算有更多細項（梯廳、陽台、機電空間等可部分免計）。新手階段用「地上各層加總」估算，結果偏保守，不會違規。</figcaption>
+  </figure>
+
+  <h2 class="h">四步驟算出盒子</h2>
+  <ol class="t">
+    <li><b>最大建築面積</b>＝基地面積 × 建蔽率</li>
+    <li><b>最大容積樓地板</b>＝基地面積 × 容積率</li>
+    <li><b>需要的樓地板</b>＝題目各空間淨面積加總 × 1.3 到 1.5（多出來的是走廊、樓梯、廁所、牆；下一單元細講）</li>
+    <li><b>決定層數與每層面積</b>：需要的樓地板 ÷ 層數 ＝ 每層面積。每層面積要 ≤ 最大建築面積，層數要 ≤ 題目限制</li>
+  </ol>
+  <p>用例題走一次：基地 2,000 ㎡、建蔽率 50%、容積率 160%。</p>
+  <div class="tw"><table>
+    <tr><th>步驟</th><th>算式</th><th class="n">結果</th></tr>
+    <tr><td>最大建築面積</td><td class="fig">2,000 × 50%</td><td class="n">1,000 ㎡</td></tr>
+    <tr><td>最大容積樓地板</td><td class="fig">2,000 × 160%</td><td class="n">3,200 ㎡</td></tr>
+    <tr><td>淨面積加總</td><td class="fig">500＋200＋60×4＋250＋120＋90＋80</td><td class="n">1,480 ㎡</td></tr>
+    <tr><td>需要的樓地板</td><td class="fig">1,480 × 1.4</td><td class="n">約 2,100 ㎡</td></tr>
+    <tr><td>層數與每層</td><td class="fig">2,100 ÷ 3 層</td><td class="n">每層 700 ㎡</td></tr>
+  </table></div>
+  <p>檢查：每層 700 ≤ 1,000（建蔽率過關）；總計 2,100 ≤ 3,200（容積率過關）；3 層 ≤ 4 層（樓層限制過關）。<b>這個盒子就是每層約 700 ㎡ × 3 層。</b></p>
+  <div class="key"><b>為什麼不蓋滿 1,000 ㎡：</b>蓋 700 就夠用時，多留的 300 ㎡ 空地可以拿來做廣場、退讓北側住宅、保護老樹。空地是你回應議題的本錢。反過來，如果題目要求「設計至容積上限」，就要用到接近 3,200 ㎡，層數會變成 4 層。</div>
+
+  <div class="box" id="massCalc">
+    <h4><em>試算</em>量體計算機</h4>
+    <p class="hint">改數字或拉層數，看盒子怎麼變。紅字代表違規。</p>
+    <div class="frow">
+      <label for="mcA">基地面積 ㎡<input type="number" id="mcA" value="2000" min="100" step="10" inputmode="decimal"></label>
+      <label for="mcB">建蔽率 %<input type="number" id="mcB" value="50" min="1" max="100" inputmode="decimal"></label>
+      <label for="mcF">容積率 %<input type="number" id="mcF" value="160" min="1" inputmode="decimal"></label>
+      <label for="mcN">需要的樓地板 ㎡<input type="number" id="mcN" value="2100" min="1" step="10" inputmode="decimal"></label>
+    </div>
+    <label for="mcL" class="hint">地上層數：<b id="mcLv" class="fig">3</b> 層</label>
+    <input type="range" id="mcL" min="1" max="8" value="3">
+    <figure><svg id="mcSvg" viewBox="0 0 720 240" role="img" aria-label="量體示意"></svg></figure>
+    <div class="out" id="mcOut"></div>
+    <p class="verdict" id="mcVerdict"></p>
+  </div>
+
+  <h2 class="h">可建範圍：扣掉退縮之後還剩多少</h2>
+  <p>建蔽率告訴你可以蓋多大，退縮告訴你可以蓋在哪。例題的基地東西 40 m、南北 50 m：</p>
+  <ul class="t">
+    <li>南側、西側臨道路，各退 4 m（題目規定）</li>
+    <li>北側、東側臨鄰地，題目沒規定。考場習慣至少退 3 m，留出通路、採光和防火間隔</li>
+  </ul>
+  <p>可建範圍 ＝ (40 − 4 − 3) × (50 − 4 − 3) ＝ 33 × 43 ＝ 1,419 ㎡。你的 700 ㎡ 要放在這個範圍內，而且還要避開東南角的老樹。</p>
+  <figure>
+    <svg id="figA-site" viewBox="0 0 720 446" role="img" aria-label="例題基地與可建範圍"></svg>
+    <figcaption>例題基地現況。藍色虛線內是扣除退縮後的可建範圍（33 × 43 m），東南角的老榕樹樹冠還要再避開。</figcaption>
+  </figure>
+
+  <h2 class="h">練習三題</h2>
+  <div class="box numq" data-ans="1560" data-tol="1">
+    <h4><em>練習 1</em>基地 2,600 ㎡，建蔽率 60%。最大建築面積是多少？</h4>
+    <div class="frow"><label for="n1">答案 ㎡<input type="number" id="n1" inputmode="decimal"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>2,600 × 0.6 ＝ 1,560 ㎡。</p>
+  </div>
+  <div class="box numq" data-ans="4" data-tol="0">
+    <h4><em>練習 2</em>基地 1,500 ㎡，建蔽率 40%，容積率 150%，題目要求「設計至容積上限」。至少要蓋幾層？</h4>
+    <div class="frow"><label for="n2">答案 層<input type="number" id="n2" inputmode="numeric"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>每層最多 1,500 × 0.4 ＝ 600 ㎡；總共要 1,500 × 1.5 ＝ 2,250 ㎡。2,250 ÷ 600 ＝ 3.75，無條件進位，至少 4 層。層數一律往上取整數。</p>
+  </div>
+  <div class="box numq" data-ans="1470" data-tol="20">
+    <h4><em>練習 3</em>題目空間淨面積加總為 1,050 ㎡，用係數 1.4 估算，需要多少樓地板？</h4>
+    <div class="frow"><label for="n3">答案 ㎡<input type="number" id="n3" inputmode="decimal"></label><button class="go" type="button">對答案</button></div>
+    <p class="why" hidden>1,050 × 1.4 ＝ 1,470 ㎡。考場上取整數到 1,500 也可以，估算差 5% 以內都算對。</p>
+  </div>
+
+  <div class="warnbox"><b>動手 2：</b>拿一張白紙，不看螢幕，把例題的四步驟重算一次，寫出「每層約 700 ㎡ × 3 層」這個結論。考場上這幾行算式要直接寫在圖紙的計畫說明裡，它本身就是分數。</div>
+</article>

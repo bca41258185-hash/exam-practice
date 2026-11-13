@@ -1,0 +1,91 @@
+<!-- ================= M3 建築計畫 ================= -->
+<article class="view mod" id="v-m3" data-min="35" data-title="建築計畫" data-ds="拿下 30 分：對策表、定性定量表、分層與泡泡圖" hidden>
+  <p class="eyebrow">單元 3 · 35 分鐘</p>
+  <h1>建築計畫：用一張表和一張圖拿 30 分</h1>
+  <ul class="goal"><li><b>學完你會：</b>填出計畫說明的五個固定欄位，並決定每個空間放在哪一層</li></ul>
+
+  <p>「建築計畫」這 30 分，考的是你有沒有先想清楚再畫。它不需要文筆，需要的是固定格式。考場上用 50 到 60 分鐘完成，佔圖紙大約五分之一的面積。</p>
+
+  <h2 class="h">計畫說明的五個固定欄位</h2>
+  <div class="tw"><table>
+    <tr><th>欄位</th><th>內容</th><th>形式</th></tr>
+    <tr><td>1. 基地分析</td><td>道路、鄰地、日照風向、要保留的東西，各一句結論</td><td>一張小簡圖加箭頭</td></tr>
+    <tr><td>2. 議題與對策</td><td>題目的每個議題句，對應一個做得出來的做法</td><td>表格</td></tr>
+    <tr><td>3. 量體計算</td><td>上一單元的四行算式</td><td>算式</td></tr>
+    <tr><td>4. 空間定性定量表</td><td>每個空間的面積、樓層、性質</td><td>表格</td></tr>
+    <tr><td>5. 分區與動線概念</td><td>誰靠近誰、誰跟誰分開</td><td>泡泡圖</td></tr>
+  </table></div>
+  <p>全部用條列和表格，不要寫成段落。閱卷者看一張圖的時間很短，表格讓他一眼找到分數。</p>
+
+  <h2 class="h">議題與對策表</h2>
+  <p>把單元 1 標成「議題」的句子逐條列出，右邊寫對策。對策的標準是：<b>能在圖上指出位置</b>。</p>
+  <div class="tw"><table>
+    <tr><th>題目的議題</th><th>對策（畫得出來的做法）</th><th>圖上位置</th></tr>
+    <tr><td>不同世代自然相遇</td><td>兒童閱覽與樂齡教室放同一層，中間設共用的故事角</td><td>2F 平面</td></tr>
+    <tr><td>白天晚上都有人使用</td><td>多功能廳、咖啡放一樓臨街，有獨立入口，夜間可單獨開放</td><td>1F 平面、配置</td></tr>
+    <tr><td>與東側公園相互延伸</td><td>建築靠西，東側留綠地接公園；一樓東面開門設半戶外平台</td><td>配置、剖面</td></tr>
+    <tr><td>降低對北側住宅的壓迫</td><td>北側退縮加大並種樹；三樓北側退一跨做露台</td><td>配置、剖面</td></tr>
+  </table></div>
+  <div class="key"><b>寫對策的句型：</b>「把＿＿放在＿＿，讓＿＿」。例如「把咖啡放在一樓西南角，讓公車站下車的人直接看到」。有位置、有理由，就是一條合格的對策。</div>
+
+  <h2 class="h">空間定性定量表</h2>
+  <p><b>定量</b>是面積，<b>定性</b>是這個空間的性質（公共或私密、吵或靜、需不需要挑高、要不要對外）。題目給的是<b>淨面積</b>，也就是房間內部。實際蓋出來還要加上走廊、樓梯、電梯、廁所、機房和牆，所以要乘一個係數。</p>
+  <div class="formula">需要的樓地板 ≈ 淨面積加總 × 1.3 ～ 1.5</div>
+  <ul class="t">
+    <li>空間大而少（體育館、展場）用 1.3</li>
+    <li>一般公共建築用 1.4</li>
+    <li>房間小而多（宿舍、教室、診間）用 1.5，因為走廊多</li>
+  </ul>
+
+  <div class="box" id="progCalc">
+    <h4><em>試算</em>定量表</h4>
+    <p class="hint">這是例題的空間。面積可以改，係數可以拉，看總量有沒有超過容積上限 3,200 ㎡。</p>
+    <div class="tw"><table id="pcTable">
+      <tr><th>空間</th><th class="n">淨面積 ㎡</th><th>性質</th></tr>
+    </table></div>
+    <label for="pcK" class="hint">係數：<b id="pcKv" class="fig">1.40</b></label>
+    <input type="range" id="pcK" min="1.2" max="1.6" step="0.05" value="1.4">
+    <div class="out" id="pcOut"></div>
+    <p class="verdict" id="pcVerdict"></p>
+  </div>
+
+  <h2 class="h">分層：誰放一樓，誰放樓上</h2>
+  <p>分層有三條通用規則，幾乎每一題都適用：</p>
+  <ol class="t">
+    <li><b>越公共、越吵、人越多的，越靠近地面。</b>咖啡、多功能廳、餐飲放一樓。</li>
+    <li><b>越安靜、越需要專注的，越往上。</b>閱覽、辦公、住宿放高樓層。</li>
+    <li><b>要獨立開放的，放一樓而且靠街。</b>它需要自己的門。</li>
+  </ol>
+  <p>另外兩個特殊考量：<b>幼兒和行動不便者</b>使用的空間盡量在低樓層，疏散容易；<b>大跨距無柱空間</b>（多功能廳、球場）放頂樓或一樓獨立一塊，因為它上面很難再疊有柱子的樓層。</p>
+
+  <div class="box" id="zoner">
+    <h4><em>動手 3</em>幫例題的七個空間分層</h4>
+    <p class="hint">先點一個空間，再點要放的樓層。每層淨面積建議在 440 到 600 ㎡ 之間（每層約 700 到 770 ㎡，扣掉走廊、樓梯、廁所）。</p>
+    <div class="pills" id="znPool"></div>
+    <div class="buckets" id="znBuckets">
+      <button type="button" class="bucket" data-f="3"><strong>3F　最安靜</strong><span class="hint" data-sum></span></button>
+      <button type="button" class="bucket" data-f="2"><strong>2F　半公共</strong><span class="hint" data-sum></span></button>
+      <button type="button" class="bucket" data-f="1"><strong>1F　最公共、臨街</strong><span class="hint" data-sum></span></button>
+    </div>
+    <div class="frow"><button class="go" type="button" id="znCheck">對答案</button><button class="ghost" type="button" id="znReset">重來</button></div>
+    <p class="verdict" id="znOut" hidden></p>
+  </div>
+
+  <h2 class="h">泡泡圖：畫出關係，不畫形狀</h2>
+  <p>泡泡圖用圓圈代表空間、線代表關係。圓的大小約略對應面積。它的作用是在畫平面之前，先確認三件事：誰要相鄰、誰要分開、人從哪裡進來。</p>
+  <figure>
+    <svg id="fbBubble" class="fbx" viewBox="0 0 720 430" role="img" aria-label="例題一樓與二樓的泡泡圖"></svg>
+    <figcaption>粗線＝要緊鄰；細線＝有關聯；藍色虛線＝垂直動線。箭頭標出人從哪裡來。三樓是一般閱覽和行政辦公，關係單純，不用畫泡泡。</figcaption>
+  </figure>
+  <div class="warnbox"><b>動手 4：</b>用 3 分鐘，在白紙上照著畫一次這張泡泡圖。只要圓圈、線和文字，不用漂亮。考場上這張圖大約 8 公分見方就夠了。</div>
+
+  <div class="box quiz" data-ans="a">
+    <h4><em>確認</em>一題學生宿舍，房間多、每間小。淨面積加總 3,000 ㎡，估算樓地板該用哪個係數？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">1.5，需要約 4,500 ㎡</button>
+      <button type="button" data-k="b">1.3，需要約 3,900 ㎡</button>
+      <button type="button" data-k="c">1.0，剛好 3,000 ㎡</button>
+    </div>
+    <p class="why" hidden>房間小而多，走廊就長，公共面積比例高，用 1.5。用 1.0 代表沒有走廊和樓梯，畫平面時一定會塞不下。</p>
+  </div>
+</article>

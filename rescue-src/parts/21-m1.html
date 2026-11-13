@@ -1,0 +1,71 @@
+<!-- ================= M1 讀題 ================= -->
+<article class="view mod" id="v-m1" data-min="25" data-title="讀題" data-ds="用四色標記把題目拆成可以打勾的清單" hidden>
+  <p class="eyebrow">單元 1 · 25 分鐘</p>
+  <h1>讀題：把三頁文字變成一張檢查表</h1>
+  <ul class="goal"><li><b>學完你會：</b>用四種標記讀完一份題目，並抄出「硬條件清單」</li></ul>
+
+  <p>題目裡的每一句話，閱卷者都會回頭對你的圖。讀題的目的不是理解故事，而是把題目<b>拆成一條一條可以檢查的項目</b>。考場上請給讀題完整 30 分鐘，這是八小時裡報酬率最高的半小時。</p>
+
+  <h2 class="h">四種標記</h2>
+  <div class="tw"><table>
+    <tr><th>標記</th><th>找什麼</th><th>之後用在哪</th></tr>
+    <tr><td><b>硬條件</b></td><td>所有數字和「須、應、不得、至少、以上」開頭的句子：建蔽率、容積率、退縮、停車數、樓層限制、保留的樹</td><td>違反就重扣。抄成清單，交卷前逐條打勾</td></tr>
+    <tr><td><b>空間需求</b></td><td>空間名稱和它的面積或人數</td><td>做成定量表，算總面積</td></tr>
+    <tr><td><b>議題</b></td><td>形容詞和願景：友善、共享、開放、永續、社區連結</td><td>寫進計畫說明，圖上要看得到對應的做法</td></tr>
+    <tr><td><b>圖面要求</b></td><td>要畫哪些圖、比例、要標什麼</td><td>決定版面和時間分配</td></tr>
+  </table></div>
+  <p>考場上用螢光筆加符號就可以，例如硬條件畫底線加星號、空間需求用圈的。重點是四類要分得開，回頭找得到。</p>
+
+  <h2 class="h">本課例題</h2>
+  <p>上面標記遊戲的第 1 份題目「社區圖書分館暨樂齡學習中心」就是本課例題。它是為這堂課設計的，難度比正式考題低，但結構相同。<b>後面所有單元都用它</b>，請先完整讀一遍。第 2、3 份題目練的是陷阱和正式考題的長度。</p>
+
+  <div class="box" id="tagger">
+    <h4><em>動手 1</em>幫題目上標記</h4>
+    <p class="gdesc hint">先選一種標記，像拿起一支螢光筆，再去點題目裡的虛線文字。共 <span id="tagN">17</span> 處，全部標完後按「對答案」。三份題目一份比一份長，陷阱也越多。</p>
+    <div class="pills" id="tagPick" role="group" aria-label="選擇分類">
+      <button type="button" class="pill c-hard" data-c="hard">硬條件</button>
+      <button type="button" class="pill c-room" data-c="room">空間需求</button>
+      <button type="button" class="pill c-issue" data-c="issue">議題</button>
+      <button type="button" class="pill c-draw" data-c="draw">圖面要求</button>
+    </div>
+    <div class="qtext" id="qtext"></div>
+    <div class="frow"><button class="go" type="button" id="tagCheck">對答案</button><button class="ghost" type="button" id="tagReset">重來</button></div>
+    <p class="verdict" id="tagOut" hidden></p>
+    <div id="tagMore"></div>
+  </div>
+
+  <h2 class="h">抄出硬條件清單</h2>
+  <p>標完後，在草稿紙角落把硬條件抄成一欄。這張清單會跟著你到交卷。例題的清單如下，請對照你剛才標的：</p>
+  <div class="box">
+    <h4><em>例題</em>硬條件清單（交卷前逐條打勾）</h4>
+    <ul class="check" id="hardList">
+      <li><label><input type="checkbox" id="h1"><span>建蔽率 ≤ 50%（建築面積 ≤ 1,000 ㎡）</span></label></li>
+      <li><label><input type="checkbox" id="h2"><span>容積率 ≤ 160%（容積樓地板 ≤ 3,200 ㎡）</span></label></li>
+      <li><label><input type="checkbox" id="h3"><span>南側、西側各退縮 4 m 人行步道</span></label></li>
+      <li><label><input type="checkbox" id="h4"><span>地上不超過 4 層</span></label></li>
+      <li><label><input type="checkbox" id="h5"><span>東南角老榕樹保留（樹冠範圍內不蓋、不挖地下室）</span></label></li>
+      <li><label><input type="checkbox" id="h6"><span>地下汽車 20、機車 30、無障礙車位 1，有車道</span></label></li>
+      <li><label><input type="checkbox" id="h7"><span>多功能廳可夜間獨立開放（自己的入口和廁所）</span></label></li>
+      <li><label><input type="checkbox" id="h8"><span>全區無障礙（入口無高差或有坡道、電梯、無障礙廁所）</span></label></li>
+    </ul>
+  </div>
+  <div class="key"><b>注意第 5、7 條：</b>題目只寫了一句話，但它會連帶產生圖面上的後果。「保留老樹」代表地下室要避開；「夜間獨立開放」代表要有獨立入口。讀題時把這種連帶後果直接寫在清單上。</div>
+
+  <h2 class="h">題目沒寫，但一定要有的東西</h2>
+  <p>題目寫「其餘必要之服務空間請自行擬定」。下面這些，任何公共建築都要有，沒畫會被當成不懂建築：</p>
+  <ul class="t">
+    <li>每層：樓梯至少 2 座、電梯、男女廁所、無障礙廁所</li>
+    <li>全棟：門廳與服務台、機房（地下層）、儲藏室、垃圾與卸貨位置</li>
+    <li>戶外：無障礙通路、自行車停放、車道出入口、植栽</li>
+  </ul>
+
+  <div class="box quiz" data-ans="c">
+    <h4><em>確認</em>題目寫「建築應與東側公園的活動相互延伸」。這句話該怎麼處理？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">這是願景描述，沒有數字，可以略過</button>
+      <button type="button" data-k="b">在計畫說明寫一句「本案與公園相互延伸」就好</button>
+      <button type="button" data-k="c">在計畫說明寫出做法，而且圖上要看得到，例如東側留開放空間、一樓對公園開門</button>
+    </div>
+    <p class="why" hidden>議題句是評分重點。只寫文字、圖上沒有對應做法，閱卷者會認定你沒回應。每個議題至少要有一個「畫得出來」的對策。</p>
+  </div>
+</article>

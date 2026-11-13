@@ -1,0 +1,239 @@
+<style>
+#gExam .exTl{position:relative;margin:6px 0 2px;padding:31px 0}
+#gExam .exTrack{position:relative;height:14px;background:var(--paper);border:1px solid var(--line);border-radius:3px}
+#gExam .exTrack i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--bp-hi);opacity:.9}
+#gExam .exTrack i.over{background:var(--bad)}
+#gExam .exTick{position:absolute;top:-5px;bottom:-5px;width:2px;margin-left:-1px;background:var(--mut)}
+#gExam .exPin{position:absolute;top:-9px;bottom:-9px;width:3px;margin-left:-1.5px;background:var(--ink);border-radius:2px}
+#gExam .exLb{position:absolute;font:11px/1.25 var(--f-data);color:var(--mut);transform:translateX(-50%);text-align:center;white-space:nowrap}
+#gExam .exLb.top{top:0}#gExam .exLb.bot{bottom:0}
+#gExam .exLb.end{transform:translateX(-100%);text-align:right}
+#gExam .exLb.past{color:var(--ink)}
+#gExam .exLb.now{color:var(--bp-hi);font-weight:700}
+#gExam .exNow{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:0 0 6px;font-size:14px;color:var(--mut)}
+#gExam .exNow b{font:600 26px var(--f-data);color:var(--bp-hi)}
+#gExam .exNow .late{color:var(--bad)}#gExam .exNow .ok{color:var(--ok)}
+#gExam .exStep{font:600 11px var(--f-data);letter-spacing:.12em;color:var(--mut);margin:12px 0 0}
+#gExam .exQ{font-size:17px;line-height:1.6;margin:4px 0 6px}
+#gExam .exQ .twist{display:block;margin-top:6px;padding:6px 10px;border-left:4px solid var(--warn);background:var(--warnbg);font-size:15px}
+#gExam .exlog li b{font-family:var(--f-data);color:var(--ink);font-weight:600;margin-right:6px}
+#gExam .exlog li.bad{color:var(--bad)}
+#gExam .exEnd{border:2px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 0;background:var(--paper)}
+#gExam .exEnd h4{font-family:var(--f-hand);font-size:22px;margin:0 0 4px}
+#gExam .exEnd.pass{border-color:var(--ok)}#gExam .exEnd.over,#gExam .exEnd.low{border-color:var(--bad)}
+#gExam .exEnd p{margin:4px 0;font-size:15px}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels)return;
+var $=K.$, el=K.el, hud=K.hud, shuffle=K.shuffle;
+/* ============ GAME 03 考場決策：三種考試狀況 ============ */
+(function(){
+  var box=$('#gExam'); if(!box)return;
+  /* 八個階段的結束時刻（分鐘） */
+  var STG=[[30,'讀題'],[90,'計畫'],[150,'草圖'],[300,'平面'],[360,'剖立面'],[400,'透視'],[450,'標註'],[480,'檢查']];
+  function clk(m){m=Math.round(m); return Math.floor(m/60)+':'+('0'+m%60).slice(-2)}
+
+  /* ---- 三個狀況 ----
+     每一步：st=所屬階段，q=情境（字串或函式），o=選項 {t 選項文字, m 花的分鐘, p 分數, log 結果, f 旗標, best 最佳}
+     after[i](S)：第 i 步之後發生的事，用 S.ev(說明, 分鐘, 分數, 怪罪第幾步) 記錄 */
+  var SC=[
+  {name:'第一次考', start:0, annot:40, overPen:3, bonus:10,
+   intro:'標準的八小時。走完六個決定，看你能不能準時交出一份及格的圖。',
+   steps:[
+    {st:0,q:'開考。題目發下來，三頁文字加一張基地圖。',o:[
+      {t:'立刻動筆畫配置，邊畫邊看題目',m:0,p:0,log:'你直接開畫，省下讀題時間。',f:'late'},
+      {t:'花 30 分鐘用四種標記讀題，抄出硬條件清單',m:30,p:10,log:'30 分鐘讀完。你手上有一張 8 條的硬條件清單。',best:1},
+      {t:'花 60 分鐘把題目逐字讀三遍',m:60,p:5,log:'讀了 60 分鐘，很熟，但時間用掉一倍。'}]},
+    {st:1,q:'接下來是建築計畫說明（30 分）。',o:[
+      {t:'先跳過，最後有時間再補',m:0,p:0,log:'計畫先空著。',f:'noPlan'},
+      {t:'用對策表、定量表、泡泡圖，55 分鐘完成',m:55,p:25,log:'55 分鐘完成計畫說明，表格一眼看得懂。',best:1},
+      {t:'寫一篇完整的設計理念文章',m:90,p:14,log:'寫了 90 分鐘、600 字。閱卷者很難在段落裡找到重點。'}]},
+    {st:2,q:'草圖階段。你有兩個配置方案，各有優缺點。',o:[
+      {t:'選比較單純的那個，定案上正圖',m:60,p:10,log:'60 分鐘定案。方案普通，但確定畫得完。',best:1},
+      {t:'再花時間把兩案融合成更好的第三案',m:110,p:14,log:'多花 50 分鐘，方案好了一點。'},
+      {t:'不畫草圖了，直接在正圖上邊畫邊想',m:15,p:2,log:'跳過草圖，直接上正圖。',f:'redo'}]},
+    {st:3,q:'平面正圖畫到一半，發現二樓的樓梯放不下。',o:[
+      {t:'把整層擦掉重排',m:70,p:8,log:'重排花了 70 分鐘，圖紙也擦髒了。'},
+      {t:'縮小旁邊的儲藏室，局部調整',m:15,p:6,log:'15 分鐘解決。儲藏室小了一點，沒人在意。',best:1},
+      {t:'把樓梯畫小一點塞進去',m:0,p:-12,log:'樓梯尺寸不合法規，閱卷者一眼就看到。'}]},
+    {st:4,q:'平面的牆和柱都畫完了，家具和鋪面還沒畫。剖面、立面、透視都還空白。',o:[
+      {t:'先把平面的家具、鋪面畫完整，再畫剖立面',m:110,p:16,log:'平面很完整，剖立面只能草草收尾。'},
+      {t:'平面先停，立刻去畫剖面和立面',m:60,p:18,log:'60 分鐘補上剖面和立面，每張都有樓高和圖名。',best:1},
+      {t:'剖面放棄，把時間留給透視',m:0,p:-15,log:'缺一張題目要求的圖，重扣。'}]},
+    {st:5,q:'最後一張：透視圖。',o:[
+      {t:'畫一張精緻的街角透視，加人、樹、陰影',m:70,p:12,log:'透視很漂亮，花了 70 分鐘。'},
+      {t:'畫量體透視，30 分鐘結束',m:30,p:9,log:'30 分鐘畫完量體透視，有樓層線和入口。',best:1},
+      {t:'不畫了，回去加強平面',m:20,p:-15,log:'缺透視圖，重扣。'}]}
+   ],
+   after:{2:function(S){
+      if(S.flags.late)S.ev('畫到這裡才發現題目要求「多功能廳夜間獨立開放」，配置要改。',30,-15,0);
+      if(S.flags.redo)S.ev('正圖畫到一半房間排不下，擦掉重畫。',40,0,2);
+      S.ev('畫配置圖和各層平面正圖。',150,15);
+   }},
+   finish:function(S){
+      if(S.flags.noPlan){ if(S.clock<=430)S.ev('回頭補計畫說明，趕出一個簡版。',50,12); else S.ev('沒時間補計畫說明，30 分的區塊是空白。',0,-20,1) }
+   }},
+
+  {name:'題目有陷阱', start:0, annot:30, overPen:4, bonus:10,
+   intro:'這份題目藏了兩條容易漏看的硬條件。你什麼時候發現、發現後怎麼處理，決定分數。',
+   steps:[
+    {st:0,q:'開考。這次題目有四頁，第三頁的字特別小。',o:[
+      {t:'花 30 分鐘用四種標記讀完四頁，抄出硬條件清單',m:30,p:10,log:'30 分鐘讀完，連小字都圈起來了。',f:'read',best:1},
+      {t:'10 分鐘掃過一遍，把空間表抄下來就好',m:10,p:3,log:'10 分鐘看完。第三頁那段小字你跳過了。',f:'skim'},
+      {t:'先算建蔽率和容積率，文字說明晚點再看',m:20,p:4,log:'20 分鐘算完量體，說明文字還沒細看。',f:'skim'}]},
+    {st:1,q:function(S){return S.flags.read?'你的清單第 7 條寫著「老榕樹樹冠下不得開挖地下室」。現在寫建築計畫說明（30 分）。':'現在寫建築計畫說明（30 分）。'},o:[
+      {t:'對策表加定量表，50 分鐘完成',m:50,p:22,log:'50 分鐘完成，每條對策都對到題目。',best:1},
+      {t:'先寫三行重點，其他最後有空再補',m:20,p:8,log:'先寫了三行。',f:'thin'},
+      {t:'寫一篇完整的設計理念長文',m:80,p:14,log:'80 分鐘寫完，內容不少，重點不好找。'}]},
+    {st:2,q:'草圖畫到一半，你翻到題目最後一頁，背面還有一段：',twist:'「本案分兩期施工，第一期（圖書分館）須能獨立使用及逃生。」',o:[
+      {t:'停下來把整份題目重讀一遍，列出這段話影響的地方，再改草圖',m:35,p:14,log:'重讀後標出分期線，第一期有自己的入口和兩座樓梯。',f:'reread',best:1},
+      {t:'在草圖上畫一條分期線，其他照舊',m:10,p:4,log:'畫了一條分期線，十分鐘結束。',f:'half'},
+      {t:'推翻整個配置，從頭重做',m:90,p:12,log:'重做花了 90 分鐘，新方案比較好，時間少了一大截。'}]},
+    {st:3,q:'平面快畫完了。你把各層面積加起來，只有容積上限的 80%。題目寫明：',twist:'「總樓地板面積須達容積上限 90% 以上。」',o:[
+      {t:'先不管，閱卷者不一定會算',m:0,p:-12,log:'面積不足就是違反硬條件，閱卷者有你的定量表可以對。'},
+      {t:'整棟加一層樓，四層全部重排',m:70,p:8,log:'加了一層，面積夠了，花掉 70 分鐘。'},
+      {t:'停筆重算，在三樓多排兩間教室補足面積',m:25,p:10,log:'25 分鐘補到 92%，定量表也改好了。',best:1}]},
+    {st:4,q:function(S){return '時間 '+clk(S.clock)+'。平面還沒畫家具，剖面、立面、透視都還空白。'},o:[
+      {t:'先把平面家具和鋪面畫完',m:90,p:12,log:'平面很好看，後面的圖開始趕。'},
+      {t:'跳過立面，留時間給透視',m:30,p:-15,log:'少一張題目要求的圖，重扣。'},
+      {t:'平面先停，立刻畫剖面和立面',m:60,p:16,log:'60 分鐘畫完剖面和立面，樓高、圖名都有。',best:1}]},
+    {st:6,q:'透視畫完了。最後一段時間怎麼用？',o:[
+      {t:'幫透視上色、加配景',m:35,p:3,log:'透視漂亮多了。'},
+      {t:'拿硬條件清單逐條對，補上漏掉的標註',m:30,p:12,log:'對清單時補上兩期的範圍線和第一期的樓梯標示。',best:1},
+      {t:'補一張分期示意圖',m:25,p:8,log:'加了一張小圖，兩期範圍一眼看得懂。'}]}
+   ],
+   after:{
+    1:function(S){ if(S.flags.read)S.ev('你在計畫階段就把地下室退到樹冠外，後面不用改。',0,5) },
+    2:function(S){
+      if(S.flags.skim){ if(S.flags.reread)S.ev('重讀時也看到「樹冠下不得開挖」，順手把地下室退開。',0,3); else S.ev('上正圖前才發現「樹冠下不得開挖」，地下室縮小、車道改位置。',30,-8,0) }
+      S.ev('上正圖：配置圖和各層平面。',120,15) },
+    4:function(S){
+      if(S.flags.half)S.ev('畫剖面時發現第一期範圍裡只有一座樓梯，不能獨立逃生。來不及改，被扣分。',0,-12,2);
+      S.ev('畫量體透視。',30,8) }
+   },
+   finish:function(S){
+      if(S.flags.thin){ if(480-S.clock>=40)S.ev('回頭把計畫說明補完整。',40,10); else S.ev('沒時間補，計畫說明只有三行。',0,-10,1) }
+   }},
+
+  {name:'一切都出錯', start:20, annot:0, overPen:4, bonus:0,
+   intro:'開考前鉛筆盒打翻，撿完坐好已經 0:20。接下來還會更糟。只有狠心取捨，才交得出每一張圖。',
+   steps:[
+    {st:0,q:'0:20 才開始，比別人少 20 分鐘。題目三頁。',o:[
+      {t:'讀題壓到 20 分鐘，只抄硬條件清單',m:20,p:9,log:'20 分鐘，清單有 7 條。',best:1},
+      {t:'照平常一樣讀 30 分鐘',m:30,p:10,log:'30 分鐘讀完，很穩，但落後還在。'},
+      {t:'跳過讀題，直接看基地圖開始想',m:0,p:0,log:'省下讀題時間。',f:'noRead'}]},
+    {st:1,q:'建築計畫說明（30 分）。',o:[
+      {t:'完整的對策表加定量表，60 分鐘',m:60,p:22,log:'60 分鐘，計畫說明很完整。'},
+      {t:'先跳過，最後有時間再補',m:0,p:0,log:'計畫先空著。',f:'noPlan'},
+      {t:'只畫定量表和泡泡圖，對策寫成五條短句，35 分鐘',m:35,p:18,log:'35 分鐘，簡短但每一項都有。',best:1}]},
+    {st:2,q:'草圖。你想到兩個配置方案。',o:[
+      {t:'不畫草圖，直接上正圖',m:10,p:0,log:'直接上正圖。',f:'redo'},
+      {t:'選第一個能用的方案，40 分鐘定案',m:40,p:8,log:'40 分鐘定案，方案普通但可行。',best:1},
+      {t:'兩案都畫出來比較，80 分鐘',m:80,p:12,log:'比較完選了比較好的一案，花了 80 分鐘。'}]},
+    {st:3,q:'上正圖 40 分鐘後，墨水瓶倒了，配置圖右下角一大片黑。',o:[
+      {t:'換一張新圖紙，整張重畫',m:80,p:0,log:'整張重畫，很乾淨，80 分鐘沒了。'},
+      {t:'用刀片刮乾淨，局部重畫，20 分鐘',m:20,p:-2,log:'刮掉重畫，紙面有點毛，但看得清楚。',best:1},
+      {t:'不處理，在污漬旁邊繼續畫',m:0,p:-8,log:'污漬蓋住停車場和入口，閱卷者看不出你畫了什麼。'}]},
+    {st:3,q:function(S){return clk(S.clock)+'，你拿比例尺一量，平面畫成了 1/100，題目要求 1/200。剖面和立面的位置被佔掉了。'},o:[
+      {t:'重畫成 1/200，家具和鋪面也一起補齊',m:100,p:12,log:'重畫得很完整，100 分鐘。'},
+      {t:'平面重畫成 1/200，只畫牆、柱、門和室名',m:50,p:8,log:'50 分鐘重畫，平面很素，但比例對了。',best:1},
+      {t:'不改，在圖名旁寫上實際比例',m:0,p:-20,log:'比例不符題目要求，整張平面被重扣。'}]},
+    {st:4,q:function(S){var d=S.clock-300; return clk(S.clock)+'，'+(d>0?'比計畫落後 '+d+' 分鐘':'剛好趕上計畫')+'。剖面、立面、透視都還空白。'},o:[
+      {t:'剖面、立面只畫輪廓、樓高和圖名，各 25 分鐘；透視畫 15 分鐘的量體',m:65,p:22,log:'三張圖都有了，每張都很簡單。',best:1},
+      {t:'先把剖面和立面畫完整，透視有時間再說',m:80,p:18,log:'剖面、立面畫得很好。',f:'noPersp'},
+      {t:'先回去補平面家具，主圖好看最重要',m:40,p:6,log:'平面好看了，其他三張還是空白。',f:'noSE'}]},
+    {st:7,q:'最後一段時間。',o:[
+      {t:'把墨水污漬再修乾淨一點',m:25,p:2,log:'污漬淡了一些。'},
+      {t:'停筆，逐項補圖名、比例、指北針、室名',m:25,p:10,log:'補上三個圖名、兩個比例和指北針。',best:1},
+      {t:'幫透視加陰影和人',m:25,p:3,log:'透視有了陰影。'}]}
+   ],
+   after:{
+    2:function(S){
+      if(S.flags.noRead)S.ev('沒讀題，配置漏了「保留老樹」和「無障礙坡道」，兩項違規。',0,-15,0);
+      if(S.flags.redo)S.ev('正圖畫到一半房間排不下，擦掉重來。',40,0,2);
+      S.ev('開始畫配置圖。',40,0) },
+    3:function(S){ S.ev('畫完配置圖和各層平面。',130,15) }
+   },
+   finish:function(S){
+      if(S.flags.noSE){ if(480-S.clock>=50)S.ev('最後趕出剖面和立面。',50,8); else S.ev('剖面、立面沒畫，缺兩張圖。',0,-25,5) }
+      if(S.flags.noPersp){ if(480-S.clock>=15)S.ev('最後擠出 15 分鐘畫量體透視。',15,6); else S.ev('透視沒畫，缺一張圖。',0,-15,5) }
+      if(S.flags.noPlan){ if(480-S.clock>=35)S.ev('回頭補一個簡版計畫說明。',35,10); else S.ev('計畫說明 30 分的區塊是空白。',0,-20,1) }
+   }}
+  ];
+
+  /* ---- 重建遊戲內容（保留 .ghead 與 .gdesc） ---- */
+  var head=$('.ghead',box), desc=$('.gdesc',box);
+  Array.prototype.slice.call(box.children).forEach(function(c){if(c!==head&&c!==desc)box.removeChild(c)});
+  desc.textContent='你坐在考場裡。每個決定都會花時間，也會影響分數。時間軸上標了八個階段該結束的時刻，看看自己落在哪裡。';
+  var tl=el('div',{'class':'exTl','aria-hidden':'true'}), track=el('div',{'class':'exTrack'}), fill=el('i'), pin=el('span',{'class':'exPin'});
+  track.appendChild(fill); var lbs=[];
+  STG.forEach(function(sg,k){var x=sg[0]/480*100; track.appendChild(el('b',{'class':'exTick',style:'left:'+x+'%'}));
+    var lb=el('span',{'class':'exLb '+(k%2?'bot':'top')+(k===STG.length-1?' end':''),style:'left:'+x+'%'},clk(sg[0])+'<br>'+sg[1]); tl.appendChild(lb); lbs.push(lb)});
+  track.appendChild(pin); tl.appendChild(track);
+  var now=el('p',{'class':'exNow','aria-live':'polite'}), stepL=el('p',{'class':'exStep'}), qn=el('p',{'class':'exQ'}), opts=el('div',{'class':'opts'}), logL=el('ol',{'class':'exlog'}), end=el('div',{'class':'exEnd',hidden:''}), row=el('div',{'class':'frow'});
+  var bAgain=el('button',{type:'button','class':'ghost',id:'exReset'},'再考一次'), bNext=el('button',{type:'button','class':'go',id:'exNext',hidden:''},'下一小關 →');
+  row.appendChild(bAgain); row.appendChild(bNext);
+  [tl,now,stepL,qn,opts,logL,end,row].forEach(function(n){box.appendChild(n)});
+
+  var LVL, sc, S, shown=0, anim=0, busy=false;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function stageAt(m){for(var k=0;k<STG.length;k++)if(m<STG[k][0])return k; return STG.length-1}
+  function drawClock(m){ var pct=Math.min(100,m/480*100); fill.style.width=pct+'%'; fill.className=m>480?'over':''; pin.style.left=pct+'%';
+    var k=stageAt(m); lbs.forEach(function(lb,j){lb.classList.toggle('past',STG[j][0]<=m); lb.classList.toggle('now',j===k&&m<480)});
+    var b=$('b',now); if(b)b.textContent=clk(m) }
+  function tween(to,cb){ cancelAnimationFrame(anim); var from=shown, t0=null, dur=reduce?0:Math.min(900,250+Math.abs(to-from)*4);
+    if(!dur){shown=to; drawClock(to); cb&&cb(); return}
+    function f(ts){ if(t0===null)t0=ts; var k=Math.min(1,(ts-t0)/dur), e=1-Math.pow(1-k,3); shown=from+(to-from)*e; drawClock(shown); if(k<1)anim=requestAnimationFrame(f); else {shown=to; drawClock(to); cb&&cb()} }
+    anim=requestAnimationFrame(f) }
+  function planLine(){ var st=S.i<sc.steps.length?sc.steps[S.i].st:7, a=st?STG[st-1][0]:0, d=S.clock-a;
+    now.innerHTML='<b>'+clk(shown)+'</b><span>/ 8:00</span><span>照計畫，「'+STG[st][1]+'」該在 '+clk(a)+'–'+clk(STG[st][0])+' 之間</span>'+(d>0?'<span class="late">落後 '+d+' 分鐘</span>':'<span class="ok">'+(d<0?'超前 '+(-d)+' 分鐘':'準時')+'</span>');
+    drawClock(shown) }
+  function addLog(t,m,p,bad){ var li=el('li',bad?{'class':'bad'}:null,'<b>'+clk(S.clock-m)+'</b>'+t+'（'+(m?'＋'+m+' 分鐘，':'')+(p>=0?'＋':'−')+Math.abs(p)+' 分）'); logL.appendChild(li) }
+  function newState(){ var st={clock:sc.start,score:0,flags:{},i:0,loss:sc.steps.map(function(){return 0}),picks:[],extra:sc.steps.map(function(){return 0})};
+    st.ev=function(t,m,p,blame){ st.clock+=m; st.score+=p; addLog(t,m,p,p<0); if(blame!=null)st.loss[blame]+=Math.max(0,-p)+m*.2 };
+    return st }
+  function ask(){ var s=sc.steps[S.i]; hud(box,Math.max(0,S.score));
+    stepL.textContent='第 '+(S.i+1)+' / '+sc.steps.length+' 個決定';
+    qn.innerHTML=(typeof s.q==='function'?s.q(S):s.q)+(s.twist?'<span class="twist">'+s.twist+'</span>':'');
+    opts.innerHTML=''; shuffle(s.o.slice()).forEach(function(o){var b=el('button',{type:'button'},o.t+'<small style="display:block;color:var(--mut);font-size:12.5px">'+(o.m?'約 '+o.m+' 分鐘':'幾乎不花時間')+'</small>'); b.addEventListener('click',function(){choose(o)}); opts.appendChild(b)});
+    planLine() }
+  function choose(o){ if(busy)return; busy=true; $$b().forEach(function(b){b.disabled=true});
+    var s=sc.steps[S.i], best=s.o.filter(function(x){return x.best})[0];
+    S.picks[S.i]=o; S.extra[S.i]=Math.max(0,o.m-best.m); S.loss[S.i]+=Math.max(0,best.p-o.p)+S.extra[S.i]*.2;
+    S.clock+=o.m; S.score+=o.p; addLog(o.log,o.m,o.p,o.p<0); if(o.f)S.flags[o.f]=1;
+    var i=S.i; if(sc.after&&sc.after[i])sc.after[i](S);
+    S.i++; hud(box,Math.max(0,S.score));
+    tween(S.clock,function(){busy=false; if(S.i<sc.steps.length)ask(); else finish()}) }
+  function $$b(){return Array.prototype.slice.call(opts.querySelectorAll('button'))}
+  function finish(){
+    if(sc.annot)S.ev('補圖名、比例、尺寸、空間名稱。',sc.annot,0);
+    if(sc.finish)sc.finish(S);
+    var over=S.clock-480;
+    if(over>0){ var pen=Math.ceil(over/10)*sc.overPen, w=0; S.extra.forEach(function(x,k){if(x>S.extra[w])w=k}); S.ev('超時 '+over+' 分鐘，鈴響時後面的圖還沒畫完。',0,-pen,S.extra[w]>0?w:null) }
+    else if(sc.bonus&&480-S.clock>=30)S.ev('還剩 '+(480-S.clock)+' 分鐘，逐條檢查硬條件，補上漏掉的指北針。',0,sc.bonus);
+    else if(sc.bonus)S.ev('剩 '+(480-S.clock)+' 分鐘，來不及完整檢查。',0,0);
+    var score=Math.max(0,Math.min(100,S.score)); hud(box,score);
+    tween(S.clock,function(){
+      opts.innerHTML=''; stepL.textContent='交卷'; qn.textContent='鈴響，停筆。';
+      now.innerHTML='<b>'+clk(S.clock)+'</b><span>/ 8:00</span>'+(over>0?'<span class="late">超時 '+over+' 分鐘</span>':'<span class="ok">剩 '+(480-S.clock)+' 分鐘</span>');
+      var w=0; S.loss.forEach(function(x,k){if(x>S.loss[w])w=k}); var wo=S.picks[w];
+      var kind=over>0?'over':(score>=60?'pass':'low');
+      var h={pass:'及格交卷',over:'鈴響時還沒畫完',low:'圖交了，但被重扣'}[kind];
+      var msg={pass:'預估 '+score+' 分，及格。每一張被要求的圖都在紙上。',over:'預估 '+score+' 分，超時 '+over+' 分鐘，不及格。前面花太久，後面的圖來不及畫。',low:'預估 '+score+' 分，不及格。時間夠，但缺圖或違規被重扣。'}[kind];
+      var hurt=S.loss[w]>=6?'<p>最傷的決定：第 '+(w+1)+' 步「'+wo.t+'」。'+wo.log+'</p>':'<p>沒有明顯失分的決定。</p>';
+      end.className='exEnd '+kind; end.innerHTML='<h4>'+h+'</h4><p>'+msg+'</p>'+hurt; end.hidden=false;
+      var passed=LVL.done(LVL.current(),over>0?Math.min(score,50):score);
+      if(passed&&LVL.current()<SC.length-1)bNext.hidden=false;
+    }) }
+  function start(i){ sc=SC[i]; cancelAnimationFrame(anim); busy=false; logL.innerHTML=''; end.hidden=true; bNext.hidden=true;
+    S=newState(); shown=sc.start; logL.appendChild(el('li',null,'<b>'+clk(sc.start)+'</b>'+sc.intro));
+    drawClock(shown); ask() }
+  bAgain.addEventListener('click',function(){K.stampOff(box); start(LVL.current())});
+  bNext.addEventListener('click',function(){LVL.next()});
+  LVL=K.levels(box,{key:'g:exam',names:SC.map(function(x){return x.name}),pass:60,start:start});
+  box._exam={SC:SC};
+})();
+})();
+</script>

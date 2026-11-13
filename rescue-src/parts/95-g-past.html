@@ -1,0 +1,63 @@
+<style>
+.pp-pages{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff}
+.pp-pages img{width:100%;height:auto;display:block;border:1px solid #c9d2dc}
+.pp-step{border-top:1px dashed var(--line);margin-top:16px;padding-top:12px}
+.pp-step h4{margin:0 0 6px;font-family:var(--f-hand);font-size:19px}
+.pp-step h4 em{font-style:normal;font:600 11px var(--f-data);letter-spacing:.1em;background:var(--bp-hi);color:#1b2330;border-radius:3px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.pp-src{font-size:12.5px;color:var(--mut);margin-top:14px}
+.pp-years{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.pp-years button{border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:13.5px;text-align:left;line-height:1.3;min-height:44px}
+.pp-years button b{font:600 15px var(--f-data);display:block}
+.pp-years button[aria-pressed="true"]{border-color:var(--bp-hi)}
+.pp-years button.done b::after{content:" ✓";color:var(--ok)}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY, P=window.KY_PAST; if(!K||!P||!P.length)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud;
+/* ============ 歷屆真題挑戰：考選部 100–113 年「建築計畫與設計」原題 ============ */
+var box=K.gameBox('gPast','真題','歷屆真題挑戰','/100','這裡是考選部 100 到 113 年「建築計畫與設計」的正式試題。選一年，看原題，計時讀題，然後對照硬條件、算量體、數出要畫幾張圖。');
+var body=el('div'); box.appendChild(body);
+function sc(id){return (K.st.sc&&K.st.sc['g:past:'+id])||0}
+function canCalc(q){return q.area&&q.bcr&&q.far&&q.id!=='104'}
+var cur=null, timer=null;
+function years(){var h='<div class="pp-years" role="group" aria-label="年度">'; P.forEach(function(q){h+='<button type="button" data-y="'+q.id+'" aria-pressed="'+(cur&&cur.id===q.id?'true':'false')+'" class="'+(sc(q.id)>=60?'done':'')+'"><b>'+q.id+' 年</b>'+q.t+'</button>'}); return h+'</div>'}
+function fmt(n){return (Math.round(n*100)/100).toLocaleString('en-US')}
+function open(q){ cur=q; clearInterval(timer); timer=null; K.stampOff(box); hud(box,sc(q.id));
+  var h=years()+'<h4 class="h-hand" style="font-size:22px;margin:0 0 4px">'+q.id+' 年：'+q.t+'</h4><p class="hint">'+(q.score||'')+'</p>';
+  h+='<div class="pp-step"><h4><em>1</em>讀原題</h4><p class="hint">考場上給 30 分鐘，這裡壓縮成 5 分鐘。用四種標記的方式讀，在紙上列出你抓到的硬條件。</p>'
+    +'<div class="frow"><button type="button" class="go" id="ppStart">開始計時 5:00</button><span class="clock" id="ppClock" style="font-size:30px">5:00</span><button type="button" class="ghost" id="ppRead">我讀完了，對答案</button></div>';
+  if(q.pages){h+='<div class="pp-pages" id="ppPages" tabindex="0" aria-label="原題頁面">'; for(var i=1;i<=q.pages;i++)h+='<img loading="lazy" src="q/'+q.id+'-'+i+'.jpg" alt="'+q.id+' 年原題第 '+i+' 頁">'; h+='</div>'}
+  h+='<p class="hint" id="ppNoImg" hidden>原題圖片在這個檢視畫面載入不了。下面是整理過的基地說明：'+q.site+'</p></div><div id="ppRest" hidden></div>';
+  h+='<p class="pp-src">資料來源：考選部歷屆試題，專門職業及技術人員高等考試建築師考試「建築計畫與設計」。下方的條件整理是摘要，數字以原題為準。</p>';
+  body.innerHTML=h;
+  $$('.pp-years button',body).forEach(function(b){b.addEventListener('click',function(){open(P.filter(function(x){return x.id===b.dataset.y})[0])})});
+  var im=$('#ppPages img',body); if(im)im.addEventListener('error',function(){$('#ppPages',body).hidden=true; $('#ppNoImg',body).hidden=false}); else $('#ppNoImg',body).hidden=false;
+  var left=300; $('#ppStart',body).addEventListener('click',function(){ $('#ppStart',body).hidden=true; clearInterval(timer); timer=setInterval(function(){left--; var c=$('#ppClock',body); if(!c){clearInterval(timer);return} c.textContent=K.mmss(left); if(left<=0){clearInterval(timer);timer=null;c.textContent='時間到';c.style.color='var(--bad)'}},1000)});
+  $('#ppRead',body).addEventListener('click',function(){clearInterval(timer);timer=null; $('#ppRead',body).hidden=true; $('#ppStart',body).hidden=true; rest(q)});
+}
+function rest(q){var r=$('#ppRest',body), calc=canCalc(q), h='';
+  h+='<div class="pp-step"><h4><em>2</em>硬條件：你抓到幾條？</h4><p class="hint">基地：'+q.site+'</p><ul class="check" id="ppHard">'+q.hard.map(function(t,i){return '<li><label><input type="checkbox" id="pph'+i+'"><span>'+t+'</span></label></li>'}).join('')+'</ul></div>';
+  if(calc){h+='<div class="pp-step"><h4><em>3</em>量體：兩個上限</h4><p class="hint">基地面積 '+fmt(q.area)+' ㎡'+(q.est?'（估算值）':'')+'、建蔽率 '+q.bcr+'%、容積率 '+q.far+'%。</p><div class="frow"><label for="ppA">最大建築面積 ㎡<input type="number" id="ppA" inputmode="decimal"></label><label for="ppB">最大容積樓地板 ㎡<input type="number" id="ppB" inputmode="decimal"></label></div></div>'}
+  else{h+='<div class="pp-step"><h4><em>3</em>量體</h4><p class="hint">這一年的題目'+(q.id==='104'?'有兩塊基地要分開檢討':'沒有直接給齊面積、建蔽率和容積率')+'，量體要依原題附圖自己推算，這一步不計分。'+(q.bcr?'建蔽率 '+q.bcr+'%。':'')+(q.far?'容積率 '+q.far+'%。':'')+'</p></div>'}
+  h+='<div class="pp-step"><h4><em>4</em>圖面：這題要你畫幾張圖？</h4><div class="frow"><label for="ppD">張數<input type="number" id="ppD" inputmode="numeric" min="1" max="20"></label></div></div>';
+  h+='<div class="frow" style="margin-top:14px"><button type="button" class="go" id="ppGo">算分</button></div><div id="ppOut"></div>';
+  r.innerHTML=h; r.hidden=false;
+  $('#ppGo',body).addEventListener('click',function(){ var got=$$('#ppHard input:checked',body).length, hs=got/q.hard.length, cs=0, out='';
+    if(calc){var A=q.area*q.bcr/100,B=q.area*q.far/100, okA=K.gradeNum($('#ppA',body),A,Math.max(1,A*.01)), okB=K.gradeNum($('#ppB',body),B,Math.max(1,B*.01)); cs=(okA?.5:0)+(okB?.5:0);
+      [['#ppA',okA],['#ppB',okB]].forEach(function(x){var n=$(x[0],body); n.style.borderColor=x[1]?'var(--ok)':'var(--bad)'; n.style.background=x[1]?'var(--okbg)':'var(--badbg)'});
+      out+='<p>量體：最大建築面積 '+fmt(q.area)+' × '+q.bcr+'% ＝ <b>'+fmt(A)+' ㎡</b>；最大容積樓地板 '+fmt(q.area)+' × '+q.far+'% ＝ <b>'+fmt(B)+' ㎡</b>。'+(q.floors?'另外題目限制地上 '+q.floors+' 層。':'')+'</p>'}
+    var d=parseInt($('#ppD',body).value,10), okD=d===q.draw.length, near=Math.abs(d-q.draw.length)===1;
+    out+='<p>圖面：題目要求 <b>'+q.draw.length+' 項</b>，另外每張圖都要有圖名、比例、指北針和標註。</p><ol class="t">'+q.draw.map(function(t){return '<li>'+t+'</li>'}).join('')+'</ol>';
+    if(q.prog&&q.prog.length){out+='<p>題目有給面積的空間：</p><div class="tw"><table><tr><th>空間</th><th class="n">㎡</th></tr>'+q.prog.map(function(p){return '<tr><td>'+p[0]+'</td><td class="n">'+fmt(p[1])+'</td></tr>'}).join('')+'<tr><th>淨面積合計</th><th class="n">'+fmt(q.prog.reduce(function(s,p){return s+p[1]},0))+'</th></tr></table></div>'}
+    var total=Math.round(calc?hs*50+cs*30+(okD?20:near?10:0):hs*70+(okD?30:near?15:0));
+    K.st.sc=K.st.sc||{}; if(total>sc(q.id)){K.st.sc['g:past:'+q.id]=total; K.save()} K.award('g:past:'+q.id,total/P.length*2); hud(box,total); if(total>=60)K.stampOn(box,total>=90?'高手':'合格');
+    $('#ppOut',body).innerHTML='<p class="verdict '+(total>=60?'ok':'no')+'"><b>'+total+' 分。</b>硬條件抓到 '+got+' / '+q.hard.length+' 條'+(calc?'，量體對 '+(cs*2)+' / 2':'')+'，圖面張數'+(okD?'正確':'應為 '+q.draw.length)+'。'+(got<q.hard.length?'沒勾到的那幾條，回原題找出它寫在哪一句。':'')+'</p>'+out;
+    $$('.pp-years button',body).forEach(function(b){b.classList.toggle('done',sc(b.dataset.y)>=60)}) });
+}
+open(P[0]);
+/* 把真題數字加進數字快答題庫（如果題庫已載入就不重複加） */
+K.pastForFlash=function(){return P.filter(canCalc).map(function(q){return [q.id,q.t,q.area,q.bcr,q.far]})};
+})();
+</script>

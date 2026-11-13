@@ -1,0 +1,387 @@
+<style>
+/* 平面拼圖：塗格子，即時畫成平面圖 */
+#gPlan .gp-brief{margin:0 0 6px;font-size:15px;line-height:1.6}
+#gPlan .gp-pal{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+#gPlan .gp-pal button{display:inline-flex;align-items:center;gap:7px;background:var(--paper);color:var(--ink);border:2px solid var(--line);border-radius:6px;padding:5px 10px;min-height:40px;font-size:14px;font-weight:600}
+#gPlan .gp-pal button[aria-pressed="true"]{border-color:var(--bp-hi);box-shadow:0 0 0 2px var(--bp-hi)}
+#gPlan .gp-pal i{width:16px;height:16px;border-radius:3px;border:1px solid var(--ink);display:inline-block;flex:none}
+#gPlan .gp-wrap{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+#gPlan .gp-wrap.wide{grid-template-columns:minmax(0,1fr)}
+#gPlan .gp-wrap.wide .gp-side{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:16px;align-items:start}
+#gPlan .gp-fig{margin:0}
+#gPlan .gp-fig svg{touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair}
+#gPlan .gp-fig svg:focus{outline:3px solid var(--bp-hi);outline-offset:2px}
+#gPlan .rules{grid-template-columns:minmax(0,1fr);margin-top:10px}
+#gPlan .rules small{display:block;color:var(--warn);font-size:12.5px;line-height:1.45;margin-top:1px}
+#gPlan .tally{font-size:13.5px}
+#gPlan .gp-fa{fill:var(--blue-soft)}#gPlan .gp-fb{fill:var(--okbg)}#gPlan .gp-fc{fill:var(--warnbg)}#gPlan .gp-fd{fill:var(--badbg)}#gPlan .gp-fe{fill:var(--line);opacity:.6}#gPlan .gp-fp{fill:var(--paper)}
+#gPlan .gp-cg{stroke:var(--line);stroke-width:.6;stroke-dasharray:1.5 3;fill:none}
+#gPlan .gp-ghost{fill:none;stroke:var(--bp-hi);stroke-width:1.3;stroke-dasharray:5 3}
+#gPlan svg .gp-gt{font-family:var(--f-data);font-size:9px;font-weight:600;fill:var(--bp-hi)}
+#gPlan .gp-path{fill:none;stroke-width:1.6;stroke-dasharray:6 3}
+#gPlan .gp-path.ok{stroke:var(--ok)}#gPlan .gp-path.no{stroke:var(--bad)}
+#gPlan svg .gp-pt{font-family:var(--f-data);font-size:10px;font-weight:700;paint-order:stroke;stroke:var(--paper);stroke-width:3px}
+#gPlan svg .gp-pt.ok{fill:var(--ok)}#gPlan svg .gp-pt.no{fill:var(--bad)}
+#gPlan .gp-cur{fill:none;stroke:var(--bp-hi);stroke-width:2.5}
+#gPlan svg .t-room,#gPlan svg .t-area,#gPlan svg .gp-lab{paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round}
+#gPlan svg .gp-lab{font-family:var(--f-text);font-size:10px;fill:var(--mut)}
+@media (max-width:700px){#gPlan .gp-wrap,#gPlan .gp-wrap.wide .gp-side{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:520px){#gPlan svg .t-room{font-size:13px}#gPlan svg .t-area,#gPlan svg .t-dim,#gPlan svg .gp-lab{font-size:10.5px}}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K)return;
+var $=K.$, $$=K.$$, el=K.el, hud=K.hud, svgPt=K.svgPt;
+/* ============ GAME 02 平面拼圖：三小關，塗格子即時變成平面圖 ============ */
+(function(){
+  var box=$('#gPlan'); if(!box)return;
+  Array.prototype.slice.call(box.children).forEach(function(n){ if(!n.classList.contains('ghead')&&!n.classList.contains('gdesc'))box.removeChild(n) });
+  var gd=$('.gdesc',box); if(gd)gd.textContent='先在色票選一種空間，再在圖上點或拖曳來塗。塗好的格子會即時畫成平面圖：牆、門、窗、柱、樓梯和尺寸都會自己長出來。規則全部打勾就過關。';
+  var D=K.draw(true), PASS=90;
+  function rep(v,n){var a=[];for(var i=0;i<n;i++)a.push(v);return a}
+  function r2(n){return Math.round(n*100)/100}
+  /* 空間種類：名稱、填色、性質（open＝開放動線不做隔間牆；core＝服務核；split＝自動切成幾格一間；free＝無柱大空間） */
+  var TY={
+    co:['走廊','fp',{open:1}], lob:['門廳','fp',{open:1}], sc:['故事角','fb',{open:1}],
+    st:['樓梯','fe',{core:1}], ev:['電梯','fe',{core:1}], wc:['廁所','fe',{core:1}],
+    cl:['樂齡教室','fa',{split:[2,2]}], kid:['兒童閱覽','fb',{}], hall:['多功能廳','fa',{free:1}],
+    cafe:['咖啡','fc',{}], din:['共餐','fb',{}], kit:['廚房','fd',{}],
+    rm:['寢室','fa',{split:[1,1]}], lng:['交誼廳','fc',{}], sv:['洗衣茶水','fd',{}],
+    x:['橡皮擦','',{}]
+  };
+  var SW={fa:'var(--blue-soft)',fb:'var(--okbg)',fc:'var(--warnbg)',fd:'var(--badbg)',fe:'var(--line)',fp:'var(--paper)'};
+  function rows(a){var o=[]; a.forEach(function(s){o=o.concat(s.split(/\s+/))}); return o}
+
+  var LV=[
+   {nm:'二樓', cw:rep(4,6), rh:rep(4,8), ax:[0,2,4,6], ay:[0,2,4,6,8], S:13, ox:96, oy:100, vw:486, wide:false, cut:3,
+    types:['co','st','ev','wc','cl','kid','sc'], title:'二樓平面圖',
+    brief:'<b>二樓，24 × 32 m，一格 4 × 4 m。</b>放四間樂齡教室、兒童閱覽和故事角，再加兩座樓梯、電梯、廁所和走廊。右邊（東）是社區公園。',
+    ctx:{n:'北側 4 層住宅',w:'西側 8 m 道路',s:'南側 15 m 道路',e:'東側 社區公園'},
+    demo:rows(['st co cl cl cl cl','st co cl cl cl cl','wc co co co co co','wc co cl cl cl cl','wc co cl cl cl cl','ev co sc kid kid kid','st co kid kid kid kid','st co kid kid kid kid']),
+    tally:[['cl','目標 240'],['kid','目標 200'],['sc',''],['co',''],['wc','']]},
+   {nm:'一樓', cw:rep(4,6), rh:rep(4,8), ax:[0,2,4,6], ay:[0,2,4,6,8], S:13, ox:96, oy:100, vw:486, wide:false, cut:3,
+    types:['co','lob','st','ev','wc','hall','cafe','din','kit'], title:'一樓平面圖',
+    brief:'<b>一樓，同一塊 24 × 32 m。</b>黃色虛線是二樓樓梯和電梯的位置，一樓要疊在同一格。南邊 15 m 路是主入口；多功能廳晚上要能自己開門；廚房要有後勤進貨的門。',
+    ctx:{n:'北側 4 層住宅',w:'西側 8 m 道路',s:'南側 15 m 道路',e:'東側 社區公園'},
+    demo:rows(['st co kit kit din cafe','st co din din din cafe','wc co din din din cafe','wc co co co cafe cafe','wc lob hall hall hall hall','ev lob hall hall hall hall','st lob hall hall hall hall','st lob hall hall hall hall']),
+    tally:[['hall','目標 250'],['din','目標 120'],['cafe','目標 80'],['kit',''],['lob',''],['co','']]},
+   {nm:'宿舍層', cw:rep(4,10), rh:[7,2.4,7], ax:[0,2,4,6,8,10], ay:[0,1,2,3], S:14, ox:96, oy:100, vw:720, wide:true,
+    types:['co','st','ev','rm','lng','sv'], title:'宿舍標準層平面圖',
+    brief:'<b>換一棟：學生宿舍的標準層，40 × 16.4 m。</b>一格寢室 4 × 7 m。中間那排 2.4 m 是走廊的位置。每間寢室要有窗，走到樓梯不能太遠。',
+    ctx:{n:'北側 鄰棟',s:'南側 中庭'},
+    demo:rows(['st rm rm rm rm rm rm rm sv st','co co co co co co co co co co','ev rm rm rm lng lng rm rm rm rm']),
+    tally:[['rm','至少 14 間'],['lng',''],['sv',''],['co','']]}
+  ];
+  var REF=(function(){var d=LV[0].demo,o={}; d.forEach(function(t,i){ if(t==='st'||t==='ev')o[i]=t }); return o})(); /* 二樓服務核（一樓要對齊） */
+
+  /* ---------- DOM ---------- */
+  var brief=el('p',{'class':'gp-brief'}), pal=el('div',{'class':'gp-pal',role:'group','aria-label':'空間種類'}),
+      wrap=el('div',{'class':'gp-wrap'}), fig=el('figure',{'class':'gp-fig'}),
+      side=el('div',{'class':'gp-side'}), tally=el('ul',{'class':'tally'}), rul=el('ul',{'class':'rules'}),
+      bar=el('div',{'class':'frow'}), msg=el('p',{'class':'verdict mid',hidden:''});
+  fig.innerHTML='<svg viewBox="0 0 486 640" role="img" tabindex="0" aria-label="平面圖。用滑鼠或手指拖曳塗色；鍵盤可用方向鍵移動、空白鍵塗色。"></svg>';
+  var svg=fig.firstChild;
+  side.appendChild(tally); side.appendChild(rul); wrap.appendChild(fig); wrap.appendChild(side);
+  bar.innerHTML='<button class="ghost" type="button" data-a="clear">清空</button><button class="ghost" type="button" data-a="demo">看一種解法</button><button class="go" type="button" data-a="next" hidden>下一小關 →</button>';
+  [brief,pal,wrap,bar,msg].forEach(function(n){box.appendChild(n)});
+  var nextBtn=$('[data-a=next]',bar);
+
+  /* ---------- 狀態 ---------- */
+  var lv, C, R, N, cells, xm, ym, xs, ys, S, ox, oy, W, H, VW, VH, pick='co', demo=false, painting=false, cur=0, kcur=0, focused=false, RM, L;
+
+  function nb(i){var r=(i/C)|0,c=i%C,o=[]; if(r>0)o.push(i-C); if(r<R-1)o.push(i+C); if(c>0)o.push(i-1); if(c<C-1)o.push(i+1); return o}
+  function cnt(t){var n=0; cells.forEach(function(x){if(x===t)n++}); return n}
+  function cellsOf(t){var o=[]; cells.forEach(function(x,i){if(x===t)o.push(i)}); return o}
+  function comps(pred){var seen={},out=[]; for(var i=0;i<N;i++){ if(seen[i]||!pred(i))continue; var q=[i],cp=[]; seen[i]=1; while(q.length){var k=q.pop(); cp.push(k); nb(k).forEach(function(n){if(!seen[n]&&pred(n)){seen[n]=1;q.push(n)}})} out.push(cp)} return out}
+  function compsOf(t){return comps(function(i){return cells[i]===t})}
+  function isOpen(t){return t!=='x'&&!!TY[t][2].open}
+  function isCirc(i){return isOpen(cells[i])}
+  function sideOf(i){var r=(i/C)|0,c=i%C,s=''; if(r===0)s+='n'; if(r===R-1)s+='s'; if(c===0)s+='w'; if(c===C-1)s+='e'; return s}
+  function touches(list,sides){return list.some(function(i){var s=sideOf(i); return sides.split('').some(function(k){return s.indexOf(k)>=0})})}
+  function ctr(i){var r=(i/C)|0,c=i%C; return [(xm[c]+xm[c+1])/2,(ym[r]+ym[r+1])/2]}
+  function areaOf(list){return list.reduce(function(a,i){var r=(i/C)|0,c=i%C; return a+(xm[c+1]-xm[c])*(ym[r+1]-ym[r])},0)}
+  function gap(a,b){var m=99; a.forEach(function(i){b.forEach(function(j){var d=Math.abs(((i/C)|0)-((j/C)|0))+Math.abs(i%C-j%C); if(d<m)m=d})}); return m}
+  function cmid(list){var x=0,y=0; list.forEach(function(i){var p=ctr(i); x+=p[0]; y+=p[1]}); return [x/list.length,y/list.length]}
+
+  /* 合併同種相鄰格子成房間；有 split 的種類再切成固定大小 */
+  function buildRooms(){
+    var of=rep(-1,N), rooms=[];
+    for(var i=0;i<N;i++){ if(of[i]!==-1||cells[i]==='x')continue;
+      var t=cells[i], comp=[], q=[i], seen={}; seen[i]=1;
+      while(q.length){var k=q.pop(); comp.push(k); nb(k).forEach(function(n){ if(!seen[n]&&cells[n]===t){seen[n]=1;q.push(n)} })}
+      var sp=TY[t][2].split;
+      if(!sp){ var id=rooms.length; rooms.push({t:t,cells:comp}); comp.forEach(function(k){of[k]=id}); continue }
+      comp.sort(function(a,b){return a-b}); var inC={}, done={}; comp.forEach(function(k){inC[k]=1});
+      comp.forEach(function(k){ if(done[k])return; var r=(k/C)|0, c=k%C, sizes=[[sp[0],sp[1]],[sp[0],1],[1,sp[1]],[1,1]];
+        for(var s=0;s<sizes.length;s++){ var bw=sizes[s][0], bh=sizes[s][1], blk=[], ok=true;
+          for(var dr=0;dr<bh&&ok;dr++)for(var dc=0;dc<bw;dc++){ var rr=r+dr, cc=c+dc, j=rr*C+cc; if(cc>=C||rr>=R||!inC[j]||done[j]){ok=false;break} blk.push(j) }
+          if(ok){ var id2=rooms.length; rooms.push({t:t,cells:blk}); blk.forEach(function(j){done[j]=1;of[j]=id2}); break } } });
+    }
+    return {rooms:rooms,of:of};
+  }
+  function roomsOf(t){return RM.rooms.filter(function(r){return r.t===t})}
+
+  /* ---------- 規則 ---------- */
+  function fillRule(p){var b=cnt('x'); return {t:'全部 '+N+' 格都填滿',ok:b===0,p:p,why:b+' 格還空著。'}}
+  function linkRule(p,txt){
+    var circ=comps(isCirc), bad=null;
+    RM.rooms.forEach(function(rm){ if(bad||isOpen(rm.t))return; if(!rm.cells.some(function(i){return nb(i).some(isCirc)}))bad=rm });
+    var ok=circ.length===1&&!bad, why=!circ.length?'還沒有走廊。':circ.length>1?'走廊斷成 '+circ.length+' 段，要連成一條。':bad?'有一間「'+TY[bad.t][0]+'」碰不到走廊，進不去。':'';
+    return {t:txt,ok:ok,p:p,why:why};
+  }
+  function stairRule(p){
+    var st=compsOf('st'), why='', ok=false;
+    if(st.length!==2)why='現在有 '+st.length+' 座樓梯，要剛好兩座。';
+    else if(st[0].length<2||st[1].length<2)why='每座樓梯要 2 格（4 × 8 m），1 格放不下梯段和平台。';
+    else{var g=gap(st[0],st[1]); if(g<4)why='兩座樓梯只隔 '+g+' 格，要分在兩端，隔 4 格以上。'; else ok=true}
+    return {t:'樓梯剛好兩座，每座 2 格，分在兩端（相隔 4 格以上）',ok:ok,p:p,why:why};
+  }
+  function rules1(){
+    var o=[fillRule(10), stairRule(15)];
+    var ev=cnt('ev'), wc=cnt('wc');
+    o.push({t:'電梯 1 格、廁所 2 到 3 格',ok:ev===1&&wc>=2&&wc<=3,p:10,why:ev!==1?'電梯現在 '+ev+' 格，一座就夠。':'廁所現在 '+wc+' 格，要 2 到 3 格（男、女、無障礙）。'});
+    var cl=roomsOf('cl'), full=cl.filter(function(r){return r.cells.length===4}).length, frag=cl.length-full;
+    o.push({t:'樂齡教室 4 間，每間 2 × 2 格（一個 8 × 8 m 柱跨）',ok:full===4&&frag===0,p:20,why:'現在 '+full+' 間完整教室'+(frag?'，另有 '+frag+' 塊零碎的教室格':'')+'。一間教室剛好佔一個柱跨最好排。'});
+    var kid=compsOf('kid'), kn=cnt('kid'), sc=cellsOf('sc'), scAdj=sc.length&&sc.some(function(i){return nb(i).some(function(n){return cells[n]==='kid'})});
+    o.push({t:'兒童閱覽 11 到 14 格連成一間，故事角 1 到 3 格貼著它',ok:kid.length===1&&kn>=11&&kn<=14&&sc.length>=1&&sc.length<=3&&scAdj,p:15,
+      why:kid.length>1?'兒童閱覽分成 '+kid.length+' 塊，要連成一間。':(kn<11||kn>14)?'兒童閱覽現在 '+kn+' 格（'+kn*16+' ㎡），目標 200 ㎡ 左右。':(sc.length<1||sc.length>3)?'故事角現在 '+sc.length+' 格，要 1 到 3 格。':'故事角要貼著兒童閱覽，小朋友才走得過去。'});
+    o.push(linkRule(20,'走廊和故事角連成一條動線，每個空間都碰得到'));
+    var bad=[]; for(var r=0;r<R;r++){var t=cells[r*C+C-1]; if(t==='st'||t==='ev'||t==='wc')bad.push(TY[t][0])}
+    o.push({t:'東側面向公園那一排不放樓梯、電梯、廁所',ok:!bad.length&&cnt('x')<N,p:10,why:bad.length?'東側有'+bad.filter(function(v,i,a){return a.indexOf(v)===i}).join('、')+'，把最好的景擋掉了。':'先開始塗。'});
+    return o;
+  }
+  function rules2(){
+    var o=[fillRule(10)], miss=0, extra=0;
+    for(var i=0;i<N;i++){ if(REF[i]&&cells[i]!==REF[i])miss++; if(!REF[i]&&(cells[i]==='st'||cells[i]==='ev'))extra++ }
+    o.push({t:'樓梯、電梯和二樓疊在同一格（黃色虛線）',ok:!miss&&!extra,p:15,why:miss?'還有 '+miss+' 格沒對齊。服務核上下對齊，結構和管道才通得過去。':'多了 '+extra+' 格樓梯或電梯，二樓沒有它們。'});
+    var lob=cellsOf('lob');
+    o.push({t:'門廳至少 3 格，碰到南側外牆（主入口面向 15 m 道路）',ok:lob.length>=3&&touches(lob,'s'),p:15,why:lob.length<3?'門廳現在 '+lob.length+' 格，太小。':'門廳沒有碰到南側外牆，主入口開不出去。'});
+    var hall=compsOf('hall'), hn=cnt('hall'), hok=false, hw='';
+    if(hall.length!==1)hw=hall.length?'多功能廳分成 '+hall.length+' 塊，要一整間。':'還沒有多功能廳。';
+    else if(hn<15||hn>16)hw='多功能廳現在 '+hn+' 格（'+hn*16+' ㎡），目標 250 ㎡ 是 15 到 16 格。';
+    else{var h=hall[0], r0=99,r1=-1,c0=99,c1=-1; h.forEach(function(i){var r=(i/C)|0,c=i%C; r0=Math.min(r0,r);r1=Math.max(r1,r);c0=Math.min(c0,c);c1=Math.max(c1,c)});
+      var bw=c1-c0+1, bh=r1-r0+1;
+      if(bw*bh!==hn)hw='多功能廳不是完整的矩形，大跨距的梁只能跨矩形。';
+      else if(Math.min(bw,bh)<3)hw='多功能廳太細長，短邊至少 3 格（12 m）才好用。';
+      else if(!touches(h,'sw'))hw='多功能廳沒有碰到西側或南側外牆，晚上開不了獨立入口。';
+      else hok=true}
+    o.push({t:'多功能廳 15 到 16 格的完整矩形，短邊 3 格以上，碰到西或南側外牆（夜間入口）',ok:hok,p:20,why:hw});
+    var din=compsOf('din'), dn=cnt('din'), kit=cellsOf('kit'), kAdj=kit.some(function(i){return nb(i).some(function(n){return cells[n]==='din'})});
+    o.push({t:'共餐 7 到 8 格；廚房 2 格以上貼著共餐，並碰到北或西側外牆（後勤進貨）',ok:din.length===1&&dn>=7&&dn<=8&&kit.length>=2&&kAdj&&touches(kit,'nw'),p:15,
+      why:din.length!==1?'共餐要連成一間。':(dn<7||dn>8)?'共餐現在 '+dn+' 格（'+dn*16+' ㎡），目標 120 ㎡。':kit.length<2?'廚房至少 2 格。':!kAdj?'廚房要貼著共餐，出餐才順。':'廚房沒有碰到北側或西側外牆，貨車送不進來。'});
+    var cafe=cellsOf('cafe');
+    o.push({t:'咖啡 4 到 6 格，碰到東側公園',ok:cafe.length>=4&&cafe.length<=6&&touches(cafe,'e'),p:10,why:(cafe.length<4||cafe.length>6)?'咖啡現在 '+cafe.length+' 格，目標 80 ㎡ 是 5 格左右。':'咖啡沒有碰到東側，看不到公園。'});
+    o.push(linkRule(15,'走廊和門廳連成一片，每個空間都碰得到'));
+    return o;
+  }
+  function travel(){
+    var res=[];
+    RM.rooms.forEach(function(rm){ if(rm.t!=='rm')return; var s=rm.cells[0], dist=rep(Infinity,N), prev=rep(-1,N), used=rep(false,N), end=-1; dist[s]=0;
+      for(;;){ var u=-1,b=Infinity; for(var i=0;i<N;i++)if(!used[i]&&dist[i]<b){b=dist[i];u=i} if(u<0)break; used[u]=true;
+        if(cells[u]==='st'){end=u;break} if(u!==s&&!isCirc(u))continue;
+        nb(u).forEach(function(n){ if(!(isCirc(n)||cells[n]==='st'))return; var a=ctr(u),c=ctr(n),w=Math.sqrt((a[0]-c[0])*(a[0]-c[0])+(a[1]-c[1])*(a[1]-c[1])); if(dist[u]+w<dist[n]){dist[n]=dist[u]+w;prev[n]=u} }) }
+      var path=[]; if(end>=0){for(var k=end;k>=0;k=prev[k])path.unshift(k)}
+      res.push({room:rm,d:end>=0?dist[end]:Infinity,path:path}) });
+    return res;
+  }
+  var TR=[];
+  function rules3(){
+    var o=[fillRule(10)], rm=roomsOf('rm');
+    o.push({t:'寢室至少 14 間',ok:rm.length>=14,p:15,why:'現在 '+rm.length+' 間。服務空間太多就會少房間，能省就省。'});
+    var dark=rm.filter(function(r){return !sideOf(r.cells[0])}).length;
+    o.push({t:'每間寢室都貼外牆，可以開窗',ok:rm.length>0&&!dark,p:15,why:rm.length?dark+' 間寢室在中間那排，沒有外牆，開不了窗。':'還沒有寢室。'});
+    var st=compsOf('st'), sOk=false, sw='';
+    if(st.length!==2)sw='現在有 '+st.length+' 座樓梯，要剛好兩座。';
+    else{var a=cmid(st[0]),b=cmid(st[1]),d=Math.abs(a[0]-b[0]); if(d<20)sw='兩座樓梯只隔 '+Math.round(d)+' m，要拉開到 20 m 以上，一座被煙堵住還有另一座。'; else sOk=true}
+    o.push({t:'樓梯剛好兩座，相隔 20 m 以上',ok:sOk,p:15,why:sw});
+    TR=travel(); var worst=TR.reduce(function(m,x){return x.d>m?x.d:m},0);
+    o.push({t:'每間寢室走到最近的樓梯不超過 30 m（考試簡化值）',ok:TR.length>0&&worst<=30,p:20,why:!TR.length?'還沒有寢室。':worst===Infinity?'有寢室沿走廊走不到任何樓梯。':'最遠一間要走 '+worst.toFixed(1)+' m（圖上虛線）。把樓梯往中間挪，或兩端各放一座。'});
+    o.push(linkRule(15,'走廊連成一條，每個空間都碰得到'));
+    var ev=cnt('ev'), sv=cnt('sv'), lng=compsOf('lng'), ln=cnt('lng');
+    o.push({t:'電梯 1 格、洗衣茶水 1 格以上、交誼廳 2 格連在一起並面向南側中庭',ok:ev===1&&sv>=1&&lng.length===1&&ln>=2&&touches(lng[0],'s'),p:10,
+      why:ev!==1?'電梯現在 '+ev+' 格，一座就夠。':sv<1?'還沒有洗衣茶水間。':(lng.length!==1||ln<2)?'交誼廳要 2 格連成一間。':'交誼廳沒有碰到南側，曬不到太陽。'});
+    return o;
+  }
+  var RULES=[rules1,rules2,rules3];
+
+  /* ---------- 繪圖 ---------- */
+  function edgeKey(a,b){return a<b?a+'-'+b:b+'-'+a}
+  function cellBox(i){var r=(i/C)|0,c=i%C; return [xs[c],ys[r],xs[c+1],ys[r+1]]}
+  /* a、b 兩格的共用邊：回傳 {v:是否垂直, x 或 y, 起點, 終點} */
+  function edgeOf(a,b){var ra=(a/C)|0,ca=a%C,rb=(b/C)|0,cb=b%C;
+    if(ra===rb){var c=Math.max(ca,cb); return {v:true,at:xs[c],p0:ys[ra],p1:ys[ra+1]}}
+    var r=Math.max(ra,rb); return {v:false,at:ys[r],p0:xs[ca],p1:xs[ca+1]}}
+  function doorAt(e,roomCell,w,ti,flip){ /* 門扇開向房間內 */
+    var b=cellBox(roomCell), into, off=Math.min(0.45*S,(e.p1-e.p0-w)/2);
+    if(e.v){ into=(b[0]<e.at)?-1:1; return flip?D.door(e.at,e.p1-off,w,'v',into,-1,ti):D.door(e.at,e.p0+off,w,'v',into,1,ti) }
+    into=(b[1]<e.at)?-1:1; return flip?D.door(e.p1-off,e.at,w,'h',-1,into,ti):D.door(e.p0+off,e.at,w,'h',1,into,ti);
+  }
+  /* 外牆上的雙開門，門扇往外開 */
+  function dbl(i,sd,ti){var b=cellBox(i), w=0.9*S, s='';
+    if(sd==='s'||sd==='n'){var y=sd==='s'?b[3]:b[1], m=(b[0]+b[2])/2, o=sd==='s'?1:-1; s+=D.door(m-w,y,w,'h',1,o,ti)+D.door(m+w,y,w,'h',-1,o,ti); return {s:s,x:m,y:y+o*15,rot:sd==='s'?0:180}}
+    var x=sd==='w'?b[0]:b[2], my=(b[1]+b[3])/2, ox2=sd==='w'?-1:1; s+=D.door(x,my-w,w,'v',ox2,1,ti)+D.door(x,my+w,w,'v',ox2,-1,ti); return {s:s,x:x+ox2*15,y:my,rot:sd==='w'?90:-90}}
+  function pickFacade(list,order){ /* 依偏好方向挑一格外牆，取中間那格 */
+    for(var k=0;k<order.length;k++){var sd=order[k], c=list.filter(function(i){return sideOf(i).indexOf(sd)>=0}); if(c.length){c.sort(function(a,b){return a-b}); return {i:c[(c.length-1)>>1],sd:sd}}}
+    return null}
+
+  function render(){
+    var s='', te=0.34*S, ti=0.2*S, i, r, c, e, t;
+    RM=RM||buildRooms();
+    /* 1 房間底色 */
+    RM.rooms.forEach(function(rm){ var f=TY[rm.t][1]; rm.cells.forEach(function(k){var b=cellBox(k); s+='<rect x="'+r2(b[0])+'" y="'+r2(b[1])+'" width="'+r2(b[2]-b[0])+'" height="'+r2(b[3]-b[1])+'" class="gp-'+f+'"/>'; if(isOpen(rm.t)&&rm.t!=='sc')s+=D.hatch(b[0],b[1],b[2]-b[0],b[3]-b[1],'tile')}) });
+    /* 2 塗色格線（淡） */
+    for(i=0;i<N;i++){ r=(i/C)|0; c=i%C;
+      if(c<C-1){ s+='<path d="M'+r2(xs[c+1])+' '+r2(ys[r])+' V'+r2(ys[r+1])+'" class="gp-cg"/>' }
+      if(r<R-1){ s+='<path d="M'+r2(xs[c])+' '+r2(ys[r+1])+' H'+r2(xs[c+1])+'" class="gp-cg"/>' } }
+    /* 3 軸線、編號、尺寸 */
+    var axX=lv.ax.map(function(k){return xs[k]}), axY=lv.ay.map(function(k){return ys[k]});
+    s+=D.grid(axX,axY,[ox-62,oy-62,ox+W+14,oy+H+14]);
+    var lx=[],ly=[]; for(i=0;i<axX.length-1;i++)lx.push(Math.round((xm[lv.ax[i+1]]-xm[lv.ax[i]])*1000));
+    for(i=0;i<axY.length-1;i++)ly.push(Math.round((ym[lv.ay[i+1]]-ym[lv.ay[i]])*1000));
+    s+=D.dimChain(axX,oy,lx,false,-28)+D.dim(ox,oy,ox+W,oy,String(Math.round(xm[C]*1000)),-44);
+    var ryy=axY.slice().reverse(), rly=ly.slice().reverse();
+    s+=D.dimChain(ryy,ox,rly,true,-28)+D.dim(ox,oy+H,ox,oy,String(Math.round(ym[R]*1000)),-44);
+    /* 4 隔間牆 */
+    var walls='';
+    for(i=0;i<N;i++){ r=(i/C)|0; c=i%C; [c<C-1?i+1:-1, r<R-1?i+C:-1].forEach(function(j){ if(j<0)return; var ta=cells[i], tb=cells[j];
+      if(ta==='x'||tb==='x'||RM.of[i]===RM.of[j]||(isOpen(ta)&&isOpen(tb)))return; e=edgeOf(i,j);
+      walls+=e.v?D.wall(e.at,e.p0-ti/2,e.at,e.p1+ti/2,ti):D.wall(e.p0-ti/2,e.at,e.p1+ti/2,e.at,ti) }) }
+    /* 外牆 */
+    walls+=D.wall(ox-te/2,oy,ox+W+te/2,oy,te)+D.wall(ox-te/2,oy+H,ox+W+te/2,oy+H,te)+D.wall(ox,oy-te/2,ox,oy+H+te/2,te)+D.wall(ox+W,oy-te/2,ox+W,oy+H+te/2,te);
+    s+=walls;
+    /* 5 外牆門（一樓）、窗 */
+    var extDoor={}, ent='';
+    if(lv===LV[1]){
+      var a1=pickFacade(cellsOf('lob'),'s'), a2=compsOf('hall').length===1?pickFacade(compsOf('hall')[0],'sw'):null, a3=pickFacade(cellsOf('kit'),'nw');
+      [[a1,'主入口',1],[a2,'夜間入口',1],[a3,'服務入口',0]].forEach(function(q){ if(!q[0])return; var o=q[0]; extDoor[o.i+o.sd]=1;
+        if(q[2]){var d=dbl(o.i,o.sd,te); ent+=d.s+D.entry(d.x,d.y,d.rot,o.sd==='s'?q[1]:'',0,22)}
+        else{var b=cellBox(o.i), w=1.0*S; if(o.sd==='n'){ent+=D.door(b[0]+0.5*S,b[1],w,'h',1,-1,te)+D.entry(b[0]+0.5*S+w/2,b[1]-14,180)} else {ent+=D.door(b[0],b[1]+0.5*S,w,'v',-1,1,te)+D.entry(b[0]-14,b[1]+0.5*S+w/2,90)}} });
+    }
+    for(i=0;i<N;i++){ t=cells[i]; if(t==='x'||t==='ev')continue; var bx=cellBox(i), sd=sideOf(i), lo=t==='wc'?.36:.2, hi=t==='wc'?.64:.8;
+      sd.split('').forEach(function(k){ if(!k||extDoor[i+k])return;
+        if(k==='n'||k==='s'){var yy=k==='n'?bx[1]:bx[3], L0=bx[0]+(bx[2]-bx[0])*lo, L1=bx[0]+(bx[2]-bx[0])*hi; s+=D.win(L0,yy,L1,yy,te)}
+        else{var xx=k==='w'?bx[0]:bx[2], M0=bx[1]+(bx[3]-bx[1])*lo, M1=bx[1]+(bx[3]-bx[1])*hi; s+=D.win(xx,M0,xx,M1,te)} }) }
+    s+=ent;
+    /* 6 室內門 */
+    RM.rooms.forEach(function(rm){ if(isOpen(rm.t))return; var cand=[];
+      rm.cells.forEach(function(k){ nb(k).forEach(function(n){ if(isCirc(n))cand.push([k,n]) }) });
+      if(!cand.length)return;
+      var m=cmid(rm.cells); cand.sort(function(p,q){var a=ctr(p[0]),b=ctr(q[0]); return (Math.abs(a[0]-m[0])+Math.abs(a[1]-m[1]))-(Math.abs(b[0]-m[0])+Math.abs(b[1]-m[1]))||p[0]-q[0]});
+      if(rm.t==='ev'){ var e2=edgeOf(cand[0][0],cand[0][1]), mid=(e2.p0+e2.p1)/2, w2=0.5*S; s+=e2.v?'<rect x="'+r2(e2.at-ti/2-.5)+'" y="'+r2(mid-w2)+'" width="'+r2(ti+1)+'" height="'+r2(2*w2)+'" class="f-void"/>':'<rect x="'+r2(mid-w2)+'" y="'+r2(e2.at-ti/2-.5)+'" width="'+r2(2*w2)+'" height="'+r2(ti+1)+'" class="f-void"/>'; return }
+      var dw=(rm.t==='rm'?0.9:rm.t==='hall'||rm.cells.length>=4?1.2:1.0)*S;
+      s+=doorAt(edgeOf(cand[0][0],cand[0][1]),cand[0][0],dw,ti,false);
+      if(rm.cells.length>=6&&cand.length>1){ var far=cand[cand.length-1]; if(far[0]!==cand[0][0]||far[1]!==cand[0][1])s+=doorAt(edgeOf(far[0],far[1]),far[0],dw,ti,true) }
+      rm.door=cand[0];
+    });
+    /* 7 設備：樓梯、電梯、廁所、寢室 */
+    RM.rooms.forEach(function(rm){ var bb=[1e9,1e9,-1e9,-1e9]; rm.cells.forEach(function(k){var b=cellBox(k); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])]});
+      var pad=ti/2+0.25*S, w=bb[2]-bb[0], h=bb[3]-bb[1];
+      if(rm.t==='st'){ var lg=h>=w?'v':'h', len=(lg==='v'?h:w)/S; s+=D.stair(bb[0]+pad,bb[1]+pad,w-2*pad,h-2*pad,lg,Math.max(7,Math.min(14,Math.round(len*1.6)))) }
+      else if(rm.t==='ev'){ rm.cells.forEach(function(k){var b=cellBox(k), z=Math.min(2.4*S,b[2]-b[0]-2*pad,b[3]-b[1]-2*pad); s+=D.elev((b[0]+b[2]-z)/2,(b[1]+b[3]-z)/2,z,z)}) }
+      else if(rm.t==='wc'){ var dside=rm.door?sideToward(rm.door[0],rm.door[1]):'e', fx={n:'s',s:'n',e:'w',w:'e'}[dside];
+        rm.cells.forEach(function(k){ s+=fixtures(cellBox(k),fx,ti) }); rm.fx=fx }
+      else if(rm.t==='rm'&&rm.door){ s+=dorm(cellBox(rm.cells[0]),sideToward(rm.door[0],rm.door[1]),ti) }
+    });
+    /* 8 柱 */
+    lv.ax.forEach(function(ci){ lv.ay.forEach(function(ri){ var around=[], ok=true;
+      [[ri-1,ci-1],[ri-1,ci],[ri,ci-1],[ri,ci]].forEach(function(p){ if(p[0]<0||p[1]<0||p[0]>=R||p[1]>=C){ok=false;return} around.push(RM.of[p[0]*C+p[1]]) });
+      var free=ok&&around[0]>=0&&around.every(function(v){return v===around[0]})&&TY[RM.rooms[around[0]].t][2].free;
+      var px=xs[ci], py=ys[ri];
+      if(free){ s+='<path d="M'+r2(px-4*S)+' '+r2(py)+' H'+r2(px+4*S)+' M'+r2(px)+' '+r2(py-4*S)+' V'+r2(py+4*S)+'" class="lw-hid"/>' }
+      else s+=D.col(px,py,0.7*S) }) });
+    /* 9 室名與面積 */
+    RM.rooms.forEach(function(rm){ var t2=rm.t; if(t2==='st'||t2==='ev')return;
+      var m=cmid(rm.cells), best=rm.cells[0], bd=1e9; rm.cells.forEach(function(k){var p=ctr(k), d=Math.abs(p[0]-m[0])+Math.abs(p[1]-m[1]); if(d<bd){bd=d;best=k}});
+      var inside=rm.cells.some(function(k){var r0=(k/C)|0,c0=k%C; return m[0]>=xm[c0]&&m[0]<=xm[c0+1]&&m[1]>=ym[r0]&&m[1]<=ym[r0+1]}); if(!inside)m=ctr(best);
+      var px=ox+m[0]*S, py=oy+m[1]*S, ar=Math.round(areaOf(rm.cells));
+      if(t2==='co'){ if(rm.cells.length>=2){var p=ctr(rm.cells[(rm.cells.length/2)|0]); s+='<text x="'+r2(ox+p[0]*S)+'" y="'+r2(oy+p[1]*S+3)+'" text-anchor="middle" class="gp-lab">走廊</text>'} return }
+      if(t2==='wc'){ var sh={n:[0,.7],s:[0,-.7],w:[.7,0],e:[-.7,0]}[rm.fx||'w']; px+=sh[0]*S; py+=sh[1]*S }
+      if(t2==='rm'){ s+='<text x="'+r2(px)+'" y="'+r2(py-2)+'" text-anchor="middle" class="t-room">寢室</text><text x="'+r2(px)+'" y="'+r2(py+10)+'" text-anchor="middle" class="t-area">'+ar+' ㎡</text>'; return }
+      s+=D.room(px,py-2,TY[t2][0],ar+' ㎡') });
+    /* 10 一樓：二樓服務核虛線 */
+    if(lv===LV[1])Object.keys(REF).forEach(function(k){var b=cellBox(+k); s+='<rect x="'+r2(b[0]+3)+'" y="'+r2(b[1]+3)+'" width="'+r2(b[2]-b[0]-6)+'" height="'+r2(b[3]-b[1]-6)+'" class="gp-ghost"/><text x="'+r2(b[0]+6)+'" y="'+r2(b[1]+13)+'" class="gp-gt">2F '+(REF[k]==='st'?'梯':'EV')+'</text>'});
+    /* 11 宿舍：最遠一間到樓梯的路徑 */
+    if(lv===LV[2]&&TR.length){ var wst=TR.reduce(function(m,x){return (x.path.length&&x.d>m.d)?x:m},{d:-1});
+      if(wst.d>=0){ var okp=wst.d<=30, pts=wst.path.map(function(k){var p=ctr(k); return r2(ox+p[0]*S)+' '+r2(oy+p[1]*S)}); s+='<path d="M'+pts.join(' L')+'" class="gp-path '+(okp?'ok':'no')+'"/>';
+        var p0=ctr(wst.path[0]); s+='<text x="'+r2(ox+p0[0]*S)+'" y="'+r2(oy+p0[1]*S+(p0[1]<ym[1]?-22:30))+'" text-anchor="middle" class="gp-pt '+(okp?'ok':'no')+'">'+wst.d.toFixed(1)+' m</text>' } }
+    /* 12 剖切線 */
+    if(lv.cut!=null){ var cx=(xs[lv.cut]+xs[lv.cut+1])/2; s+=D.cut(cx,oy-8,cx,oy+H+8,'A',1,0) }
+    /* 13 周邊、圖名、比例尺、指北 */
+    var cx2=lv.ctx;
+    if(cx2.n&&lv.ax.length>2){var mx=(axX[1]+axX[2])/2; s+='<text x="'+r2(mx)+'" y="'+r2(oy-67)+'" text-anchor="middle" class="t-dim">'+cx2.n+'</text>'}
+    if(cx2.w&&axY.length>2){var my=(axY[1]+axY[2])/2; s+='<text x="'+r2(ox-70)+'" y="'+r2(my)+'" text-anchor="middle" class="t-dim" transform="rotate(-90 '+r2(ox-70)+' '+r2(my)+')">'+cx2.w+'</text>'}
+    if(cx2.e){ for(i=0;i<4;i++)s+=D.tree(ox+W+40+(i%2)*14,oy+50+i*H/4,13); s+='<text x="'+r2(ox+W+40)+'" y="'+r2(oy+H/2)+'" text-anchor="middle" class="t-dim" transform="rotate(90 '+r2(ox+W+40)+' '+r2(oy+H/2)+')">'+cx2.e+'</text>' }
+    if(cx2.s)s+='<text x="'+r2(ox+W/2)+'" y="'+r2(oy+H+52)+'" text-anchor="middle" class="t-dim">'+cx2.s+'</text>';
+    s+=D.title(ox+W/2,oy+H+84,lv.title,'1/200');
+    s+=D.scale(ox,oy+H+102,S,[0,4,8,16]);
+    s+=D.north(ox+W+30,oy+H+86,13);
+    /* 14 鍵盤游標 */
+    if(focused){var kb=cellBox(kcur); s+='<rect x="'+r2(kb[0]+1.5)+'" y="'+r2(kb[1]+1.5)+'" width="'+r2(kb[2]-kb[0]-3)+'" height="'+r2(kb[3]-kb[1]-3)+'" class="gp-cur"/>'}
+    svg.innerHTML=s;
+  }
+  function sideToward(a,b){var d=b-a; return d===1?'e':d===-1?'w':d===C?'s':'n'}
+  /* 廁所：沿著遠離門的那面牆排三間小便間 */
+  function fixtures(b,fx,ti){ var s='', dpt=1.5*S, n=3, i, x0=b[0]+ti/2, x1=b[2]-ti/2, y0=b[1]+ti/2, y1=b[3]-ti/2;
+    if(fx==='w'||fx==='e'){ var X=fx==='w'?x0:x1, F=fx==='w'?x0+dpt:x1-dpt, st=(y1-y0)/n; s+='<path d="M'+r2(F)+' '+r2(y0)+' V'+r2(y1)+'" class="lw-thin"/>';
+      for(i=0;i<n;i++){ var yc=y0+st*(i+.5); if(i)s+='<path d="M'+r2(X)+' '+r2(y0+st*i)+' H'+r2(F)+'" class="lw-thin"/>'; s+='<ellipse cx="'+r2(X+(fx==='w'?1:-1)*0.45*S)+'" cy="'+r2(yc)+'" rx="'+r2(.32*S)+'" ry="'+r2(.22*S)+'" class="lw-thin"/>' } }
+    else{ var Y=fx==='n'?y0:y1, G=fx==='n'?y0+dpt:y1-dpt, sw=(x1-x0)/n; s+='<path d="M'+r2(x0)+' '+r2(G)+' H'+r2(x1)+'" class="lw-thin"/>';
+      for(i=0;i<n;i++){ var xc=x0+sw*(i+.5); if(i)s+='<path d="M'+r2(x0+sw*i)+' '+r2(Y)+' V'+r2(G)+'" class="lw-thin"/>'; s+='<ellipse cx="'+r2(xc)+'" cy="'+r2(Y+(fx==='n'?1:-1)*0.45*S)+'" rx="'+r2(.22*S)+'" ry="'+r2(.32*S)+'" class="lw-thin"/>' } }
+    return s }
+  /* 寢室：門邊的浴室、靠窗的床 */
+  function dorm(b,ds,ti){ var s='', x0=b[0]+ti/2, x1=b[2]-ti/2, y0=b[1]+ti/2, y1=b[3]-ti/2, bw=1.7*S, bd=2.0*S, toCor=ds==='s'?1:-1;
+    var cy=ds==='s'?y1:y0, by=ds==='s'?y1-bd:y0; s+='<rect x="'+r2(x1-bw)+'" y="'+r2(by)+'" width="'+r2(bw)+'" height="'+r2(bd)+'" class="lw-vis"/><ellipse cx="'+r2(x1-bw/2)+'" cy="'+r2(by+bd/2)+'" rx="'+r2(.22*S)+'" ry="'+r2(.32*S)+'" class="lw-thin"/>';
+    var fy=ds==='s'?y0:y1-2.0*S; s+='<rect x="'+r2(x0+.1*S)+'" y="'+r2(fy)+'" width="'+r2(1.0*S)+'" height="'+r2(2.0*S)+'" class="lw-thin"/><path d="M'+r2(x0+.1*S)+' '+r2(ds==='s'?fy+.45*S:fy+1.55*S)+' h'+r2(1.0*S)+'" class="lw-thin"/>';
+    s+='<rect x="'+r2(x1-.6*S)+'" y="'+r2(ds==='s'?y0:y1-1.2*S)+'" width="'+r2(.6*S)+'" height="'+r2(1.2*S)+'" class="lw-thin"/>';
+    return s }
+
+  /* ---------- 表單與分數 ---------- */
+  function refresh(){
+    RM=buildRooms(); var rs=RULES[cur](); render();
+    var sc=0; rul.innerHTML=''; rs.forEach(function(x){ if(x.ok)sc+=x.p; rul.appendChild(el('li',x.ok?{'class':'ok'}:null,'<i>'+(x.ok?'✓':'✗')+'</i><span>'+x.t+(x.ok||!x.why?'':'<small>'+x.why+'</small>')+'</span><span class="pt">'+x.p+'</span>')) });
+    if(cnt('x')===N)sc=0;
+    tally.innerHTML=''; lv.tally.forEach(function(q){var n=cnt(q[0]), a=Math.round(areaOf(cellsOf(q[0]))), extra=q[0]==='rm'?roomsOf('rm').length+' 間':q[0]==='cl'?roomsOf('cl').filter(function(r){return r.cells.length===4}).length+' 間':n+' 格';
+      tally.appendChild(el('li',null,'<span>'+TY[q[0]][0]+'</span><b>'+extra+' · '+a+' ㎡'+(q[1]?'（'+q[1]+'）':'')+'</b>'))});
+    hud(box,sc); return sc;
+  }
+  function commit(){ /* 一筆畫完才計分 */
+    var sc=refresh(); if(demo)return;
+    var ok=L.done(cur,sc); if(!ok)K.stampOff(box);
+    nextBtn.hidden=!(L.best(cur)>=PASS&&cur<LV.length-1);
+    if(ok){msg.hidden=false; msg.className='verdict ok'; msg.innerHTML='<b>過關，'+sc+' 分。</b>'+['服務核在兩端、教室一跨一間，這就是標準層的排法。','服務核對齊二樓，三種入口各在該在的那一面。','雙邊走廊加兩端樓梯，宿舍、旅館、病房都是這個骨架。'][cur]+(cur<LV.length-1?'按「下一小關」繼續。':'')}
+    else msg.hidden=true;
+  }
+  function cellAt(p){ var x=(p.x-ox)/S, y=(p.y-oy)/S, c=-1, r=-1, k; for(k=0;k<C;k++)if(x>=xm[k]&&x<xm[k+1])c=k; for(k=0;k<R;k++)if(y>=ym[k]&&y<ym[k+1])r=k; return (c<0||r<0)?-1:r*C+c }
+  function paint(i){ if(i<0||cells[i]===pick)return false; cells[i]=pick; refresh(); return true }
+  svg.addEventListener('pointerdown',function(e){ if(e.button>0)return; e.preventDefault(); try{svg.setPointerCapture(e.pointerId)}catch(_){}; painting=true; var i=cellAt(svgPt(svg,e)); if(i>=0)kcur=i; paint(i) });
+  svg.addEventListener('pointermove',function(e){ if(!painting)return; paint(cellAt(svgPt(svg,e))) });
+  function up(){ if(!painting)return; painting=false; commit() }
+  svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up); window.addEventListener('pointerup',up);
+  svg.addEventListener('focus',function(){focused=true; render()}); svg.addEventListener('blur',function(){focused=false; render()});
+  svg.addEventListener('keydown',function(e){ var r=(kcur/C)|0, c=kcur%C, k=e.key;
+    if(k==='ArrowLeft')c=Math.max(0,c-1); else if(k==='ArrowRight')c=Math.min(C-1,c+1); else if(k==='ArrowUp')r=Math.max(0,r-1); else if(k==='ArrowDown')r=Math.min(R-1,r+1);
+    else if(k===' '||k==='Enter'){e.preventDefault(); if(paint(kcur))commit(); return} else return;
+    e.preventDefault(); kcur=r*C+c; render() });
+  bar.addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b)return; var a=b.dataset.a;
+    if(a==='clear'){ cells=rep('x',N); demo=false; K.stampOff(box); msg.hidden=true; refresh() }
+    else if(a==='demo'){ cells=lv.demo.slice(); demo=true; K.stampOff(box); refresh(); msg.hidden=false; msg.className='verdict mid'; msg.innerHTML='<b>這是其中一種解法，不計分。</b>看完按「清空」，自己塗一次才算。' }
+    else if(a==='next')L.next() });
+
+  function start(i){
+    cur=i; lv=LV[i]; C=lv.cw.length; R=lv.rh.length; N=C*R; cells=rep('x',N); demo=false; kcur=0; TR=[];
+    xm=[0]; lv.cw.forEach(function(w){xm.push(xm[xm.length-1]+w)}); ym=[0]; lv.rh.forEach(function(h){ym.push(r2(ym[ym.length-1]+h))});
+    S=lv.S; ox=lv.ox; oy=lv.oy; W=xm[C]*S; H=ym[R]*S; VW=lv.vw; VH=Math.ceil(oy+H+124);
+    xs=xm.map(function(m){return ox+m*S}); ys=ym.map(function(m){return oy+m*S});
+    svg.setAttribute('viewBox','0 0 '+VW+' '+VH); wrap.classList.toggle('wide',!!lv.wide);
+    brief.innerHTML=lv.brief;
+    if(lv.types.indexOf(pick)<0)pick=lv.types[0];
+    pal.innerHTML=''; lv.types.concat(['x']).forEach(function(t){ var b=el('button',{type:'button','aria-pressed':t===pick?'true':'false','data-t':t},'<i style="background:'+(t==='x'?'transparent':SW[TY[t][1]])+'"></i>'+TY[t][0]); pal.appendChild(b);
+      b.addEventListener('click',function(){pick=t; $$('button',pal).forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')})}) });
+    msg.hidden=true; nextBtn.hidden=!(L&&L.best(i)>=PASS&&i<LV.length-1);
+    refresh();
+  }
+  L=K.levels(box,{key:'g:plan',names:LV.map(function(l){return l.nm}),pass:PASS,start:start});
+  nextBtn.hidden=!(L.best(cur)>=PASS&&cur<LV.length-1);
+})();
+})();
+</script>

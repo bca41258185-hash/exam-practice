@@ -1,0 +1,373 @@
+<style>
+/* figsB：講義裡的專業圖（配置、量體、剖面、立面、透視、泡泡圖、圖紙版面） */
+svg.fbx text{paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
+svg .fb-l{font-family:var(--f-text);font-size:10px;fill:var(--ink)}
+svg .fb-b{font-family:var(--f-text);font-size:11px;font-weight:700;fill:var(--ink)}
+svg .fb-h{font-family:var(--f-text);font-size:13px;font-weight:700;fill:var(--ink)}
+svg .fb-m{font-family:var(--f-text);font-size:9.5px;fill:var(--mut)}
+svg .fb-big{font-family:var(--f-data);font-size:18px;font-weight:700;fill:var(--ink)}
+svg .fb-blue{fill:var(--blue)} svg .fb-red{fill:var(--bad)} svg .fb-grn{fill:var(--ok)}
+.fb-ab{stroke:var(--blue);stroke-width:2.2;fill:none;stroke-linecap:round}
+.fb-hb{fill:var(--blue);stroke:none}
+.fb-ar{stroke:var(--bad);stroke-width:2.2;fill:none}
+.fb-hr{fill:var(--bad);stroke:none}
+.fb-faint{stroke:var(--mut);stroke-width:.7;fill:none;stroke-dasharray:3 2}
+.fb-frame{stroke:var(--mut);stroke-width:.7;fill:none;stroke-dasharray:4 2}
+.fb-sh{fill:var(--ink);opacity:.16;stroke:none}
+.fb-pa{stroke:var(--mut);stroke-width:9;fill:none;stroke-linecap:round}
+.fb-pb{stroke:var(--sheet);stroke-width:7.4;fill:none;stroke-linecap:round}
+.fb-vline{stroke:var(--blue);stroke-width:2.2;fill:none;stroke-dasharray:7 4}
+.fb-con{stroke:var(--mut);stroke-width:.6;fill:none;stroke-dasharray:2 3}
+.fb-hz{stroke:var(--blue);stroke-width:1;fill:none;stroke-dasharray:8 3}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.draw)return;
+var D=K.draw(false);
+function f(n){return Math.round(n*100)/100}
+function R(x,y,w,h,c,st){return '<rect x="'+f(x)+'" y="'+f(y)+'" width="'+f(w)+'" height="'+f(h)+'" class="'+c+'"'+(st?' style="'+st+'"':'')+'/>'}
+function RF(x,y,w,h,fc,lc){return R(x,y,w,h,fc)+R(x,y,w,h,lc)}
+function HF(x,y,w,h,kind,op){return '<rect x="'+f(x)+'" y="'+f(y)+'" width="'+f(w)+'" height="'+f(h)+'" fill="'+D.fill(kind)+'" stroke="none"'+(op?' style="opacity:'+op+'"':'')+'/>'}
+function P(d,c,st){return '<path d="'+d+'" class="'+c+'"'+(st?' style="'+st+'"':'')+'/>'}
+function L(x1,y1,x2,y2,c){return P('M'+f(x1)+' '+f(y1)+' L'+f(x2)+' '+f(y2),c)}
+function T(x,y,s,c,a,ex){return '<text x="'+f(x)+'" y="'+f(y)+'"'+(a?' text-anchor="'+a+'"':'')+' class="'+c+'"'+(ex||'')+'>'+s+'</text>'}
+function Ci(x,y,r,c){return '<circle cx="'+f(x)+'" cy="'+f(y)+'" r="'+f(r)+'" class="'+c+'"/>'}
+function poly(pts){return pts.map(function(p,i){return (i?'L':'M')+f(p[0])+' '+f(p[1])}).join(' ')+' Z'}
+function arrow(x1,y1,x2,y2,lc,hc,hs){var a=Math.atan2(y2-y1,x2-x1),s=hs||9,bx=x2-Math.cos(a)*s,by=y2-Math.sin(a)*s,px=-Math.sin(a)*s*.48,py=Math.cos(a)*s*.48;
+  return L(x1,y1,bx,by,lc)+P(poly([[x2,y2],[bx+px,by+py],[bx-px,by-py]]),hc)}
+function tri(x,y,rot,cls){return '<path d="M0 -7 L6 5 L-6 5 Z" class="'+(cls||'poche')+'" transform="translate('+f(x)+','+f(y)+') rotate('+rot+')"/>'}
+function $(id){return document.getElementById(id)}
+
+/* ================= M4 配置圖逐步生成 ================= */
+(function(){
+  var svg=$('fbSite'); if(!svg)return;
+  function g(k){return svg.querySelector(k)}
+  var s='';
+  /* 對街（西側）住宅 */
+  s+=R(20,166,108,60,'lw-thin')+R(20,330,108,50,'lw-thin')+T(74,200,'對街住宅','fb-m','middle');
+  /* 北側鄰房 */
+  s+=R(214,12,212,54,'f-paper')+HF(214,12,212,54,'hatch',.3)+R(214,12,212,54,'lw-vis')+T(320,43,'北側 4 層住宅','fb-l','middle');
+  /* 公園 */
+  s+=R(440,0,280,390,'f-ok','opacity:.45')+HF(440,0,280,390,'grass');
+  s+=P('M440 270 C 500 266, 530 226, 590 216 S 680 168, 720 158','fb-pa')+P('M440 270 C 500 266, 530 226, 590 216 S 680 168, 720 158','fb-pb');
+  [[488,52,15],[560,30,17],[650,58,19],[700,250,14],[620,300,17],[530,340,13],[690,350,12],[500,150,12]].forEach(function(t){s+=D.tree(t[0],t[1],t[2])});
+  s+=T(610,124,'社區公園','fb-h','middle');
+  /* 道路 */
+  s+=R(152,0,48,390,'f-line')+HF(152,0,48,390,'road')+R(0,390,720,90,'f-line')+HF(0,390,720,90,'road');
+  s+=L(152,0,152,390,'lw-thin')+L(200,0,200,390,'lw-thin')+L(0,390,152,390,'lw-thin')+L(200,390,720,390,'lw-thin')+L(0,480,720,480,'lw-thin');
+  s+=L(176,0,176,390,'lw-axis')+L(0,435,720,435,'lw-axis');
+  s+=T(168,80,'西側 8 m 道路（次要）','fb-l','middle',' transform="rotate(-90 168 80)"');
+  s+=D.dim(152,20,200,20,'8 m');
+  s+=T(560,428,'南側 15 m 道路（主要）','fb-l','middle')+D.dim(706,390,706,480,'15 m');
+  /* 公車站 */
+  s+=RF(300,394,48,8,'f-sheet','lw-vis')+L(304,394,304,402,'lw-thin')+L(344,394,344,402,'lw-thin')+T(324,416,'公車站','fb-b','middle');
+  /* 基地 */
+  s+=T(320,236,'基地 40 × 50 m＝2,000 ㎡','fb-m','middle');
+  s+=R(200,90,240,300,'lw-site');
+  s+=D.dim(200,90,440,90,'40 m',-8)+D.dim(440,90,440,390,'50 m',-12);
+  /* 老榕樹 */
+  s+=D.tree(412,356,30)+T(476,376,'老榕樹（保留）','fb-l');
+  /* 指北、比例尺、圖名 */
+  s+=D.north(70,44,15)+D.scale(30,498,6,[0,5,10,20])+D.title(360,506,'配置圖','1/400');
+  s+=L(500,494,530,494,'lw-site')+T(536,497,'地界線','fb-m')+L(590,494,620,494,'lw-setb')+T(626,497,'退縮線','fb-m');
+  g('[data-fb="base"]').innerHTML=s;
+
+  /* 2 退縮線 */
+  s=R(224,108,198,258,'lw-setb')+D.dim(200,100,224,100,'4 m')+D.dim(430,90,430,108,'3 m')+D.dim(422,176,440,176,'3 m')+D.dim(236,366,236,390,'4 m');
+  g('[data-s="2"]').innerHTML=s;
+
+  /* 3 人流 */
+  s=arrow(372,412,372,372,'fb-ab','fb-hb')+T(378,404,'公車站人流','fb-l fb-blue');
+  s+=arrow(512,206,444,206,'fb-ab','fb-hb')+T(518,210,'公園遊客','fb-l fb-blue');
+  s+=arrow(84,148,196,148,'fb-ab','fb-hb')+T(80,152,'社區居民','fb-l fb-blue','end');
+  g('[data-s="3"]').innerHTML=s;
+
+  /* 4 車道 */
+  s=RF(200,108,166,24,'f-line','lw-vis');
+  for(var x=238;x<366;x+=7)s+=L(x,108,x,132,'lw-thin');
+  s+=L(236,108,236,132,'lw-vis')+T(300,124,'坡道 1:6　下 B1','fb-l','middle')+arrow(340,120,362,120,'lw-vis','poche',7);
+  s+=tri(190,120,90,'fb-hr')+T(148,124,'車道出入口','fb-b fb-red','end');
+  s+=D.dim(200,132,200,390,'距路口 43 m',12);
+  g('[data-s="4"]').innerHTML=s;
+
+  /* 5 量體（屋頂平面） */
+  s=R(230,138,144,192,'fb-sh')+R(224,132,144,192,'f-sheet')+HF(224,132,144,48,'tile')+R(227,183,138,138,'lw-thin');
+  s+=L(272,126,272,330,'lw-axis')+L(320,126,320,330,'lw-axis')+L(218,228,374,228,'lw-axis')+L(218,276,374,276,'lw-axis');
+  s+=L(224,180,368,180,'lw-vis')+R(224,132,144,192,'lw-cut');
+  s+=T(296,160,'2F 屋頂露台','fb-l','middle')+T(296,256,'3F','fb-big','middle')+T(296,272,'24 × 32 m','t-dim','middle');
+  s+=D.dim(368,150,440,150,'12 m')+D.dim(380,90,380,132,'7 m');
+  g('[data-s="5"]').innerHTML=s;
+
+  /* 6 入口 */
+  s=tri(296,336,0)+T(296,356,'主入口','fb-b','middle');
+  s+=tri(212,306,90)+L(150,306,204,306,'lw-thin')+T(146,310,'夜間入口','fb-b','end')+T(146,322,'多功能廳','fb-m','end');
+  s+=tri(380,226,-90)+T(388,216,'往公園','fb-b');
+  g('[data-s="6"]').innerHTML=s;
+
+  /* 7 開放空間 */
+  s=HF(202,328,178,60,'tile')+R(202,328,178,60,'lw-thin')+T(320,382,'入口廣場（鋪面）','fb-l','middle');
+  s+=R(372,134,66,190,'f-ok','opacity:.6')+HF(372,134,66,190,'grass')+R(372,134,66,190,'lw-thin');
+  var dk=''; for(var y=240;y<296;y+=4)dk+=L(382,y,428,y,'lw-thin'); s+=RF(382,236,46,60,'f-sheet','lw-vis')+dk+T(405,270,'平台','fb-b','middle')+T(405,316,'綠帶','fb-l','middle');
+  [246,274,302,330,358,414].forEach(function(tx){s+=D.tree(tx,99,8)});
+  g('[data-s="7"]').innerHTML=s;
+})();
+
+/* ================= M4 四種量體 ================= */
+(function(){
+  var svg=$('fbMass'); if(!svg)return; var s='';
+  var shapes=[
+    {n:'一字型',d:'最好畫，新手首選',p:[[-60,58],[60,58],[60,98],[-60,98]],e:[[0,110,0]],t:[]},
+    {n:'L 型',d:'轉角圍出廣場',p:[[-58,34],[-22,34],[-22,100],[58,100],[58,134],[-58,134]],e:[[18,146,0]],t:[[22,64,11]]},
+    {n:'ㄇ 字型',d:'庭院朝一側開口',p:[[-60,34],[60,34],[60,134],[26,134],[26,72],[-26,72],[-26,134],[-60,134]],e:[[0,146,0]],t:[[0,106,10]]},
+    {n:'口字型',d:'有中庭，基地要夠大',p:[[-60,34],[60,34],[60,134],[-60,134]],h:[[-24,68],[24,68],[24,102],[-24,102]],e:[[0,146,0]],t:[[0,85,9]]}
+  ];
+  shapes.forEach(function(o,i){var cx=90+i*180;
+    function tr(pts,dx,dy){return pts.map(function(p){return [cx+p[0]+(dx||0),p[1]+(dy||0)]})}
+    var d=poly(tr(o.p)), ds=poly(tr(o.p,5,5)); if(o.h){d+=' '+poly(tr(o.h)); ds+=' '+poly(tr(o.h,5,5))}
+    s+=R(cx-76,18,152,138,'fb-faint');
+    s+='<path d="'+ds+'" class="fb-sh" fill-rule="evenodd"/>';
+    if(o.h)s+=HF(cx-24,68,48,34,'grass');
+    s+='<path d="'+d+'" class="f-sheet" fill-rule="evenodd"/>';
+    if(o.h)s+=R(cx-24,68,48,34,'f-ok','opacity:.5')+HF(cx-24,68,48,34,'grass');
+    s+='<path d="'+d+'" class="lw-cut" fill-rule="evenodd"/>';
+    o.t.forEach(function(t){s+=D.tree(cx+t[0],t[1],t[2])});
+    o.e.forEach(function(e){s+=tri(cx+e[0],e[1],e[2])});
+    s+=T(cx,178,o.n,'fb-h','middle')+T(cx,194,o.d,'fb-m','middle');
+  });
+  s+=D.north(700,30,9);
+  svg.innerHTML=s;
+})();
+
+/* ================= M6 A–A′ 剖面 ================= */
+(function(){
+  var svg=$('fbSec'); if(!svg)return; var s='';
+  var GL=300,B1=336,F2=255,F3=219,RF=183,PT=172, gx=[190,270,350,430,510];
+  /* 土壤 */
+  s+=HF(0,300,186,72,'earth')+HF(514,300,206,72,'earth')+HF(186,344,328,28,'earth');
+  /* 北側鄰房 */
+  s+=R(30,172,80,128,'f-paper')+P('M30 300 V172 H110 V300','lw-vis')+P('M26 172 l8 6 l-8 6 l8 6 M30 172 V300','lw-thin');
+  [268,236,204].forEach(function(y){s+=L(30,y,110,y,'lw-thin')});
+  [284,252,220,188].forEach(function(y){s+=R(88,y-8,16,10,'lw-thin')});
+  s+=T(62,246,'北側鄰房','fb-l','middle')+T(62,258,'4F 住宅','fb-m','middle');
+  /* 柱位軸線 */
+  gx.forEach(function(x,i){s+=L(x,148,x,350,'lw-axis')+Ci(x,140,8,'f-void')+Ci(x,140,8,'lw-vis')+T(x,143.2,'ABCDE'[i],'t-axis','middle')});
+  s+=D.dimChain(gx,162,['8000','8000','8000','8000']);
+  /* 地面線 */
+  s+=L(0,300,186,300,'lw-cut')+L(514,300,720,300,'lw-cut');
+  /* 地下室：外牆、基礎版 */
+  s+=R(186,300,6,44,'poche')+R(508,300,6,44,'poche')+R(186,336,328,8,'poche');
+  /* 樓板與梁（剖到，塗黑） */
+  function slab(y,x1,x2){var o=R(x1,y,x2-x1,4,'poche'); gx.forEach(function(x){if(x>=x1+2&&x<=x2-2)o+=R(x-3,y+4,6,6,'poche')}); return o}
+  s+=slab(300,186,514)+slab(F2,188,512)+slab(F3,188,512)+slab(RF,268,512);
+  /* 外牆：窗台＋玻璃 */
+  function ext(x,fl,up){return R(x-2,fl-9,4,9,'poche')+L(x-1.2,fl-9,x-1.2,up+10,'lw-thin')+L(x+1.2,fl-9,x+1.2,up+10,'lw-thin')}
+  s+=ext(190,GL,F2)+ext(190,F2,F3)+ext(270,F3,RF)+ext(510,F2,F3)+ext(510,F3,RF);
+  /* 南側一樓：入口玻璃門與雨庇 */
+  s+=L(508.8,GL,508.8,F2+10,'lw-thin')+L(511.2,GL,511.2,F2+10,'lw-thin')+L(507,GL-22,513,GL-22,'lw-thin')+R(510,267,24,3,'poche');
+  /* 女兒牆、露台欄杆 */
+  s+=R(268,PT,4,11,'poche')+R(508,PT,4,11,'poche')+R(188,213,4,6,'poche')+P('M190 213 V208 M185 208 H198','lw-vis')+T(518,172,'女兒牆 1100','t-dim');
+  /* 隔間（剖到） */
+  s+=R(348.5,265,3,35,'poche')+R(268.5,229,3,26,'poche');
+  /* 室名 */
+  s+=T(270,286,'多功能廳','fb-b','middle')+T(430,286,'門廳','fb-b','middle');
+  s+=T(230,242,'樂齡教室','fb-l','middle')+T(310,242,'故事角','fb-l','middle')+T(430,242,'兒童閱覽','fb-l','middle');
+  s+=T(390,206,'一般閱覽','fb-l','middle')+T(232,212,'露台','fb-l fb-grn','middle');
+  s+=T(300,326,'B1 停車場','fb-l','middle');
+  /* 車 */
+  s+=P('M400 336 h50 v-8 l-7 -2 l-7 -6 h-21 l-7 6 l-8 2 z','lw-vis')+Ci(410,334,3.6,'f-void')+Ci(410,334,3.6,'lw-vis')+Ci(440,334,3.6,'f-void')+Ci(440,334,3.6,'lw-vis');
+  /* 尺度人與樹 */
+  s+=D.person(212,F3,17)+D.person(470,GL,17)+D.person(232,GL,16)+D.person(522,GL,17)+D.person(496,GL,15);
+  s+=D.treeE(148,GL,62)+D.treeE(690,GL,64);
+  /* 樓高尺寸鏈與高程 */
+  s+=D.dimChain([B1,GL,F2,F3,RF],552,['3600','4500','3600','3600'],true);
+  s+=D.dim(568,GL,568,RF,'11700');
+  s+=D.level(590,B1,'B1FL −3600')+D.level(590,GL,'GL ±0')+D.level(590,F2,'2FL +4500')+D.level(590,F3,'3FL +8100')+D.level(590,RF,'RFL +11700');
+  /* 地界 */
+  s+=L(120,303,120,372,'lw-site')+L(620,303,620,372,'lw-site')+T(120,386,'北側地界','fb-m','middle')+T(620,386,'南側地界','fb-m','middle');
+  s+=T(668,362,'南側 15 m 道路','fb-l','middle');
+  s+=T(24,416,'北 ←','fb-m')+T(696,416,'→ 南','fb-m','end');
+  s+=D.title(360,412,'A–A′ 剖面圖','1/200');
+  svg.innerHTML=s;
+})();
+
+/* ================= M6 東向立面 ================= */
+(function(){
+  var svg=$('fbElev'); if(!svg)return; var s='';
+  var GL=250,F2=205,F3=169,RF=133,PT=122, bx=[200,280,360,440,520];
+  s+=HF(20,251,680,9,'earth');
+  /* 樹在建築後方的不畫；先畫建築 */
+  s+=P(poly([[200,GL],[200,PT],[440,PT],[440,F3],[520,F3],[520,GL]]),'f-sheet');
+  /* 軸線 */
+  bx.forEach(function(x,i){s+=L(x,104,x,PT,'lw-axis')+Ci(x,96,8,'f-void')+Ci(x,96,8,'lw-vis')+T(x,99.2,'EDCBA'[i],'t-axis','middle')});
+  /* 窗 */
+  function win(x1,y1,x2,y2,n,tr){var o=R(x1,y1,x2-x1,y2-y1,'f-soft')+R(x1,y1,x2-x1,y2-y1,'lw-vis'),w=(x2-x1)/n; for(var i=1;i<n;i++)o+=L(x1+i*w,y1,x1+i*w,y2,'lw-thin'); if(tr)o+=L(x1,tr,x2,tr,'lw-thin'); return o}
+  s+=win(288,211,352,GL,4,222)+win(448,211,512,GL,4,222);
+  s+=win(208,211,272,GL,4,222);
+  [280,360].forEach(function(x){s+=win(x+8,F3+6,x+72,F2-9,4)}); s+=win(208+240,F3+6,512,F2-9,2);
+  [280,360].forEach(function(x){s+=win(x+8,RF+6,x+72,F3-9,4)});
+  /* 木格柵（2F–3F 南端） */
+  var lv=''; for(var x=210;x<272;x+=3.2)lv+=L(x,RF+5,x,F2-4,'lw-thin'); s+=R(207,RF+4,66,F2-RF-7,'f-paper')+lv+R(207,RF+4,66,F2-RF-7,'lw-vis')+T(240,F3+4,'木格柵','fb-b','middle');
+  /* 清水混凝土（北端 1F–2F）*/
+  s+=R(443,F3+3,74,GL-F3-3,'f-sheet')+HF(443,F3+3,74,GL-F3-3,'conc')+R(443,F3+3,74,GL-F3-3,'lw-thin');
+  s+=win(448,211,512,GL,4,222);
+  s+=T(480,195,'清水混凝土','fb-l','middle');
+  /* 東側出入口與雨庇 */
+  s+=R(368,214,64,3,'poche')+R(368,217,64,5,'fb-sh')+R(384,224,32,26,'f-sheet')+R(384,224,32,26,'lw-vis')+L(400,224,400,GL,'lw-vis');
+  /* 柱型（壁柱）與樓層線 */
+  [280,360].forEach(function(x){s+=L(x-3,PT,x-3,GL,'lw-thin')+L(x+3,PT,x+3,GL,'lw-thin')}); s+=L(437,F3,437,GL,'lw-thin');
+  s+=L(200,F2,520,F2,'lw-thin')+L(200,F3,440,F3,'lw-thin')+L(200,RF,440,RF,'lw-thin');
+  /* 露台欄杆 */
+  var rl=''; for(var x=446;x<520;x+=8)rl+=L(x,158,x,F3,'lw-thin'); s+=rl+L(440,158,520,158,'lw-vis');
+  /* 外輪廓、地面線 */
+  s+=P(poly([[200,GL],[200,PT],[440,PT],[440,F3],[520,F3],[520,GL]]),'lw-out');
+  s+=L(20,GL,700,GL,'lw-cut');
+  /* 樹、人 */
+  s+=D.treeE(120,GL,92)+T(120,272,'老榕樹','fb-m','middle')+D.treeE(640,GL,70)+D.treeE(690,GL,62);
+  s+=D.person(330,GL,17)+D.person(392,GL,17)+D.person(470,GL,16);
+  /* 高程 */
+  s+=D.level(545,GL,'GL ±0')+D.level(545,F2,'2FL +4500')+D.level(545,F3,'3FL +8100')+D.level(545,RF,'RFL +11700');
+  s+=T(36,272,'南','fb-m','middle')+T(700,272,'北','fb-m','end');
+  s+=D.title(360,296,'東向立面圖','1/200');
+  svg.innerHTML=s;
+})();
+
+/* ================= M6 兩點透視 ================= */
+(function(){
+  var svg=$('fbPersp'); if(!svg)return; var s='';
+  /* 世界座標：X 向東、Y 向北、Z 向上（m）。建築東南角在原點，向西 24 m、向北 32 m */
+  var FOC=340, CX=360, HY=196, EYE=1.5, Dd=30, F=[-Math.SQRT1_2,Math.SQRT1_2], Rv=[Math.SQRT1_2,Math.SQRT1_2];
+  var C=[-F[0]*Dd,-F[1]*Dd];
+  function pr(X,Y,Z){var dx=X-C[0],dy=Y-C[1],z=dx*F[0]+dy*F[1],x=dx*Rv[0]+dy*Rv[1]; return [CX+FOC*x/z, HY-FOC*(Z-EYE)/z]}
+  function pp(arr){return poly(arr.map(function(a){return pr(a[0],a[1],a[2])}))}
+  var VL=[CX-FOC,HY], VR=[CX+FOC,HY];
+  var H=12.8, H2=9.2;
+  /* 地面與視平線 */
+  var g0=pr(0,0,0);
+  s+=L(16,HY,704,HY,'fb-hz')+Ci(VL[0],HY,3.5,'poche')+Ci(VR[0],HY,3.5,'poche');
+  s+=T(VL[0]+2,HY-10,'② 左消點','fb-l')+T(VR[0]-2,HY-10,'② 右消點','fb-l','end')+T(VL[0]+2,HY+16,'① 視平線＝眼高 1.5 m','fb-l fb-blue');
+  /* 建構線 */
+  var t0=pr(0,0,H);
+  s+=L(t0[0],t0[1],VL[0],HY,'fb-con')+L(g0[0],g0[1],VL[0],HY,'fb-con')+L(t0[0],t0[1],VR[0],HY,'fb-con')+L(g0[0],g0[1],VR[0],HY,'fb-con');
+  /* 南面（亮面）與東面（暗面） */
+  s+='<path d="'+pp([[0,0,0],[-24,0,0],[-24,0,H],[0,0,H]])+'" class="f-sheet"/>';
+  s+='<path d="'+pp([[0,0,0],[0,32,0],[0,32,H2],[0,24,H2],[0,24,H],[0,0,H]])+'" class="f-line"/>';
+  /* 樓層線 */
+  [4.5,8.1,11.7].forEach(function(z){var a=pr(-24,0,z),b=pr(0,0,z),c=pr(0,z<9?32:24,z); s+=L(a[0],a[1],b[0],b[1],'lw-vis')+L(b[0],b[1],c[0],c[1],'lw-vis')});
+  /* 柱位（8 m）細線 */
+  [-8,-16].forEach(function(x){var a=pr(x,0,0),b=pr(x,0,H); s+=L(a[0],a[1],b[0],b[1],'lw-thin')});
+  [8,16,24].forEach(function(y){var a=pr(0,y,0),b=pr(0,y,y<24?H:H); s+=L(a[0],a[1],b[0],b[1],'lw-thin')});
+  /* 窗帶（2F、3F） */
+  [[5.4,7.2],[9.0,10.8]].forEach(function(z){
+    [[-23,-17],[-15,-9],[-7,-1]].forEach(function(x){s+='<path d="'+pp([[x[0],0,z[0]],[x[1],0,z[0]],[x[1],0,z[1]],[x[0],0,z[1]]])+'" class="lw-thin"/>'});
+    [[1,7],[9,15],[17,23]].forEach(function(y){if(y[0]>23&&z[0]>8)return; s+='<path d="'+pp([[0,y[0],z[0]],[0,y[1],z[0]],[0,y[1],z[1]],[0,y[0],z[1]]])+'" class="lw-thin"/>'});
+  });
+  /* 入口：南面中間一跨，玻璃門＋雨庇 */
+  s+='<path d="'+pp([[-15,0,0],[-9,0,0],[-9,0,3.2],[-15,0,3.2]])+'" class="f-soft"/>'+'<path d="'+pp([[-15,0,0],[-9,0,0],[-9,0,3.2],[-15,0,3.2]])+'" class="lw-vis"/>';
+  var m1=pr(-12,0,0),m2=pr(-12,0,3.2); s+=L(m1[0],m1[1],m2[0],m2[1],'lw-thin');
+  s+='<path d="'+pp([[-16,0,3.6],[-8,0,3.6],[-8,-3,3.6],[-16,-3,3.6]])+'" class="poche"/>';
+  /* 露台欄杆 */
+  var r1=pr(0,24,H2+1.1),r2=pr(0,32,H2+1.1); s+=L(r1[0],r1[1],r2[0],r2[1],'lw-vis');
+  /* 輪廓（最近的垂直邊最粗） */
+  s+='<path d="'+pp([[-24,0,0],[-24,0,H],[0,0,H],[0,24,H],[0,24,H2],[0,32,H2],[0,32,0]])+'" class="lw-out"/>';
+  s+=L(g0[0],g0[1],t0[0],t0[1],'lw-cut');
+  var gl1=pr(-24,0,0),gl2=pr(0,32,0); s+=L(gl1[0],gl1[1],g0[0],g0[1],'lw-cut')+L(g0[0],g0[1],gl2[0],gl2[1],'lw-cut');
+  s+=L(t0[0],t0[1]-3,t0[0],t0[1]-14,'lw-thin')+T(t0[0],t0[1]-18,'③ 最近的垂直邊（最粗）','fb-l','middle');
+  var fl=pr(-24,0,8.1); s+=T(fl[0]-6,fl[1]+4,'④ 樓層線','fb-l','end');
+  /* 人：頭都在視平線上 */
+  function man(X,Y){var a=pr(X,Y,0),b=pr(X,Y,1.7); return D.person(a[0],a[1],a[1]-b[1])}
+  function treeAt(X,Y,h){var a=pr(X,Y,0),b=pr(X,Y,h); return D.treeE(a[0],a[1],a[1]-b[1])}
+  s+=treeAt(-31,-3,7)+treeAt(6,44,6.5);
+  s+=man(-15,-3)+man(-10,-6)+man(4,6)+man(5,16);
+  var e=pr(-12,-4,0); s+=T(e[0]-10,e[1]+22,'⑤ 入口、人、樹','fb-l','middle');
+  s+=T(360,272,'順序：① 視平線 → ② 兩個消點 → ③ 最近的垂直邊 → 連到消點成盒子 → ④ 樓層線 → ⑤ 入口、人、樹','fb-m','middle');
+  svg.innerHTML=s;
+})();
+
+/* ================= M3 泡泡圖 ================= */
+(function(){
+  var svg=$('fbBubble'); if(!svg)return; var s='';
+  function tag(x,y,t,sub){return RF(x,y,34,20,'f-sheet','lw-out')+T(x+17,y+14.5,t,'fb-h','middle')+T(x+42,y+14,sub,'fb-m')}
+  s+=tag(16,14,'1F','最公共、臨街')+tag(16,214,'2F','半公共')+L(16,200,704,200,'lw-hid');
+  var B={hall:[170,112,52],lob:[365,112,36],cafe:[540,72,30],din:[548,150,36],kid:[180,300,46],story:[365,300,28],sen:[548,300,54]};
+  function rel(a,b,c){return L(B[a][0],B[a][1],B[b][0],B[b][1],c)}
+  s+=rel('hall','lob','lw-cut')+rel('lob','cafe','lw-cut')+rel('lob','din','lw-cut')+rel('cafe','din','lw-vis')+rel('kid','story','lw-cut')+rel('story','sen','lw-cut');
+  /* 垂直動線 */
+  s+=L(365,148,365,272,'fb-vline');
+  s+=RF(351,186,28,28,'f-sheet','lw-vis')+P('M351 186 L379 214 M379 186 L351 214','lw-thin')+T(388,228,'樓梯、電梯','fb-l fb-blue');
+  function bub(k,name,area,fc){var b=B[k]; return Ci(b[0],b[1],b[2],fc)+Ci(b[0],b[1],b[2],'lw-vis')+T(b[0],b[1]+(area?-1:4),name,'fb-h','middle')+(area?T(b[0],b[1]+14,area,'t-dim','middle'):'')}
+  s+=bub('hall','多功能廳','250 ㎡','f-warn')+bub('lob','門廳','服務台','f-sheet')+bub('cafe','咖啡','80 ㎡','f-warn')+bub('din','共餐','120 ㎡','f-warn');
+  s+=bub('kid','兒童閱覽','200 ㎡','f-soft')+bub('story','故事角','','f-sheet')+bub('sen','樂齡教室','60 ㎡ × 4','f-soft');
+  /* 入口 */
+  s+=arrow(70,112,112,112,'lw-out','poche',10)+tri(64,112,90)+T(66,96,'夜間入口','fb-b','middle');
+  s+=arrow(365,46,365,70,'lw-out','poche',10)+tri(365,40,180)+T(375,34,'主入口（南側 15 m 道路）','fb-b');
+  s+=arrow(586,112,640,112,'lw-out','poche',10)+T(648,116,'公園','fb-b');
+  /* 圖例 */
+  var y=392; s+=R(16,376,688,36,'lw-thin')+T(28,y+4,'圖例','fb-b');
+  s+=L(70,y,104,y,'lw-cut')+T(110,y+4,'要緊鄰','fb-l');
+  s+=L(170,y,204,y,'lw-vis')+T(210,y+4,'有關聯','fb-l');
+  s+=L(270,y,304,y,'fb-vline')+T(310,y+4,'垂直動線','fb-l');
+  s+=tri(380,y,90)+T(392,y+4,'入口','fb-l');
+  s+=Ci(446,y,7,'f-warn')+Ci(446,y,7,'lw-vis')+T(458,y+4,'公共、熱鬧','fb-l')+Ci(540,y,7,'f-soft')+Ci(540,y,7,'lw-vis')+T(552,y+4,'安靜','fb-l')+T(600,y+4,'圓大小≈面積','fb-m');
+  svg.innerHTML=s;
+})();
+
+/* ================= M7 圖紙版面 ================= */
+(function(){
+  var svg=$('fbSheet'); if(!svg)return; var s='';
+  s+=R(10,10,700,480,'f-sheet')+R(10,10,700,480,'lw-thin')+R(22,22,676,456,'lw-out');
+  function zone(x,y,w,h,name,sc,plan){return (plan?R(x,y,w,h,'f-warn','opacity:.55'):'')+R(x,y,w,h,'fb-frame')+
+    T(x+w/2-(sc?18:0),y+h-8,name,'fb-b','middle')+(sc?T(x+w/2+((name.length*11)/2)-14,y+h-8,'S＝'+sc,'t-area'):'')+L(x+w/2-name.length*6.2-(sc?18:0),y+h-4.5,x+w/2+name.length*5.6+(sc?26:0),y+h-4.5,'lw-vis')}
+  function lines(x,y,w,n,gap){var o='';for(var i=0;i<n;i++)o+=L(x,y+i*gap,x+w*(i%3===2?.65:1),y+i*gap,'lw-thin');return o}
+  function table(x,y,w,h,r,c){var o=R(x,y,w,h,'lw-vis'),i;for(i=1;i<r;i++)o+=L(x,y+h*i/r,x+w,y+h*i/r,'lw-thin');for(i=1;i<c;i++)o+=L(x+w*i/c,y,x+w*i/c,y+h,'lw-thin');return o}
+  function mplan(x,y,cols,rows,u,b1){var w=cols*u,h=rows*u,o=R(x,y,w,h,'f-sheet')+R(x,y,w,h,'lw-out'),i,j;
+    for(i=0;i<=cols;i++)for(j=0;j<=rows;j++)o+=R(x+i*u-1.6,y+j*u-1.6,3.2,3.2,'poche');
+    if(b1){for(i=0;i<cols*2;i++)o+=R(x+i*u/2,y+2,u/2,u*.62,'lw-thin')+R(x+i*u/2,y+h-2-u*.62,u/2,u*.62,'lw-thin')}
+    else{o+=L(x,y+h/2-u*.15,x+w,y+h/2-u*.15,'lw-thin')+L(x,y+h/2+u*.15,x+w,y+h/2+u*.15,'lw-thin');for(i=1;i<cols;i++)o+=L(x+i*u,y,x+i*u,y+h/2-u*.15,'lw-thin')+L(x+i*u,y+h/2+u*.15,x+i*u,y+h,'lw-thin')}
+    o+=R(x+1.5,y+1.5,u*.45,u*.8,'lw-vis')+P('M'+(x+1.5)+' '+(y+1.5)+' l'+(u*.45)+' '+(u*.8),'lw-thin')+R(x+w-1.5-u*.45,y+h-1.5-u*.8,u*.45,u*.8,'lw-vis')+P('M'+(x+w-1.5-u*.45)+' '+(y+h-1.5-u*.8)+' l'+(u*.45)+' '+(u*.8),'lw-thin');
+    return o}
+  /* A 計畫說明 */
+  s+=zone(30,30,170,210,'建築計畫說明','',1);
+  s+=R(40,42,62,52,'f-sheet')+R(40,42,62,52,'lw-thin')+R(54,54,26,30,'lw-vis')+arrow(71,104,71,86,'lw-thin','poche',5)+T(108,52,'基地分析','fb-m')+lines(108,62,82,4,8);
+  s+=table(40,106,150,58,5,2)+T(44,116,'議題','fb-m')+T(119,116,'對策','fb-m');
+  s+=T(40,184,'量體計算','fb-m')+lines(40,194,150,3,9);
+  /* B 定性定量表＋泡泡圖 */
+  s+=zone(30,248,170,190,'定性定量表、泡泡圖','',1);
+  s+=table(40,258,150,70,6,3);
+  s+=L(84,370,124,370,'lw-out')+L(124,370,160,356,'lw-out')+Ci(84,370,15,'f-warn')+Ci(84,370,15,'lw-vis')+Ci(124,370,10,'f-sheet')+Ci(124,370,10,'lw-vis')+Ci(160,356,12,'f-soft')+Ci(160,356,12,'lw-vis')+Ci(156,392,9,'f-warn')+Ci(156,392,9,'lw-vis')+L(130,378,150,388,'lw-thin');
+  /* C 配置暨一樓平面 */
+  s+=zone(208,30,244,232,'配置暨一樓平面圖','1/200');
+  s+=R(216,40,20,190,'f-line')+R(216,212,228,20,'f-line')+L(226,40,226,212,'lw-axis')+L(216,222,444,222,'lw-axis');
+  s+=R(236,48,176,164,'lw-site');
+  s+=HF(380,60,30,150,'grass')+mplan(246,70,3,4,26)+D.tree(400,196,12)+tri(285,182,0)+R(246,58,78,10,'lw-thin');
+  s+=D.north(430,58,9);
+  /* D 透視 */
+  s+=zone(460,30,230,140,'透視圖','');
+  s+=L(470,122,680,122,'fb-hz')+P('M560 52 L560 132 L496 129 L496 76 Z','f-sheet')+P('M560 52 L560 132 L656 128 L656 80 Z','f-line')+P('M496 76 L560 52 L656 80 L656 128 L560 132 L496 129 Z','lw-out')+L(560,52,560,132,'lw-cut')+L(496,94,560,79,'lw-thin')+L(560,79,656,98,'lw-thin')+L(496,111,560,105,'lw-thin')+L(560,105,656,113,'lw-thin')+D.treeE(484,128,30)+D.treeE(668,128,26);
+  /* E/F 2F、3F 平面 */
+  s+=zone(460,178,112,122,'2F 平面','')+mplan(476,190,3,4,18);
+  s+=zone(578,178,112,122,'3F 平面','')+mplan(594,208,3,3,18)+HF(594,190,54,18,'tile')+R(594,190,54,18,'lw-thin');
+  /* G 剖面 */
+  s+=zone(208,270,244,82,'A–A′ 剖面圖','1/200');
+  s+='<g transform="translate(0,-9)">';
+  s+=HF(220,322,50,14,'earth')+HF(410,322,30,14,'earth')+HF(270,334,140,4,'earth')+L(220,322,270,322,'lw-cut')+L(410,322,440,322,'lw-cut');
+  s+=R(268,322,3,14,'poche')+R(409,322,3,14,'poche')+R(268,334,144,3,'poche');
+  [[322,268],[307,268],[294,268],[281,296]].forEach(function(a){s+=R(a[1],a[0],412-a[1],2.6,'poche')});
+  s+=R(268,294,2.2,28,'lw-thin')+R(409.8,281,2.2,41,'lw-thin')+R(294.8,281,2.2,13,'lw-thin')+R(295,276,2.2,5,'poche')+R(409.8,276,2.2,5,'poche')+P('M268 294 V289 M264 289 H274','lw-thin');
+  s+=D.person(340,322,10)+D.treeE(244,322,30)+D.treeE(428,322,26)+'</g>';
+  /* H 立面 */
+  s+=zone(358-150,358,244,80,'東向立面圖','1/200');
+  s+=L(220,412,440,412,'lw-cut')+R(266,370,110,42,'f-sheet')+R(376,382,36,30,'f-sheet')+P('M266 412 V370 H376 V382 H412 V412','lw-out')+L(266,393,412,393,'lw-thin')+L(266,382,376,382,'lw-thin');
+  for(var i=0;i<4;i++){s+=R(272+i*26,385+11,18,12,'lw-thin')+R(272+i*26,373,18,6,'lw-thin')} s+=D.treeE(240,412,28)+D.treeE(428,412,24);
+  /* I B1 */
+  s+=zone(460,308,230,130,'B1 平面','1/200')+mplan(527,320,3,4,20,1);
+  /* 圖框標題欄 */
+  var ty=446; s+=R(22,ty,676,32,'lw-vis');
+  [[22,'題目名稱'],[260,'圖名'],[410,'比例'],[480,'准考證號碼'],[640,'座號']].forEach(function(c,i){ if(i)s+=L(c[0],ty,c[0],478,'lw-vis'); s+=T(c[0]+5,ty+11,c[1],'t-area')});
+  s+=T(141,ty+26,'社區圖書分館暨樂齡學習中心','fb-l','middle')+T(335,ty+26,'（每張圖下方另寫）','fb-m','middle')+T(445,ty+26,'1/200','t-dim','middle');
+  for(var k=0;k<8;k++)s+=R(486+k*18.5,ty+14,15,14,'lw-thin');
+  s+=R(650,ty+14,38,14,'lw-thin');
+  svg.innerHTML=s;
+})();
+})();
+</script>

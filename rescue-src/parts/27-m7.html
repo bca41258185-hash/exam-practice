@@ -1,0 +1,88 @@
+<!-- ================= M7 配速與版面 ================= -->
+<article class="view mod" id="v-m7" data-min="20" data-title="配速與版面" data-ds="八小時怎麼切、圖紙怎麼排、落後時怎麼救" hidden>
+  <p class="eyebrow">單元 7 · 20 分鐘</p>
+  <h1>配速與版面：八小時的作戰表</h1>
+  <ul class="goal"><li><b>學完你會：</b>背出八個階段的時間點，知道落後時先放棄什麼</li></ul>
+
+  <p>多數人不及格的原因是沒畫完，沒畫完的原因幾乎都是前面花太久。配速表的用途是告訴你「現在該停了」。</p>
+
+  <h2 class="h">八個階段</h2>
+  <div class="box" id="pacer">
+    <h4><em>配速</em>考試進行到第幾分鐘，你應該在做什麼</h4>
+    <div class="pace" id="paceBar" aria-hidden="true"></div>
+    <label for="paceT" class="hint">拖動時間：開考後 <b id="paceTv" class="fig">0:00</b></label>
+    <input type="range" id="paceT" min="0" max="480" step="5" value="0">
+    <p class="verdict mid" id="paceNow"></p>
+    <div class="tw"><table id="paceTable">
+      <tr><th>階段</th><th class="n">時間</th><th class="n">結束時刻</th><th>產出</th></tr>
+    </table></div>
+  </div>
+  <p>八小時內沒有另外的午餐時間。吃東西、上廁所的時間，要從各階段自己扣，所以每個階段請以「提早 5 分鐘結束」為目標。</p>
+
+  <h2 class="h">落後時的止損規則</h2>
+  <ol class="t">
+    <li><b>草圖階段超過 2 小時 30 分還沒定案：</b>停止修改，用手上最完整的那一版上正圖。普通但完整的方案，分數高於很好但沒畫完的方案。</li>
+    <li><b>第 5 小時平面還沒畫完：</b>平面先停，家具和鋪面全部跳過，去畫剖面和立面。</li>
+    <li><b>第 6 小時 40 分透視還沒開始：</b>改畫最簡單的量體透視，10 分鐘內結束。</li>
+    <li><b>最後 30 分鐘：</b>不管畫到哪裡都停筆，進入檢查。補圖名、比例、指北針、空間名稱、尺寸。這些每一項都是分數，而且只要幾秒鐘。</li>
+  </ol>
+  <div class="key"><b>原則：</b>每一張被要求的圖都要存在。寧可六張圖都有七成，不要三張十成、三張空白。</div>
+
+
+  <h2 class="h">模擬：八小時裡的六個決定</h2>
+  <section class="game" id="gExam">
+    <header class="ghead"><span class="gno">GAME 03</span><h3>考場決策</h3><div class="hud"><b data-score>0</b><small>分</small></div></header>
+    <p class="gdesc">你坐在考場裡。每個決定都會花掉時間，也會影響分數。走完六個關卡，看你能不能在 8 小時內交出一張及格的圖。</p>
+    <div class="exbar"><i id="exFill" style="width:0"></i><span id="exClock">0:00 / 8:00</span></div>
+    <p class="fq" id="exQ"></p>
+    <div class="opts" id="exOpts"></div>
+    <ol class="exlog" id="exLog"></ol>
+    <div class="frow"><button class="ghost" type="button" id="exReset" hidden>再考一次</button></div>
+  </section>
+
+  <h2 class="h">圖紙版面</h2>
+  <p>動筆畫正圖之前，先用鉛筆在圖紙上輕輕框出每張圖的位置。確認每張圖都放得下，再開始畫。實際的圖紙大小和張數以當年試場規定為準，以下是一張橫式大圖紙的常見排法：</p>
+  <figure>
+    <svg id="fbSheet" class="fbx" viewBox="0 0 720 500" role="img" aria-label="圖紙版面配置範例"></svg>
+    <figcaption>左邊黃底一欄是計畫（30 分），其餘是設計（70 分）。最下方是標題欄，准考證號碼等依試場規定填寫。配置圖最大、放在視覺中心。各層平面上下或左右對齊，柱位對得起來。</figcaption>
+  </figure>
+  <ul class="t">
+    <li>題目若要求配置圖和一樓平面分開畫，就分開。沒有特別要求時，兩張合併成「配置暨一樓平面」可以省下一張圖的時間。</li>
+    <li>各層平面用同一個方向、同一個比例，並排對齊。</li>
+    <li>每張圖下方寫圖名和比例，並畫一條底線。</li>
+  </ul>
+
+  <h2 class="h">交卷前 30 分鐘的檢查表</h2>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c71"><span>題目要求的每一張圖都有，比例正確</span></label></li>
+    <li><label><input type="checkbox" id="c72"><span>硬條件清單逐條打勾（單元 1 抄的那張）</span></label></li>
+    <li><label><input type="checkbox" id="c73"><span>題目列出的每個空間，圖上都找得到名稱</span></label></li>
+    <li><label><input type="checkbox" id="c74"><span>每張圖有圖名、比例；配置和平面有指北針</span></label></li>
+    <li><label><input type="checkbox" id="c75"><span>每層有 2 座樓梯、電梯、廁所、無障礙廁所</span></label></li>
+    <li><label><input type="checkbox" id="c76"><span>入口有 ▲ 符號；車道入口、停車數量有標</span></label></li>
+    <li><label><input type="checkbox" id="c77"><span>平面有柱位和主要尺寸；剖面有樓高</span></label></li>
+    <li><label><input type="checkbox" id="c78"><span>建蔽率、容積率的檢討算式寫在圖上</span></label></li>
+    <li><label><input type="checkbox" id="c79"><span>准考證號碼、座號等依試場規定填寫；圖面上不留任何可辨識身分的記號</span></label></li>
+  </ul>
+
+
+  <h2 class="h">找碴：這張圖哪裡會被扣分</h2>
+  <section class="game" id="gSpot">
+    <header class="ghead"><span class="gno">GAME 04</span><h3>圖面找碴</h3><div class="hud"><b data-score>0</b><small>/8 處</small></div></header>
+    <p class="gdesc">這是一位考生畫的例題「配置暨一樓平面」，裡面有 8 個會被扣分的錯。直接點圖上你覺得有問題的地方。點錯三次會扣分。</p>
+    <figure><svg id="spSvg" class="spot" viewBox="0 0 720 340" role="application" aria-label="有錯誤的配置圖，點選錯誤處"></svg></figure>
+    <p class="verdict mid" id="spMsg">已找到 0 / 8，誤點 0 次。</p>
+    <ul class="finds" id="spFinds"></ul>
+    <div class="frow"><button class="ghost" type="button" id="spHint">給我一個提示</button><button class="ghost" type="button" id="spReset">重來</button></div>
+  </section>
+
+  <div class="box quiz" data-ans="a">
+    <h4><em>確認</em>開考 2 小時 40 分，你的配置有兩個版本，各有優缺點，還決定不了。該怎麼做？</h4>
+    <div class="opts">
+      <button type="button" data-k="a">選比較單純、確定畫得完的那一版，立刻上正圖</button>
+      <button type="button" data-k="b">再花 30 分鐘把兩版融合成第三版</button>
+      <button type="button" data-k="c">兩版都畫在圖上，讓閱卷者挑</button>
+    </div>
+    <p class="why" hidden>已經超過草圖階段的時限。這時候再多想 30 分鐘，換來的設計改善很小，但後面每一張圖都會少 30 分鐘。選單純的版本，把省下的時間用在畫完。</p>
+  </div>
+</article>

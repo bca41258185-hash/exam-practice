@@ -1,0 +1,88 @@
+<style>
+/* 樓層像剖面一樣由上往下疊 */
+#zoner .buckets{grid-template-columns:minmax(0,1fr);gap:0;border-bottom:4px solid var(--ink)}
+#zoner .bucket{flex-direction:row;flex-wrap:wrap;align-items:center;min-height:58px;border-radius:0;border-width:2px 2px 0;gap:6px 8px}
+#zoner .bucket strong{flex:0 0 150px;font-family:var(--f-data)}
+#zoner .bucket .hint[data-sum]{flex:1 0 100%;order:9;margin:0;font-size:12.5px}
+#zoner .bucket span.in.no{border-color:var(--bad);background:var(--badbg);box-shadow:0 0 0 1px var(--bad)}
+@media (max-width:560px){#zoner .bucket strong{flex-basis:100%}}
+</style>
+<script>
+(function(){
+"use strict";
+var K=window.KY; if(!K||!K.levels)return;
+var $=K.$, $$=K.$$, el=K.el, fmt=K.fmt;
+/* ---------- M3 空間分層：三份計畫 ----------
+   每個空間：[名稱, 淨面積, 可接受的樓層(0=B1), 放錯時的原因]。樓層：[樓層, 標籤, 建議淨面積下限, 上限]。 */
+(function(){
+  var box=$('#zoner'); if(!box)return;
+  var P=[
+  {name:'例題：圖書分館',
+   rule:'例題的七個空間，分到三層。每層淨面積建議 440 到 600 ㎡（每層約 700 到 770 ㎡，扣掉走廊、樓梯、廁所）。規則：公共、吵、人多的放低樓層；安靜的放高樓層。',
+   floors:[[3,'3F　最安靜',440,600],[2,'2F　半公共',440,600],[1,'1F　最公共、臨街',440,600]],
+   items:[['多功能廳',250,[1],'要夜間獨立開放、人多，放一樓臨街。'],['社區咖啡',80,[1],'最公共，要讓路人看得到，放一樓。'],['共餐廚房與用餐',120,[1],'食材要卸貨、長者進出方便，放一樓。'],
+    ['兒童閱覽區',200,[2],'幼兒宜在低樓層；一樓已被三個公共空間用滿，放二樓，和樂齡教室同層來回應「世代相遇」。'],['樂齡教室 ×4',240,[2],'半公共，有電梯可達；和兒童閱覽同層。'],
+    ['一般閱覽區',500,[3],'最需要安靜，放頂樓。'],['行政辦公',90,[3,2],'內部空間，放二樓或三樓都可以。']],
+   ok:'一樓是熱鬧的街道層，二樓讓小孩和長者相遇，三樓安靜閱讀。這個分層本身就回應了題目的兩個議題。'},
+  {name:'日照中心＋社區食堂',
+   rule:'地上 3 層加地下 1 層。規則：長輩每天用的空間放 1F、2F；廚房要緊鄰食堂和卸貨；午休室要安靜，和活動室同一層；B1 只放沒有人長時間停留、不需要採光的空間。',
+   floors:[[3,'3F',120,320],[2,'2F',280,500],[1,'1F　臨街',280,450],[0,'B1　沒有採光',130,300]],
+   items:[['社區食堂（用餐區）',160,[1],'對社區開放、人最多，放一樓臨街，長輩不必搭電梯就能吃飯。'],['中央廚房',90,[1],'食材要卸貨，又要緊鄰食堂出餐，只能放一樓。'],['日照接待與家屬等候',50,[1],'家屬在一樓門口接送，接待要在入口旁。'],
+    ['日間活動室',200,[2],'一樓已被食堂和廚房用掉；活動室要和午休室、護理站同一層，整組放二樓，用電梯上下。'],['午休室',80,[2],'要安靜，又要靠近活動室，長輩午睡前後不必換樓層。'],['護理站與藥品',40,[2],'護理人員要看得到活動室和午休室，跟著放二樓。'],
+    ['復健室',100,[2,1],'長輩每天用，放一樓或二樓都合理，不能放更高或地下室。'],['研習教室 ×2',120,[3],'給志工和家屬上課，偶爾使用，放三樓，把低樓層留給長輩。'],['志工與行政辦公',70,[3,2],'員工空間，三樓或二樓都可以。'],
+    ['員工休息與更衣',40,[3,0],'只有員工使用，三樓或地下室都可以。'],['機房',80,[0],'沒有人停留，放地下室。'],['洗衣與被服',60,[0],'不需要採光，放地下室用服務電梯上下，把一樓臨街的位置留給食堂。'],['食材倉儲',50,[0,1],'放一樓廚房旁或地下室都可以，重點是離卸貨近。']],
+   ok:'長輩只在一樓和二樓活動，三樓和地下室是員工與設備。這樣電梯的尖峰只有上下一層。'},
+  {name:'市場＋圖書＋住宅',
+   rule:'地上 5 層，三種使用疊在一起。規則：市場有氣味、水和卸貨，放一樓；住宅和圖書館各有自己的門廳和樓梯電梯，住宅放最上面兩層；無柱大廳上面不能再壓樓層，只能放頂樓或一樓。',
+   floors:[[5,'5F',360,440],[4,'4F',360,440],[3,'3F',480,600],[2,'2F',320,520],[1,'1F　臨街',780,920]],
+   items:[['市場攤位區',420,[1],'生鮮要卸貨、有氣味和水，只能放一樓。'],['卸貨與冷藏',60,[1],'貨車停在一樓，冷藏要緊貼卸貨區。'],['住宅門廳與信箱',40,[1],'住宅要在一樓有自己的出入口和電梯，不和市場、圖書館共用。'],
+    ['多功能大廳（無柱）',300,[1],'無柱大空間上面不能壓樓層。頂樓是住宅，所以放一樓做成單層量體，屋頂可以當露台。'],['圖書門廳與借還書',80,[1,2],'放一樓或二樓都可以；放一樓，還書不用上樓。'],
+    ['兒童閱覽區',240,[2],'兒童放圖書館最低的一層，推嬰兒車的家長最方便。'],['說故事與親子共讀',100,[2],'會出聲，要和兒童閱覽同層，不要吵到三樓。'],['一般閱覽區',400,[3],'最需要安靜，放圖書館的最上層。'],
+    ['自習室',100,[3],'要安靜，和一般閱覽同層；二樓有說故事區，太吵。'],['圖書行政',80,[2,3],'員工空間，二樓或三樓都可以。'],
+    ['青年住宅 A 區（8 戶）',400,[4,5],'住宅放最上面兩層，用自己的服務核，不經過市場和圖書館。'],['青年住宅 B 區（8 戶）',400,[4,5],'住宅放最上面兩層，用自己的服務核，不經過市場和圖書館。']],
+   pair:[10,11,'兩區住宅疊在同一層，另一層就空了。每層放一區，每層 8 戶。'],
+   ok:'一樓是市場、無柱大廳和兩個獨立門廳；二、三樓是圖書館；四、五樓是住宅。三種使用各有自己的入口和服務核，互不穿越。'}
+  ];
+  var hint=null, pool, bks, out, more, L, cur=0, sel=null, place={};
+  /* 重建內部：保留 h4 */
+  var h4=$('h4',box); Array.prototype.slice.call(box.childNodes).forEach(function(n){if(n!==h4)box.removeChild(n)});
+  if(h4)h4.innerHTML='<em>動手 3</em>幫空間分樓層';
+  hint=el('p',{'class':'gdesc hint',id:'znRule'}); box.appendChild(hint);
+  pool=el('div',{'class':'pills',id:'znPool',role:'group','aria-label':'空間'}); box.appendChild(pool);
+  bks=el('div',{'class':'buckets',id:'znBuckets'}); box.appendChild(bks);
+  var fr=el('div',{'class':'frow'},'<button class="go" type="button" id="znCheck">對答案</button><button class="ghost" type="button" id="znReset">重來</button>'); box.appendChild(fr);
+  out=el('p',{'class':'verdict',id:'znOut',hidden:''}); box.appendChild(out);
+  more=el('div',{id:'znMore'}); box.appendChild(more);
+  function fl(f){return f===0?'B1':f+'F'}
+  function clearSel(){sel=null; $$('.pill',pool).forEach(function(x){x.setAttribute('aria-pressed','false')})}
+  function choose(i){sel=i; $$('.pill',pool).forEach(function(x){x.setAttribute('aria-pressed',+x.dataset.i===i?'true':'false')})}
+  function start(i){cur=i; sel=null; place={}; var p=P[i]; hint.textContent=p.rule; out.hidden=true; more.innerHTML='';
+    pool.innerHTML=''; p.items.forEach(function(it,k){var b=el('button',{type:'button','class':'pill','aria-pressed':'false','data-i':k},it[0]+'　<span class="fig">'+it[1]+'</span>'); pool.appendChild(b); b.addEventListener('click',function(){choose(k)})});
+    bks.innerHTML=''; p.floors.forEach(function(f){var b=el('button',{type:'button','class':'bucket','data-f':f[0]},'<strong>'+f[1]+'</strong><span class="hint" data-sum></span>'); bks.appendChild(b);
+      b.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.in'); if(t&&sel==null){choose(+t.dataset.i);return}
+        if(sel==null){out.hidden=false;out.className='verdict mid';out.textContent='先點上面的一個空間，再點樓層。';return}
+        place[sel]=f[0]; clearSel(); paint(); out.hidden=true; more.innerHTML=''})});
+    paint()}
+  function paint(){var p=P[cur];
+    $$('.bucket',bks).forEach(function(bk){$$('.in',bk).forEach(function(n){n.remove()}); var f=+bk.dataset.f, sum=0, fd=p.floors.filter(function(x){return x[0]===f})[0];
+      p.items.forEach(function(it,k){if(place[k]===f){sum+=it[1]; bk.appendChild(el('span',{'class':'in','data-i':k},it[0]+' '+it[1]))}});
+      var tag=sum===0?'':sum<fd[2]?'　偏少':sum>fd[3]?'　偏多':'　✓';
+      $('[data-sum]',bk).textContent='淨面積 '+fmt(sum)+' ㎡（建議 '+fd[2]+'–'+fd[3]+'）'+tag});
+    $$('.pill',pool).forEach(function(x){x.classList.toggle('placed',place[+x.dataset.i]!=null)})}
+  $('#znCheck').addEventListener('click',function(){var p=P[cur], n=0, msg=[], bad={};
+    out.hidden=false; more.innerHTML='';
+    var un=p.items.filter(function(_,k){return place[k]==null}).length; if(un){out.className='verdict mid';out.textContent='還有 '+un+' 個空間沒放。';return}
+    p.items.forEach(function(it,k){if(it[2].indexOf(place[k])<0){bad[k]=1; msg.push('<li><b>'+it[0]+'</b>（你放 '+fl(place[k])+'）：'+it[3]+'</li>')}});
+    if(p.pair){var a=p.pair[0], b=p.pair[1]; if(!bad[a]&&!bad[b]&&place[a]===place[b]){bad[a]=bad[b]=1; msg.push('<li><b>'+p.items[a][0]+'、'+p.items[b][0]+'</b>：'+p.pair[2]+'</li>')}}
+    p.items.forEach(function(_,k){if(!bad[k])n++; var s=$('.in[data-i="'+k+'"]',bks); if(s)s.classList.toggle('no',!!bad[k])});
+    var sc=Math.round(n/p.items.length*100), pass=L.done(cur,sc);
+    if(pass){out.className='verdict ok'; out.innerHTML='<b>全部合理。</b>'+p.ok;
+      if(cur<L.count-1){var nx=el('button',{type:'button','class':'go'},'下一小關 →'); nx.addEventListener('click',function(){L.next(); box.scrollIntoView({block:'start'})}); more.appendChild(nx)}
+      else more.appendChild(el('p',{'class':'hint'},'三份計畫都分好了。考場上先寫這張分層表，再畫泡泡圖。'))}
+    else{out.className='verdict no'; out.innerHTML='<b>'+n+' / '+p.items.length+' 合理。</b>紅框的再想一下。點紅框的空間可以拿起來重放：'; more.innerHTML='<ul class="t">'+msg.join('')+'</ul>'}
+  });
+  $('#znReset').addEventListener('click',function(){place={}; clearSel(); paint(); out.hidden=true; more.innerHTML=''});
+  L=K.levels(box,{key:'g:zone',names:['圖書館','日照中心','複合大樓'],pass:100,start:start});
+})();
+})();
+</script>
