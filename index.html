@@ -244,6 +244,12 @@ function renderSetup(){
       ${tabsHtml('practice')}
 
       <div class="card">
+        <label class="fld">題庫網頁</label>
+        <a class="btn sm" style="text-align:center;text-decoration:none" href="bank/env.html">▶ 環控題庫（520 題）</a>
+        <a class="btn ghost sm" style="text-align:center;text-decoration:none;margin-top:8px" href="bank/struct.html">▶ 結構題庫（480 題附圖）</a>
+      </div>
+
+      <div class="card">
         <label class="fld">科目</label>
         <select id="sub">${SUBJECTS.map(s=>`<option ${s===sel.subject?'selected':''}>${esc(s)}</option>`).join('')}</select>
       </div>
