@@ -472,6 +472,10 @@ class RobustnessTest(Base):
         core._cache.update(stamp=None, cfg=None)
         cfg = core.load_config()
         self.assertEqual((cfg.get("opened"), cfg.get("pinned"), cfg["project_roots"]), (None, None, ["/x"]), "型別不對的欄位當作沒設定")
+        path.write_text('{"opened": {"/a": 2, "/b": "x"}, "shelved": {"t1": 123.5, "t2": "x"}, "merged": {"/a": "/b", "/c": 1}}', "utf-8")
+        core._cache.update(stamp=None, cfg=None)
+        cfg = core.load_config()
+        self.assertEqual((cfg["opened"], cfg["shelved"], cfg["merged"]), ({"/a": 2}, {"t1": 123.5}, {"/a": "/b"}), "內層型別不對的項目被濾掉，其餘保留")
         self.assertEqual(core.config_int("panel_port", 8765), 8765)
 
     def test_dirty_ai_records_do_not_break_the_list(self):
@@ -624,6 +628,57 @@ class ConversationTest(Base):
         task = ai_tasks.pr_task("o/r", bare, [], time.time())
         self.assertEqual((task["session"], task["messages"][0]["text"]), ("session_01DemoFire4567", "輸出成表格。"), "連結用來回覆，不顯示在對話裡")
 
+    def test_sub_conversations_hang_under_their_parent(self):
+        self.put("甲案/a.pdf")
+        f = self.session("parent", str(self.root / "甲案"), ["幫我請三位審查者來看", "好，我派出去了。"])
+        sub = f.with_suffix("") / "subagents"
+        sub.mkdir(parents=True)
+        def child(name, title, finished, rows, age):
+            (sub / f"agent-{name}.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), "utf-8")
+            (sub / f"agent-{name}.meta.json").write_text(json.dumps({"description": title, "finished": finished}, ensure_ascii=False), "utf-8")
+            when = time.time() - age
+            os.utime(sub / f"agent-{name}.jsonl", (when, when))
+        child("a1", "第一輪審查", True, [
+            {"type": "user", "isSidechain": True, "message": {"role": "user", "content": "請審查流程"}},
+            {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "tool_use", "name": "SubagentHandback", "input": {"message": "分數：10/10"}}]}}], 900)
+        child("b2", "第二輪審查", False, [
+            {"type": "user", "isSidechain": True, "message": {"content": "請再審一次"}},
+            {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "text", "text": "正在實測…"}]}}], 10)
+        (sub / "agent-bad.jsonl").write_text("不是 JSON", "utf-8")
+        kids = ai_tasks.sub_conversations(f)
+        self.assertEqual([(k["title"], k["state"], k["ask"], k["last"]) for k in kids if k["id"] != "bad"],
+                         [("第一輪審查", "done", "請審查流程", "分數：10/10"), ("第二輪審查", "running", "請再審一次", "正在實測…")])
+        os.utime(f, (time.time() - 3600,) * 2)   # 主對話一小時沒動，但子助手還在做
+        parent = next(s for s in ai_tasks.local_sessions() if s["id"] == "parent")
+        self.assertEqual((parent["state"], parent["state_text"], len(parent["children"])), ("running", "子助手正在做", 3))
+        self.assertEqual(ai_tasks.sub_conversations(f.with_name("沒有這個.jsonl")), [])
+
+    def test_unused_conversations_are_shelved_and_can_come_back(self):
+        self.put("甲案/a.pdf")
+        cwd = str(self.root / "甲案")
+        old = self.session("old_done", cwd, ["舊的事", "做完了"])
+        os.utime(old, (time.time() - 5 * 86400,) * 2)
+        self.session("in_use", cwd, ["現在的事", "處理中"])
+        ids = lambda key: sorted(t["id"] for t in ai_tasks.all_tasks()[key] if t["id"] in ("old_done", "in_use"))  # noqa: E731
+        self.assertEqual((ids("tasks"), ids("shelved")), (["in_use"], ["old_done"]), "停著超過三天的自動收起來")
+        col = next(c for c in panel.conversations()["columns"] if c["name"] == "甲案")
+        self.assertEqual(([t["id"] for t in col["threads"]], [t["id"] for t in col["shelved"]]), (["in_use"], ["old_done"]))
+        ai_tasks.set_shelved("old_done", False)     # 放回來
+        self.assertEqual(ids("tasks"), ["in_use", "old_done"])
+        ai_tasks.set_shelved("in_use", True)        # 手動收起來
+        self.assertEqual((ids("tasks"), ids("shelved")), (["old_done"], ["in_use"]))
+        self.assertEqual(ai_tasks.all_tasks()["counts"]["waiting"], sum(t["state"] == "waiting" for t in ai_tasks.all_tasks()["tasks"]), "收起來的不算進數字")
+        with open(Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-conv" / "in_use.jsonl", "a", encoding="utf-8") as fh:
+            fh.write("\n" + json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "有新進度"}]}}))
+        future = time.time() + 5
+        os.utime(Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-conv" / "in_use.jsonl", (future, future))
+        self.assertIn("in_use", ids("tasks"), "收起來的對話有新動靜會自己回來")
+        only_old = self.session("lonely", str(self.root / "乙案"), ["很久以前", "好"]) if (self.root / "乙案").mkdir() is None else None
+        os.utime(only_old, (time.time() - 9 * 86400,) * 2)
+        panel._folders(fresh=True)
+        col = next(c for c in panel.conversations()["columns"] if c["name"] == "乙案")
+        self.assertEqual((col["threads"], [t["id"] for t in col["shelved"]]), ([], ["lonely"]), "只剩收起來的對話時，專案仍有一欄可以找回來")
+
     def test_pr_comments_become_a_conversation(self):
         pr = {"number": 3, "title": "T", "state": "open", "draft": True, "updated_at": "2026-11-10T00:00:00Z", "created_at": "2026-11-09T00:00:00Z",
               "html_url": "https://github.com/o/r/pull/3", "head": {"ref": "claude/x"},
@@ -688,6 +743,9 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/link_repo", {"repo": "x/y", "project": ""})[0], 400)
         self.assertEqual(self.call("/api/reply", {"thread": "nope", "text": "嗨"})[0], 400)
         self.assertEqual(self.call("/api/reply", {"thread": 5, "text": "嗨"})[0], 400)
+        self.assertEqual(self.call("/api/shelve", {"thread": "any", "on": True})[1], {"ok": True})
+        self.assertIn("any", core.load_config()["shelved"], "收起來的紀錄有存下來")
+        self.assertEqual(self.call("/api/shelve", {"thread": 3, "on": True})[0], 400)
         self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
         for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
             self.assertEqual(self.call("/api/open", bad)[0], 400, bad)

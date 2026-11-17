@@ -141,7 +141,63 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
     return _finish(info)
 
 
-def local_sessions(days: float = 3, limit: int = 12) -> list[dict]:
+_child_cache: dict[str, tuple] = {}
+
+
+def _last_say(rows: list[dict]) -> str:
+    """子助手最後說的話：一般是文字；交回成果時則放在工具呼叫的 message 裡。"""
+    for o in reversed(rows):
+        if o.get("type") != "assistant":
+            continue
+        msg = o.get("message") if isinstance(o.get("message"), dict) else {}
+        txt = _text_of(msg)
+        if txt:
+            return txt
+        for b in msg.get("content") if isinstance(msg.get("content"), list) else []:
+            said = (b.get("input") or {}).get("message") if isinstance(b, dict) and b.get("type") == "tool_use" else None
+            if isinstance(said, str) and said.strip():
+                return said.strip()
+    return ""
+
+
+def sub_conversations(session_file: Path, now: float | None = None) -> list[dict]:
+    """這段對話裡，助手另外派出去的子助手（子對話）。
+    Claude Code 把它們存在「<對話代號>/subagents/agent-*.jsonl」，旁邊的 .meta.json 有任務名稱與是否做完。"""
+    folder = session_file.with_suffix("") / "subagents"
+    out = []
+    try:
+        files = sorted(folder.glob("agent-*.jsonl"))
+    except OSError:
+        return out
+    for f in files:
+        try:
+            st = f.stat()
+            cached = _child_cache.get(str(f))
+            if cached and cached[0] == (st.st_mtime, st.st_size):
+                info = dict(cached[1])
+            else:
+                meta = {}
+                try:
+                    meta = json.loads(f.with_name(f.stem + ".meta.json").read_text("utf-8"))
+                except (OSError, ValueError):
+                    pass
+                rows = _read_slices(f, head=20_000, tail=200_000)
+                ask = next((_text_of(o.get("message")) for o in rows if o.get("type") == "user"), "")
+                title = meta.get("description") if isinstance(meta, dict) and isinstance(meta.get("description"), str) else ""
+                info = {"id": f.stem.replace("agent-", ""), "title": (title or ask or "子對話")[:60], "ask": ask[:MSG_CHARS],
+                        "last": _last_say(rows)[:MSG_CHARS], "finished": bool(isinstance(meta, dict) and meta.get("finished")),
+                        "updated": st.st_mtime}
+                _child_cache[str(f)] = ((st.st_mtime, st.st_size), dict(info))
+            fresh = (now or time.time()) - info["updated"] < 120
+            info["state"] = "running" if fresh and not info["finished"] else "done" if info["finished"] else "idle"
+            info["state_text"] = {"running": "正在做", "done": "做完了", "idle": "停著"}[info["state"]]
+            out.append(info)
+        except Exception:   # 單一子對話格式不對就跳過
+            continue
+    return sorted(out, key=lambda c: c["updated"])
+
+
+def local_sessions(days: float = 30, limit: int = 40) -> list[dict]:
     base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
     cutoff = time.time() - days * 86400
     files = []
@@ -162,8 +218,42 @@ def local_sessions(days: float = 3, limit: int = 12) -> list[dict]:
         except Exception:   # 這份紀錄格式不對就跳過，不影響其他的
             info = None
         if info:
+            info["children"] = sub_conversations(f)
+            if any(c["state"] == "running" for c in info["children"]) and info["state"] != "running":
+                info["state"], info["state_text"] = "running", "子助手正在做"   # 主對話停著，但它派出去的還在忙
             out.append(info)
     return out
+
+
+# ---------------------------------------------------------------- 用到的與收起來的
+SHELVE_AFTER = 3 * 86400   # 做完或停著超過三天的對話自動收起來
+
+
+def is_shelved(task: dict, cfg: dict, now: float | None = None) -> bool:
+    """這段對話是不是「收起來的」：不佔畫面、不算進數字、不通知。
+    手動收起來的，之後有新動靜會自己回來；做完或停著超過三天的自動收起來，除非你把它放回來過。"""
+    now = now or time.time()
+    put_away = cfg.get("shelved", {}).get(task["id"])
+    if isinstance(put_away, (int, float)) and not isinstance(put_away, bool) and task["updated"] <= put_away + 1:
+        return True
+    kept = cfg.get("kept", {}).get(task["id"])
+    kept = kept if isinstance(kept, (int, float)) and not isinstance(kept, bool) else 0
+    # GitHub 上還開著等你的成果不會自動收（那是真的待辦）；這台電腦上「回覆完就沒下文」的對話則會
+    unused = task["state"] in ("idle", "done") or (task["state"] == "waiting" and task.get("source") != "GitHub")
+    return unused and now - max(task["updated"], kept) > SHELVE_AFTER
+
+
+def set_shelved(thread_id: str, on: bool) -> None:
+    with core._LOCK:
+        cfg = core.load_config()
+        shelved, kept = dict(cfg.get("shelved", {})), dict(cfg.get("kept", {}))
+        shelved.pop(thread_id, None)
+        kept.pop(thread_id, None)
+        if on:
+            shelved[thread_id] = time.time()
+        else:
+            kept[thread_id] = time.time()   # 放回來：從現在起再算三天
+        core.set_config(shelved=dict(list(shelved.items())[-300:]), kept=dict(list(kept.items())[-300:]))
 
 
 # ---------------------------------------------------------------- GitHub
@@ -358,9 +448,12 @@ def all_tasks() -> dict:
         local = local_sessions()
     except Exception:
         local = []
-    tasks = sorted(local + gh, key=lambda t: (ORDER.get(t["state"], 9), -t["updated"]))
+    cfg = core.load_config()
+    every = sorted(local + gh, key=lambda t: (ORDER.get(t["state"], 9), -t["updated"]))
+    tasks = [t for t in every if not is_shelved(t, cfg)]
+    shelved = sorted((t for t in every if is_shelved(t, cfg)), key=lambda t: -t["updated"])
     counts = {s: sum(t["state"] == s for t in tasks) for s in ORDER}
-    return {"tasks": tasks, "counts": counts, "error": err,
+    return {"tasks": tasks, "shelved": shelved, "counts": counts, "error": err,
             "github_configured": bool(core.load_config().get("github_repos"))}
 
 

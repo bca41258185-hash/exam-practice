@@ -65,7 +65,8 @@ config_problem = ""                 # 設定檔壞掉時，給畫面顯示的一
 # 各欄位應有的型別；型別不對的欄位當作沒設定，不讓它弄壞其他功能
 _TYPES = {"project_roots": list, "projects": list, "hidden_projects": list, "pinned": list,
           "github_repos": list, "ai_branch_prefixes": list, "merged": dict, "opened": dict,
-          "github_token": str, "walk": bool, "repo_links": dict, "sent": dict, "claude_path": str}
+          "github_token": str, "walk": bool, "repo_links": dict, "sent": dict, "claude_path": str,
+          "shelved": dict, "kept": dict}
 
 
 def _stamp(path: Path):
@@ -94,6 +95,9 @@ def load_config() -> dict:
                         if key in cfg:
                             want = int if key == "opened" else list if key == "sent" else str
                             cfg[key] = {k: v for k, v in cfg[key].items() if isinstance(v, want) and not isinstance(v, bool)}
+                    for key in ("shelved", "kept"):   # 值是時間（數字）
+                        if key in cfg:
+                            cfg[key] = {k: v for k, v in cfg[key].items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
                     for key in ("project_roots", "projects", "hidden_projects", "pinned", "github_repos", "ai_branch_prefixes"):
                         if key in cfg:
                             cfg[key] = [x for x in cfg[key] if isinstance(x, str)]

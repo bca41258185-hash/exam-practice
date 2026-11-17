@@ -159,6 +159,9 @@
   .tabs::-webkit-scrollbar { display: none; }
   .tab { flex: none; max-width: 13rem; height: 2.4rem; padding: 0 .8rem; border-radius: .6rem; background: var(--card); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: .25rem solid var(--s); }
   .tab.on { background: var(--card-hi); font-weight: 700; }
+  .tabs.kids { align-items: center; } .tabs.kids > span { flex: none; font-size: .75rem; color: var(--dim); padding: 0 .2rem 0 .3rem; }
+  .tabs.kids .tab { height: 2.2rem; font-size: .8rem; background: none; border: 1px solid var(--line); border-left: .25rem solid var(--s); }
+  .ver[disabled], .open[disabled] { opacity: .55; pointer-events: none; }
   .msgs { flex: 1; min-height: 0; overflow-y: auto; padding: .3rem .6rem .5rem; display: flex; flex-direction: column; gap: .45rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
   .msg { max-width: 88%; padding: .55rem .75rem; font-size: .98rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; user-select: text; }
   .msg.ai { align-self: flex-start; background: var(--card); border-radius: .3rem .9rem .9rem .9rem; }                       /* 助手：左邊的方框 */
@@ -643,6 +646,8 @@ function talkColumn(key, title, threads, extra) {
           ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</span></button>
       ${extra || ""}</div>
     ${threads.length > 1 ? `<div class="tabs">${threads.map(t => `<button class="tab s-${t.state} ${t.id === cur.id ? "on" : ""}" data-thread="${esc(t.id)}" data-key="${esc(key)}">${esc(t.title)}</button>`).join("")}</div>` : ""}
+    ${(cur.children || []).length ? `<div class="tabs kids"><span>子對話</span>${cur.children.map(k =>
+      `<button class="tab s-${k.state}" data-child="${esc(k.id)}" data-parent="${esc(cur.id)}">${k.state === "done" ? "✓ " : k.state === "running" ? "… " : ""}${esc(k.title)}</button>`).join("")}</div>` : ""}
     <div class="msgs" data-thread-id="${esc(cur.id)}">${msgs || empty}</div>
     ${cur.can_reply ? `<button class="rbar" data-reply="${esc(cur.id)}">回覆 AI 助手…<span>送出</span></button>`
       : `<div class="rbar off">這段對話不能從這裡回覆，請到 GitHub 或 claude.ai</div>`}</section>`;
@@ -678,8 +683,9 @@ async function loadTalk() {
   if (seq !== talkSeq || !document.body.classList.contains("talk")) return;
   state.talk = d;
   state.threads = {};
-  [...d.columns.flatMap(c => c.threads), ...d.loose].forEach(t => state.threads[t.id] = t);
-  noticeStates(Object.values(state.threads));
+  const active = [...d.columns.flatMap(c => c.threads), ...d.loose];
+  [...active, ...d.columns.flatMap(c => c.shelved || []), ...(d.loose_shelved || [])].forEach(t => state.threads[t.id] = t);
+  noticeStates(active);   // 收起來的對話不通知
   renderTalk();
 }
 
@@ -690,8 +696,8 @@ try { focusList = JSON.parse(localStorage.getItem("focus") || "[]"); } catch (e)
 const lead = c => [...c.threads].sort((x, y) => RANK[x.state] - RANK[y.state] || y.updated - x.updated)[0];
 const RANK = {failed: 0, waiting: 1, running: 2, done: 3, idle: 4};
 function allColumns(d) {
-  const cols = d.columns.map(c => ({key: c.path, name: projName(c.name)[1], threads: c.threads, path: c.path}));
-  if (d.loose.length) cols.push({key: "__loose", name: "還沒指定專案", threads: d.loose, path: ""});
+  const cols = d.columns.map(c => ({key: c.path, name: projName(c.name)[1], threads: c.threads, shelved: c.shelved || [], path: c.path}));
+  if (d.loose.length || (d.loose_shelved || []).length) cols.push({key: "__loose", name: "還沒指定專案", threads: d.loose, shelved: d.loose_shelved || [], path: ""});
   return cols;
 }
 function expandedSet(cols) {
@@ -709,15 +715,19 @@ function focusOn(key) {
   try { localStorage.setItem("focus", JSON.stringify(focusList)); } catch (e) {}
 }
 function compactColumn(c) {   // 摘要欄：史萊姆、名稱、狀態、進度、最後一句話。整欄都可以點
-  if (!c.threads.length) return `<button class="ccol s-idle" data-proj-files="${esc(c.path)}">${slime("idle")}
-    <b>${c.name}</b><span class="cst">沒有進行中的對話</span><span class="csnip"></span><span class="cgo">${icon("folder")}看檔案</span></button>`;
+  if (!c.threads.length) return c.shelved.length
+    ? `<button class="ccol s-idle" data-manage="${esc(c.key)}">${slime("idle")}
+      <b>${c.name}</b><span class="cst">沒有用到中的對話</span><span class="csnip">有 ${c.shelved.length} 段收起來的對話，點我可以找回來。</span><span class="cgo">管理對話</span></button>`
+    : `<button class="ccol s-idle" data-proj-files="${esc(c.path)}">${slime("idle")}
+      <b>${c.name}</b><span class="cst">沒有進行中的對話</span><span class="csnip"></span><span class="cgo">${icon("folder")}看檔案</span></button>`;
+  const kids = c.threads.reduce((n, x) => n + (x.children || []).length, 0);
   const t = lead(c), [done, total] = t.progress || [0, 0], last = (t.messages || [])[t.messages ? t.messages.length - 1 : 0];
   const need = t.state === "failed" || t.state === "waiting";
   return `<button class="ccol s-${t.state} ${need ? "need" : ""}" data-focus="${esc(c.key)}">${slime(t.state, t.id)}
     <b>${c.name}</b><span class="cst">${esc(t.state_text || "")}${total ? ` ${done}/${total}` : ""}</span>
     ${total ? `<span class="prog"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ""}
     <span class="csnip">${last ? `<em>${last.role === "ai" ? "AI 助手" : "你"}：</em>${esc(tidy(last.text).slice(0, 90))}` : esc(t.title)}</span>
-    <span class="cgo">${c.threads.length > 1 ? c.threads.length + " 段對話・" : ""}點我展開</span></button>`;
+    <span class="cgo">${c.threads.length > 1 ? c.threads.length + " 段對話・" : ""}${kids ? "子對話 " + kids + "・" : ""}點我展開</span></button>`;
 }
 function renderTalk() {
   const d = state.talk, box = $("talk-cols");
@@ -726,9 +736,10 @@ function renderTalk() {
   const keep = {};
   box.querySelectorAll(".msgs").forEach(m => keep[m.dataset.threadId] = {top: m.scrollTop, atEnd: m.scrollHeight - m.scrollTop - m.clientHeight < 40});
   const left = box.scrollLeft, cols = allColumns(d), open = expandedSet(cols);
-  let html = cols.map(c => !open.has(c.key) ? compactColumn(c) : talkColumn(c.key, c.name, c.threads, c.key === "__loose"
+  const more = c => `<button class="f" data-manage="${esc(c.key)}">對話 ${c.threads.length}${c.shelved.length ? `<small>收起 ${c.shelved.length}</small>` : ""}</button>`;
+  let html = cols.map(c => !open.has(c.key) ? compactColumn(c) : talkColumn(c.key, c.name, c.threads, more(c) + (c.key === "__loose"
     ? (d.loose.some(t => t.repo) && d.projects.length ? `<button class="f" data-act="link">指定專案</button>` : "")
-    : `<button class="f" data-proj-files="${esc(c.path)}">${icon("folder")}檔案</button>`)).join("");
+    : `<button class="f" data-proj-files="${esc(c.path)}">${icon("folder")}檔案</button>`))).join("");
   if (!cols.length) html = `<section class="tcol"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
     d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面寵物上按右鍵 →「追蹤 AI 助手的 GitHub 專案」<br><small>在這台電腦上用 Claude Code 進行的對話會自動出現，不必設定。</small>"}</div></section>`;
   else if (d.error) html += `<section class="ccol"><span class="csnip" style="color:var(--failed)">${esc(d.error)}</span></section>`;
@@ -752,6 +763,28 @@ function setMode(talk) {
   try { localStorage.setItem("mode", talk ? "talk" : "files"); } catch (e) {}
   if (talk) { closeSheet(); $("talk-cols").innerHTML = `<section class="tcol"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
   else refresh();
+}
+/* 管理一個專案的對話：哪些用到中、哪些收起來。收起來的不佔畫面、不算進數字、史萊姆也不會為它跑來 */
+function manageSheet(key) {
+  const c = allColumns(state.talk).find(x => x.key === key);
+  if (!c) return closeSheet();
+  const row = (t, away) => `<div class="file s-${t.state}" style="min-height:4.4rem;border-left:.35rem solid var(--s)">
+    <button class="open" data-view="${esc(t.id)}" data-key="${esc(key)}" ${away ? "disabled" : ""}><span class="t"><div class="n">${esc(t.title)}</div>
+      <div class="m"><b style="color:var(--s)">${esc(t.state_text || "")}</b>・${ago(t.updated)}${(t.children || []).length ? "・子對話 " + t.children.length : ""}・${t.source === "GitHub" ? "雲端" : "這台電腦"}</div></span></button>
+    <button class="ver" data-shelve="${esc(t.id)}" data-on="${away ? "" : "1"}" data-key="${esc(key)}">${away ? "放回來" : "收起來"}</button></div>`;
+  sheet(head(`「${c.name}」的對話`) + `<div class="list">
+    <p>「收起來」的對話不佔畫面、不算進數字，史萊姆也不會為它跑來；之後有新動靜會自己回來。做完或停著超過三天的對話會自動收起來。只是顯示方式，對話本身不會被刪除。</p>
+    <p class="sec" style="padding:0 .3rem">用到中（${c.threads.length}）</p>${c.threads.map(t => row(t, false)).join("") || `<p>沒有。</p>`}
+    <p class="sec" style="padding:.4rem .3rem 0">收起來的（${c.shelved.length}）</p>${c.shelved.map(t => row(t, true)).join("") || `<p>沒有。</p>`}</div>`);
+}
+function childSheet(parent, id) {
+  const t = (state.threads || {})[parent], k = t && (t.children || []).find(x => x.id === id);
+  if (!k) return;
+  sheet(head("子對話：" + esc(k.title)) + `<div class="list s-${k.state}">
+    <p style="color:var(--s);font-weight:700;font-size:1.05rem">${k.state_text}・${ago(k.updated)}　<span style="color:var(--dim);font-weight:400">屬於「${esc(t.title)}」</span></p>
+    <div class="who user" style="align-self:auto">主助手交代它的事</div><div class="msg user" style="max-width:100%;max-height:8rem;overflow:auto">${esc(tidy(k.ask || "（沒有紀錄）"))}</div>
+    <div class="who ai">它最後回報的</div><div class="msg ai" style="max-width:100%;max-height:13rem;overflow:auto">${esc(tidy(k.last || "（還沒有回報）"))}</div>
+    <p style="margin-top:.3rem">子對話是 AI 助手自己派出去分頭做事的，做完會把結果交回主對話。這裡只能看，不能直接回覆它；要調整請在主對話回覆。</p></div>`);
 }
 function linkSheet() {
   const repos = [...new Set(state.talk.loose.filter(t => t.repo).map(t => t.repo))];
@@ -890,11 +923,20 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-focus],[data-next],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-manage],[data-shelve],[data-view],[data-child],[data-focus],[data-next],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("focus" in d) { focusOn(d.focus); renderTalk(); }
+    if ("manage" in d) manageSheet(d.manage);
+    else if ("child" in d) childSheet(d.parent, d.child);
+    else if ("view" in d) { picked[d.key] = d.view; delete seenLast[d.view]; focusOn(d.key); closeSheet(); renderTalk(); }
+    else if ("shelve" in d) {
+      el.disabled = true;
+      await api("/api/shelve", {thread: d.shelve, on: d.on === "1"});
+      toast(d.on === "1" ? "已收起來，可以在「對話」裡放回來" : "已放回來");
+      await loadTalk(); manageSheet(d.key);
+    }
+    else if ("focus" in d) { focusOn(d.focus); renderTalk(); }
     else if ("next" in d) {   // 左邊的數字：輪流跳到下一個這種狀態的專案
       const hits = allColumns(state.talk).filter(c => c.threads.length && lead(c).state === d.next).map(c => c.key);
       const open = expandedSet(allColumns(state.talk));

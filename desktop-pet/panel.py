@@ -659,25 +659,33 @@ def conversations(active: list[str] | None = None) -> dict:
                      for m in mine if m["text"] not in known]
             t["messages"] = sorted(t.get("messages", []) + extra, key=lambda m: m["ts"])[-ai_tasks.MSG_KEEP:]
     current = projects()
-    by_project: dict[str, list[dict]] = {}
-    loose: list[dict] = []
-    for t in data["tasks"]:
-        owner = None
+
+    def owner_of(t: dict) -> str | None:
         if t.get("cwd"):
-            owner = project_of(t["cwd"])
-        elif t.get("repo"):
-            owner = links.get(t["repo"]) or _guess_project(t["repo"], current)
-        if owner in current:
-            by_project.setdefault(owner, []).append(t)
-        else:
-            loose.append(t)
-    for p in active or []:
+            return project_of(t["cwd"])
+        if t.get("repo"):
+            return links.get(t["repo"]) or _guess_project(t["repo"], current)
+        return None
+
+    by_project: dict[str, list[dict]] = {}
+    put_away: dict[str, list[dict]] = {}     # 收起來的對話：不佔欄位，但在「管理對話」裡找得到
+    loose: list[dict] = []
+    loose_away: list[dict] = []
+    for bucket, away, items in ((by_project, False, data["tasks"]), (put_away, True, data.get("shelved", []))):
+        for t in items:
+            t["can_reply"] = t.get("can_reply") or reply_route(t)
+            owner = owner_of(t)
+            if owner in current:
+                bucket.setdefault(owner, []).append(t)
+            else:
+                (loose_away if away else loose).append(t)
+    for p in list(active or []) + list(put_away):
         if p in current:
             by_project.setdefault(p, [])
     # 欄位順序固定依專案名稱，不因誰剛有動靜而換位（位置會變就建立不了手感）
-    columns = [{"path": p, "name": os.path.basename(p) or p, "threads": threads}
+    columns = [{"path": p, "name": os.path.basename(p) or p, "threads": threads, "shelved": put_away.get(p, [])}
                for p, threads in sorted(by_project.items(), key=lambda kv: os.path.basename(kv[0]).lower())]
-    return {"columns": columns, "loose": loose, "repos": cfg.get("github_repos", []), "cli": bool(claude_cli()),
+    return {"columns": columns, "loose": loose, "loose_shelved": loose_away, "repos": cfg.get("github_repos", []), "cli": bool(claude_cli()),
             "projects": [{"path": p, "name": os.path.basename(p) or p} for p in current],
             "error": data.get("error", ""), "github_configured": data.get("github_configured", False)}
 
@@ -729,7 +737,8 @@ def send_reply(thread_id: str, text: str) -> str:
         raise ValueError("empty")
     if len(text) > REPLY_MAX:
         raise PermissionError(f"訊息太長了（最多 {REPLY_MAX} 個字）。")
-    task = next((t for t in ai_tasks.all_tasks()["tasks"] if t["id"] == thread_id), None)
+    everything = ai_tasks.all_tasks()
+    task = next((t for t in everything["tasks"] + everything.get("shelved", []) if t["id"] == thread_id), None)
     if not task:
         raise PermissionError("找不到這段對話，可能已經結束了。")
     route = reply_route(task)
@@ -929,6 +938,11 @@ class Handler(BaseHTTPRequestHandler):
                 except FileNotFoundError:   # 檔案被移走了：讓下一次查詢重新掃描，清單才不會留著它
                     self.index.data = {k: (0, rows) for k, (_, rows) in self.index.data.items()}
                     raise
+            elif path == "/api/shelve":
+                if not isinstance(body.get("thread"), str):
+                    raise ValueError("格式不對")
+                ai_tasks.set_shelved(body["thread"], bool(body.get("on")))
+                self._send(200, {"ok": True})
             elif path == "/api/reply":
                 if not isinstance(body.get("thread"), str) or not isinstance(body.get("text"), str):
                     raise ValueError("格式不對")
