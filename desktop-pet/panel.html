@@ -63,7 +63,7 @@
   .col:has(.setbtn).below::after { bottom: 3.9rem; }   /* 「往下還有」的提示放在設定鈕上面，不要蓋住它 */
   .setbtn { flex: none; position: relative; z-index: 2; background: var(--panel); margin: .4rem .5rem .5rem; min-height: 3rem; border-radius: .8rem; color: var(--dim); font-size: .95rem; text-align: center; border: 1px solid var(--line); }
   .setbtn:active { background: var(--card); }
-  #fchip .f { height: 3rem; }
+  #fchip .f, #fexp .f { height: 3rem; }
   .sec span { margin-left: .6rem; letter-spacing: 0; font-weight: 400; color: var(--text); }
   .filters { display: flex; gap: .4rem; overflow-x: auto; flex: 1; scrollbar-width: none; padding: .1rem; }
   .filters::-webkit-scrollbar { display: none; }
@@ -296,7 +296,7 @@
     <button class="setbtn" data-act="more">設定</button></section>
 
   <section class="col">
-    <div class="fhead" id="fhead"><h2 id="ftitle">全部專案</h2><span id="fchip"></span><span id="busy">更新中…</span>
+    <div class="fhead" id="fhead"><h2 id="ftitle">全部專案</h2><span id="fexp"></span><span id="fchip"></span><span id="busy">更新中…</span>
       <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button></div>
     <div class="bar" id="bar">
       <div class="filters" id="filters"></div>
@@ -427,7 +427,7 @@ function fileCard(f, opts = {}) {
   return `<div class="file ${f.pinned ? "pinned" : ""} ${openedPaths.has(f.path) ? "opened" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
     <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
       <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}${warn}</div></span></button>
-    ${n ? `<button class="ver" data-ver="${esc(f.path)}">${f.group === "batch" ? (n + 1) + "<br>張" : "+" + n + "<br>版"}</button>` : ""}</div>`;
+    ${n && opts.versions ? `<button class="ver" data-ver="${esc(f.path)}">${f.group === "batch" ? (n + 1) + "<br>張" : "+" + n + "<br>版"}</button>` : ""}</div>`;
 }
 
 function renderFilters() {   // 用最近一次的資料加上目前的選擇來畫；點了篩選鈕會先呼叫它，讓按鈕立刻變色
@@ -484,6 +484,10 @@ async function loadFiles(quiet) {
     grid.innerHTML = `<div class="empty">正在讀取${cname ? "「" + esc(cname) + "」的" : ""}檔案清單…<br><small>資料夾在網路磁碟上時，第一次會比較久。</small></div>`;
     return;
   }
+  if (!d.files.length && older && state.project && !state.q && !state.kind && !state.sub) {
+    grid.innerHTML = `<div class="empty">這兩週沒有動過的檔案。<br><button class="big" data-reveal="${esc(state.project)}">${icon("folder")}<span>在檔案總管開啟（${older} 份）</span></button></div>`;
+    return;
+  }
   if (!d.files.length) {
     const kn = (/^[A-Za-z]/.test(kindName) ? " " : "") + kindName;
     let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kn}` : `這裡沒有${kn}`;
@@ -496,11 +500,16 @@ async function loadFiles(quiet) {
     return;
   }
   $("ftitle").innerHTML = cur() ? projName(cur().name)[1] : "全部專案";
+  $("fexp").innerHTML = cur() ? `<button class="f" data-reveal="${esc(cur().path)}">${icon("folder")}在檔案總管開啟</button>` : "";
   const picked = [state.sub ? base(state.sub) : "", state.kind ? KIND[state.kind][0] : "", state.since ? SINCE[state.since] : ""].filter(Boolean).join("・");
   $("fchip").innerHTML = picked ? `<button class="f on" data-act="clear-filter"><span>只看 ${esc(picked)}</span><span class="x">✕</span></button>` : "";
   let html = "", last = null;
   // 區段標題直接寫份數：「上週 11 份」就是報告的第一句話，不必另外按按鈕
   const secOf = x => x.pinned ? "釘選" : bucket(x.mtime), cnt = {};
+  const RECENT = ["釘選", "今天", "昨天", "本週", "上週"];
+  // 這裡只負責「最近的」；更早的、要仔細找的，交給檔案總管
+  const older = d.files.filter(x => !RECENT.includes(secOf(x))).length + Math.max(0, d.total - d.files.length);
+  if (!state.q && !state.kind && !state.sub) d.files = d.files.filter(x => RECENT.includes(secOf(x)));
   d.files.forEach(x => { const s = secOf(x); cnt[s] = (cnt[s] || 0) + 1; });
   if (state.since) {  // 報告用的一句話摘要，可以直接唸
     const parts = Object.keys(KIND).filter(k => d.kinds[k]).map(k => `${KIND[k][0]} ${d.kinds[k]}`).join("・");
@@ -511,8 +520,9 @@ async function loadFiles(quiet) {
     if (sec !== last) { html += `<div class="sec">${sec}<span>${cnt[sec]} 份</span></div>`; last = sec; }
     html += fileCard(x, {project: !state.project});
   }
-  if (d.capped) html += `<div class="empty" style="padding:1rem">已經顯示 ${d.files.length} 張，還有 ${d.total - d.files.length} 個更舊的。<br>請用上面的時間、資料夾、類型或搜尋縮小範圍。</div>`;
-  else if (d.total > d.files.length) html += `<div class="empty" style="padding:1rem"><button class="big" data-act="load-more">再往下顯示（還有 ${d.total - d.files.length} 個更舊的）</button></div>`;
+  if (older && !state.q && !state.kind && !state.sub) html += state.project
+    ? `<div class="empty" style="padding:1rem"><button class="big" data-reveal="${esc(state.project)}">${icon("folder")}<span>更早的檔案（${older} 份）→ 在檔案總管開啟</span></button></div>`
+    : `<div class="empty" style="padding:1rem;font-size:.95rem">更早的檔案沒有列在這裡。點左邊的專案，最下面可以直接到檔案總管。</div>`;
   if (d.denied) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">有 ${d.denied} 個資料夾讀不到（可能沒有權限），裡面的檔案沒有列出。</div>`;
   if (d.truncated) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">這個專案的檔案太多，只列出一部分。</div>`;
   grid.innerHTML = html;
@@ -836,11 +846,7 @@ function subsSheet() {   // 「篩選」：資料夾（可以一層層往下）�
 function moreSheet() {
   const c = cur();
   sheet(head(c ? `「${esc(c.name)}」與設定` : "設定") + `<div class="list two">
-    ${c ? `<button class="big" data-reveal="${esc(c.path)}">${icon("folder")}<span>在檔案總管開啟這個專案<small>直接看它的資料夾</small></span></button>
-      <button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
-    <button class="big" data-act="filter">${icon("folder")}<span>只看某個資料夾或某種檔案<small>例如只看 03_法規、只看 PDF</small></span></button>
-    <button class="big" data-act="search-open">${icon("search")}<span>用檔名搜尋<small>需要鍵盤</small></span></button>
-    <button class="big" data-act="pin-mode"><span>釘選檔案到最上面<small>按了之後點一張卡片；也可以直接長按卡片</small></span></button>
+    ${c ? `<button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
     <button class="big" data-act="sources">${icon("folder")}<span>已加入的資料夾<small>查看、新增或移除（不會動到檔案）</small></span></button>
     <button class="big" data-act="bigger">字放大</button><button class="big" data-act="smaller">字縮小</button>
     <button class="big" data-act="full">${document.fullscreenElement ? "離開全螢幕" : "全螢幕"}</button>
@@ -894,8 +900,8 @@ function fileMenu(path) {
   const f = [...state.files, ...state.files.flatMap(x => x.versions || [])].find(x => x.path === path);
   if (!f) return;
   sheet(head(esc(f.name)) + `<div class="list two">
-    <button class="big main" data-pin="${esc(path)}" data-on="${f.pinned ? "" : "1"}">${f.pinned ? "取消釘選" : "釘選到這個專案的最上面"}</button>
-    <button class="big" data-reveal="${esc(path)}">${icon("folder")}在檔案總管顯示位置</button></div>`);
+    <button class="big main" data-reveal="${esc(path)}">${icon("folder")}<span>在檔案總管顯示<small>舊版、同資料夾的其他檔案都在那裡</small></span></button>
+    <button class="big" data-pin="${esc(path)}" data-on="${f.pinned ? "" : "1"}">${f.pinned ? "取消釘選" : "釘選到最上面"}</button></div>`);
 }
 let pressTimer, pressed = false;
 document.addEventListener("pointerdown", ev => {
