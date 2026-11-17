@@ -122,6 +122,41 @@
   .detail li.in_progress { font-weight: 700; } .detail li.in_progress::before { content: "▶"; color: var(--running); }
   .detail p { user-select: text; }
 
+  /* AI 對話畫面 */
+  .label.go { display: flex; align-items: center; width: 100%; min-height: 2.6rem; }
+  .label.go span { margin-left: auto; letter-spacing: 0; font-weight: 700; color: var(--accent); background: rgba(244,184,96,.14); border-radius: .6rem; padding: .35rem .7rem; }
+  .label.go:active span { background: rgba(244,184,96,.3); }
+  #talk { display: none; height: 100vh; padding: .5rem; gap: .5rem; }
+  .talk #app { display: none; } .talk #talk { display: flex; }
+  #talk nav { flex: none; width: 4.6rem; display: flex; flex-direction: column; gap: .5rem; }
+  .navbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; width: 100%; min-height: 5rem; border-radius: 1rem; background: var(--panel); color: var(--accent); font-size: .82rem; font-weight: 700; text-align: center; }
+  .navbtn:active { background: var(--card-hi); }
+  #talk-cols { flex: 1; min-width: 0; display: flex; gap: .5rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+  #talk-cols::-webkit-scrollbar { display: none; }
+  /* 一次並排三欄（和草圖一樣）；專案更多時往左滑 */
+  .tcol { flex: 0 0 calc((100% - 1rem) / 3); min-width: 20rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
+  .tcol.few { flex: 1 1 0; }
+  .thead { display: flex; align-items: center; gap: .5rem; padding: .45rem .5rem .35rem .9rem; }
+  .thead h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thead .f { height: 2.6rem; font-size: .88rem; padding: 0 .8rem; }
+  .tabs { display: flex; gap: .35rem; overflow-x: auto; padding: 0 .5rem .35rem; scrollbar-width: none; flex: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; max-width: 13rem; height: 2.4rem; padding: 0 .8rem; border-radius: .6rem; background: var(--card); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: .25rem solid var(--s); }
+  .tab.on { background: var(--card-hi); font-weight: 700; }
+  .msgs { flex: 1; min-height: 0; overflow-y: auto; padding: .3rem .6rem .5rem; display: flex; flex-direction: column; gap: .45rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
+  .msg { max-width: 88%; padding: .55rem .75rem; font-size: .98rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; user-select: text; }
+  .msg.ai { align-self: flex-start; background: var(--card); border-radius: .3rem .9rem .9rem .9rem; }                       /* 助手：左邊的方框 */
+  .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-radius: .9rem .9rem .3rem .9rem; }   /* 你：右邊的泡泡 */
+  .msg small { display: block; font-size: .7rem; opacity: .65; margin-top: .2rem; }
+  .msg.clip { max-height: 9.5rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+  .who { font-size: .72rem; color: var(--dim); margin: .1rem .2rem -.25rem; }
+  .who.user { align-self: flex-end; }
+  .tfoot { flex: none; display: block; width: calc(100% - 1rem); margin: 0 .5rem .5rem; padding: .55rem .8rem; border-radius: .8rem; background: var(--card); border-left: .35rem solid var(--s); }
+  .tfoot:active { background: var(--card-hi); }
+  .tfoot .st { font-size: .9rem; font-weight: 700; color: var(--s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tfoot .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .tnote { color: var(--dim); font-size: .9rem; line-height: 1.7; text-align: center; margin: auto; padding: 1rem; }
+
   /* 彈出面板、提示 */
   .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 10; }
   .sheet-bg.show { display: grid; }
@@ -172,7 +207,13 @@
     <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
   </section>
 
-  <section class="col"><div class="label">AI 助手</div><div class="scroll" id="tasks"></div></section>
+  <section class="col"><button class="label go" data-act="talk">AI 助手<span>看對話 ›</span></button><div class="scroll" id="tasks"></div></section>
+</div>
+
+<!-- AI 對話：一個專案一欄，看得到這個專案和 AI 助手說了什麼 -->
+<div id="talk">
+  <nav><button class="navbtn" data-act="files"><svg><use href="#i-folder"/></svg>找檔案</button></nav>
+  <div id="talk-cols"></div>
 </div>
 
 <div class="sheet-bg" id="sheet-bg"><div class="sheet" id="sheet"></div></div>
@@ -411,7 +452,7 @@ async function loadTasks() {
   $("tasks").innerHTML = html;
 }
 function taskSheet(id) {
-  const t = state.tasks.find(x => x.id === id);
+  const t = state.tasks.find(x => x.id === id) || (state.threads || {})[id];
   if (!t) return;
   sheet(head(esc(t.title)) + `<div class="detail list s-${t.state}">
     <p style="color:var(--s);font-weight:700;font-size:1.05rem">${esc(t.state_text)}・${ago(t.updated)}</p>
@@ -420,6 +461,87 @@ function taskSheet(id) {
     ${t.todos.length ? `<ul>${t.todos.map(x => `<li class="${x.status}">${esc(x.text)}</li>`).join("")}</ul>` : ""}
     ${t.prompt ? `<p>你交代的：${esc(t.prompt)}</p>` : ""}${t.reply ? `<p>${esc(t.reply)}</p>` : ""}
     ${t.url ? `<button class="big" data-url="${esc(t.url)}">在 GitHub 開啟</button>` : ""}</div>`);
+}
+
+/* ---------- AI 對話：一個專案一欄 ---------- */
+const picked = {};        // 每一欄目前看的是哪一段對話
+const seenLast = {};      // 每段對話上次畫到的最後一則，用來判斷要不要捲到最新
+// 助手的訊息常帶 Markdown 記號；這裡只顯示純文字，把最常見的記號拿掉比較好讀
+const tidy = s => s.replace(/^#{1,6}\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`\n]+)`/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
+function clock(ts) {
+  if (!(ts > 0)) return "";
+  const d = new Date(ts * 1000), today = new Date().toDateString() === d.toDateString();
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return today ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+function talkColumn(key, title, threads, extra) {
+  const cur = threads.find(t => t.id === picked[key]) || threads[0];
+  picked[key] = cur.id;
+  const [done, total] = cur.progress || [0, 0];
+  const local = cur.source !== "GitHub";
+  let prev = "";
+  const msgs = (cur.messages || []).map((m, i, all) => {
+    const who = m.role !== prev ? `<div class="who ${m.role}">${m.role === "ai" ? "AI 助手" : "你"}</div>` : "";
+    prev = m.role;
+    const long = m.text.length > 260 && i < all.length - 1;   // 較早的長訊息先收起來，點一下展開
+    return who + `<div class="msg ${m.role} ${long ? "clip" : ""}" ${long ? 'data-act="unclip"' : ""}>${esc(tidy(m.text))}<small>${clock(m.ts)}</small></div>`;
+  }).join("");
+  const empty = `<div class="tnote">${local ? "這段對話還沒有內容。" :
+    "這段對話是在雲端進行的，內容不在這台電腦上。<br>這裡只能顯示助手在 GitHub 留下的說明與留言。<br>點下面的狀態列可以看進度與下一步。"}</div>`;
+  return `<section class="tcol s-${cur.state}" data-col="${esc(key)}">
+    <div class="thead"><h2>${title}</h2>${extra || ""}</div>
+    ${threads.length > 1 ? `<div class="tabs">${threads.map(t => `<button class="tab s-${t.state} ${t.id === cur.id ? "on" : ""}" data-thread="${esc(t.id)}" data-key="${esc(key)}">${esc(t.title)}</button>`).join("")}</div>` : ""}
+    <div class="msgs" data-thread-id="${esc(cur.id)}">${msgs || empty}</div>
+    <button class="tfoot s-${cur.state}" data-task="${esc(cur.id)}">
+      <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}<em>　${esc(threads.length > 1 ? "" : cur.title)}</em></div>
+      ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}
+      ${cur.doing && cur.state === "running" ? `<div class="doing" style="font-size:.8rem;color:var(--dim);margin-top:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">正在：${esc(cur.doing)}</div>` : ""}
+    </button></section>`;
+}
+let talkSeq = 0;
+async function loadTalk() {
+  const seq = ++talkSeq;
+  let d;
+  try { d = await api("/api/conversations"); } catch (e) { return; }
+  if (seq !== talkSeq || !document.body.classList.contains("talk")) return;
+  state.talk = d;
+  state.threads = {};
+  [...d.columns.flatMap(c => c.threads), ...d.loose].forEach(t => state.threads[t.id] = t);
+  const box = $("talk-cols");
+  // 記住每一欄捲到哪裡：使用者正在往上翻舊訊息時，更新不可以把他拉回底部
+  const keep = {};
+  box.querySelectorAll(".msgs").forEach(m => keep[m.dataset.threadId] = {top: m.scrollTop, atEnd: m.scrollHeight - m.scrollTop - m.clientHeight < 40});
+  const left = box.scrollLeft;
+  let html = d.columns.map(c => talkColumn(c.path, projName(c.name)[1],
+    c.threads, `<button class="f" data-proj-files="${esc(c.path)}">${icon("folder")}檔案</button>`)).join("");
+  if (d.loose.length) html += talkColumn("__loose", "還沒指定專案", d.loose,
+    d.loose.some(t => t.repo) && d.projects.length ? `<button class="f" data-act="link">指定專案</button>` : "");
+  if (!d.columns.length && !d.loose.length) html = `<section class="tcol few"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
+    d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面寵物上按右鍵 →「追蹤 AI 助手的 GitHub 專案」<br><small>在這台電腦上用 Claude Code 進行的對話會自動出現，不必設定。</small>"}</div></section>`;
+  else if (d.error) html += `<section class="tcol"><div class="tnote" style="color:var(--failed)">${esc(d.error)}</div></section>`;
+  box.innerHTML = html;
+  const n = box.querySelectorAll(".tcol").length;
+  box.querySelectorAll(".tcol").forEach(c => c.classList.toggle("few", n <= 3));
+  box.scrollLeft = left;
+  box.querySelectorAll(".msgs").forEach(m => {
+    const id = m.dataset.threadId, t = state.threads[id], k = keep[id];
+    const last = t && t.messages && t.messages.length ? t.messages.length + ":" + t.messages[t.messages.length - 1].ts : "";
+    m.scrollTop = k && !k.atEnd && seenLast[id] === last ? k.top : m.scrollHeight;   // 新的對話、或原本就在最底：顯示最新一則
+    seenLast[id] = last;
+  });
+}
+function setMode(talk) {
+  document.body.classList.toggle("talk", talk);
+  try { localStorage.setItem("mode", talk ? "talk" : "files"); } catch (e) {}
+  if (talk) { closeSheet(); $("talk-cols").innerHTML = `<section class="tcol few"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
+  else refresh();
+}
+function linkSheet() {
+  const repos = [...new Set(state.talk.loose.filter(t => t.repo).map(t => t.repo))];
+  sheet(head("這些對話是哪個專案的？") + `<div class="list">
+    <p>選一個 GitHub 專案，再選它屬於哪個專案。之後它的對話就會顯示在那個專案的欄位裡。只是顯示方式，可以再改。</p>
+    ${repos.map(r => `<div class="list three"><p class="wide" style="margin:.2rem .3rem 0;color:var(--text);font-weight:700">${esc(r)}</p>${state.talk.projects.map(p =>
+      `<button class="big" data-link="${esc(r)}" data-project="${esc(p.path)}"><span class="clamp">${esc(projName(p.name)[1])}</span></button>`).join("")}</div>`).join("")}</div>`);
 }
 
 /* ---------- 彈出面板 ---------- */
@@ -551,11 +673,18 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("pin" in d) { const r = await api("/api/pin", {path: d.pin, on: d.on === "1"}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
+    if ("thread" in d) { picked[d.key] = d.thread; delete seenLast[d.thread]; loadTalk(); }
+    else if ("projFiles" in d) { Object.assign(state, {project: d.projFiles, kind: "", since: "", sub: "", q: "", last: null, files: []}); resetList(); setMode(false); }
+    else if ("link" in d) { await api("/api/link_repo", {repo: d.link, project: d.project}); closeSheet(); toast("已指定，這個 GitHub 專案的對話會顯示在那一欄"); loadTalk(); }
+    else if (d.act === "talk") setMode(true);
+    else if (d.act === "files") setMode(false);
+    else if (d.act === "link") linkSheet();
+    else if (d.act === "unclip") el.classList.remove("clip");
+    else if ("pin" in d) { const r = await api("/api/pin", {path: d.pin, on: d.on === "1"}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
     else if ("proj" in d) {
       if (d.proj === state.project && !(state.kind || state.since || state.sub || state.q)) return;   // 已經在這裡了，連點不重做
       setSearch(false); setPinMode(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: "", last: null, files: []});
@@ -624,7 +753,8 @@ $("filters").addEventListener("scroll", fades, {passive: true});
 setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
 loadTasks();
-setInterval(loadTasks, 15000);
+setInterval(() => document.body.classList.contains("talk") ? loadTalk() : loadTasks(), 15000);
+try { if (localStorage.getItem("mode") === "talk") setMode(true); } catch (e) {}   // 回到上次停留的畫面
 setInterval(() => { if (document.body.classList.contains("offline")) api("/api/ping").catch(() => {}); }, 4000);
 const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
 setInterval(async () => {

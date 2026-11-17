@@ -65,7 +65,7 @@ config_problem = ""                 # 設定檔壞掉時，給畫面顯示的一
 # 各欄位應有的型別；型別不對的欄位當作沒設定，不讓它弄壞其他功能
 _TYPES = {"project_roots": list, "projects": list, "hidden_projects": list, "pinned": list,
           "github_repos": list, "ai_branch_prefixes": list, "merged": dict, "opened": dict,
-          "github_token": str, "walk": bool}
+          "github_token": str, "walk": bool, "repo_links": dict}
 
 
 def _stamp(path: Path):
@@ -90,9 +90,9 @@ def load_config() -> dict:
                     if not isinstance(raw, dict):
                         raise ValueError("not an object")
                     cfg.update({k: v for k, v in raw.items() if k not in _TYPES or isinstance(v, _TYPES[k])})
-                    for key in ("merged", "opened"):   # 內層的值型別也要對
+                    for key in ("merged", "opened", "repo_links"):   # 內層的值型別也要對
                         if key in cfg:
-                            want = str if key == "merged" else int
+                            want = int if key == "opened" else str
                             cfg[key] = {k: v for k, v in cfg[key].items() if isinstance(v, want) and not isinstance(v, bool)}
                     for key in ("project_roots", "projects", "hidden_projects", "pinned", "github_repos", "ai_branch_prefixes"):
                         if key in cfg:

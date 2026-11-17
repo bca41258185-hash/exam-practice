@@ -624,6 +624,63 @@ class Index:
                 "capped": limit >= MAX_LIMIT and len(groups) > limit}
 
 
+# ---------------------------------------------------------------- 每個專案與 AI 助手的對話
+def _plain(text: str) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]", "", text.lower())
+
+
+def _guess_project(repo: str, candidates: list[str]) -> str | None:
+    """沒有手動指定時，用名稱猜：GitHub 專案名稱出現在資料夾名稱裡（或反過來）才算。"""
+    name = _plain(repo.split("/")[-1])
+    if len(name) < 3:
+        return None
+    hits = [c for c in candidates if name in _plain(os.path.basename(c)) or
+            (len(_plain(os.path.basename(c))) >= 3 and _plain(os.path.basename(c)) in name)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def conversations() -> dict:
+    """把 AI 助手的對話依專案分欄。在這台電腦上進行的對話依它工作的資料夾歸屬；
+    GitHub 上的依「這個 GitHub 專案屬於哪個專案」的指定（沒指定就用名稱猜，猜不到放在「還沒指定專案」）。"""
+    data = ai_tasks.all_tasks()
+    cfg = core.load_config()
+    links = cfg.get("repo_links", {})
+    current = projects()
+    by_project: dict[str, list[dict]] = {}
+    loose: list[dict] = []
+    for t in data["tasks"]:
+        owner = None
+        if t.get("cwd"):
+            owner = project_of(t["cwd"])
+        elif t.get("repo"):
+            owner = links.get(t["repo"]) or _guess_project(t["repo"], current)
+        if owner in current:
+            by_project.setdefault(owner, []).append(t)
+        else:
+            loose.append(t)
+    order = {p: i for i, p in enumerate(current)}
+    columns = [{"path": p, "name": os.path.basename(p) or p, "threads": threads}
+               for p, threads in sorted(by_project.items(), key=lambda kv: order[kv[0]])]
+    return {"columns": columns, "loose": loose, "repos": cfg.get("github_repos", []),
+            "projects": [{"path": p, "name": os.path.basename(p) or p} for p in current],
+            "error": data.get("error", ""), "github_configured": data.get("github_configured", False)}
+
+
+@_locked
+def link_repo(repo: str, project: str) -> None:
+    """指定某個 GitHub 專案的對話要顯示在哪個專案那一欄（project 給空字串＝取消指定）。"""
+    cfg = core.load_config()
+    if repo not in cfg.get("github_repos", []):
+        raise PermissionError("不是追蹤中的 GitHub 專案")
+    if project and project not in projects(include_hidden=True):
+        raise PermissionError("不是已加入的專案")
+    links = dict(cfg.get("repo_links", {}))
+    links.pop(repo, None)
+    if project:
+        links[repo] = project
+    core.set_config(repo_links=links)
+
+
 def _midnight() -> float:
     return time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
 
@@ -722,6 +779,12 @@ class Handler(BaseHTTPRequestHandler):
                 if q.get("project") not in projects(include_hidden=True):
                     raise PermissionError("不是已加入的專案")
                 self._send(200, {"folders": folder_info(q["project"])})
+            elif url.path == "/api/conversations":
+                try:
+                    self._send(200, conversations())
+                except Exception:
+                    self._send(200, {"columns": [], "loose": [], "repos": [], "projects": [], "github_configured": True,
+                                     "error": "暫時讀不到 AI 助手的對話，稍後會自動再試。"})
             elif url.path == "/api/tasks":
                 try:
                     self._send(200, ai_tasks.all_tasks())
@@ -743,7 +806,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 1 << 20)) or b"{}")
             if not isinstance(body, dict) or any(k in body and not isinstance(body[k], str)
-                                                 for k in ("path", "into", "folder", "project", "url")):
+                                                 for k in ("path", "into", "folder", "project", "url", "repo")):
                 raise ValueError("格式不對")
             path = self.path
             if path == "/api/open":
@@ -752,6 +815,9 @@ class Handler(BaseHTTPRequestHandler):
                 except FileNotFoundError:   # 檔案被移走了：讓下一次查詢重新掃描，清單才不會留著它
                     self.index.data = {k: (0, rows) for k, (_, rows) in self.index.data.items()}
                     raise
+            elif path == "/api/link_repo":
+                link_repo(body["repo"], body.get("project") or "")
+                self._send(200, {"ok": True})
             elif path == "/api/pin":
                 if not project_of(body["path"]):
                     raise PermissionError("不在專案資料夾範圍內")
