@@ -244,7 +244,7 @@ class IndexTest(Base):
         idx.data[proj] = (0, idx.data[proj][1])
         self.assertEqual(idx.files(proj)["files"][0]["name"], "b.pdf")
 
-    def test_frequent_files_float_up_and_hide(self):
+    def test_opening_often_does_not_reorder_and_hide(self):
         often = self.put("甲案/常開的預算.xlsx", 50)
         self.put("甲案/新的.pdf", 0)
         self.put("乙案/x.pdf", 1)
@@ -261,9 +261,7 @@ class IndexTest(Base):
         finally:
             panel.subprocess.Popen = orig
         if os.name != "nt":
-            first = idx.files(proj)["files"][0]
-            self.assertEqual((first["name"], first["frequent"]), ("常開的預算.xlsx", True))
-            self.assertFalse(idx.files(proj, since="today")["files"][0]["frequent"], "有篩選時不插隊")
+            self.assertEqual(idx.files(proj)["files"][0]["name"], "新的.pdf", "常開的檔案不會自己插隊，順序只看時間（要固定就用釘選）")
         panel.toggle("hidden_projects", str(self.root / "乙案"))
         self.assertEqual([p["name"] for p in idx.project_list()], ["甲案"])
 

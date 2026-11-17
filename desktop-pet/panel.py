@@ -608,12 +608,8 @@ class Index:
                      check=gtype == "version" and not later.get(id(head), 0)
                      and 0 <= version_number(head[1]) < max(version_number(o[1]) for o in others))
             rows.append(d)
-        if plain:  # 沒有篩選時，釘選之後接「常用」（開過兩次以上，最多 4 個），其餘依時間
-            often = sorted((d for d in rows if not d["pinned"] and opened.get(d["path"], 0) >= 2),
-                           key=lambda d: -opened[d["path"]])[:4]
-            for d in often:
-                d["frequent"] = True
-            rows.sort(key=lambda d: (0, 0) if d["pinned"] else (1, -opened[d["path"]]) if d["frequent"] else (2, 0))
+        # 排列只有兩條規則：釘選的在最上面，其餘照修改時間。（以前「開過兩次就自動排前面」的常用區已拿掉：
+        # 卡片會自己換位置，反而讓人找不到。常被問到的檔案請用釘選。）
         return {"files": rows, "total": len(groups), "kinds": kinds, "times": times,
                 "new": sum(g[0][6] >= new_from for g in groups),
                 "subs": sorted(({"name": k, "count": v} for k, v in subs.items() if k), key=lambda s: s["name"]),

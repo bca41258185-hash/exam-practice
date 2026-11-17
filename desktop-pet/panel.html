@@ -20,8 +20,16 @@
     user-select: none; touch-action: manipulation; }
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
   svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-  .app { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 17rem; gap: .5rem; height: 100vh; padding: .5rem; }
-  .app.many { grid-template-columns: 22rem minmax(0, 1fr) 13rem; }
+  .app { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: .5rem; height: 100vh; padding: .5rem; }
+  .app.many { grid-template-columns: 22rem minmax(0, 1fr); }
+  .aibtn { flex: none; display: flex; align-items: center; gap: .4rem; height: 3.3rem; padding: 0 1rem 0 .5rem; border-radius: .8rem; background: var(--card); font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .aibtn:active { background: var(--card-hi); }
+  .aibtn #mascot { margin: 0; } .aibtn b { color: var(--waiting); font-size: 1.15rem; margin-right: .15rem; }
+  .f .x { margin-left: .2rem; opacity: .7; }
+  .hint { font-weight: 700; color: var(--accent); }
+  .big .dot { width: .8rem; height: .8rem; }
+  .proj .dot, .label .dot, .big .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--accent); flex: none; }
+  .label .dot { margin: 0 .3rem 0 .8rem; }
   .app.many .grid { grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
   .col { background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   /* 看得見的細捲軸：讓人知道下面還有多少 */
@@ -45,7 +53,7 @@
   .proj:active { background: var(--card-hi); }
   .proj.sel { background: var(--accent); color: var(--accent-ink); }
   .proj.sel small { color: #5b4514; }
-  .proj b { color: var(--accent); } .proj.sel b { color: var(--accent-ink); }
+  .proj.sel .dot { background: var(--accent-ink); }
 
   /* 中間：一排篩選 + 大卡片 */
   .bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .5rem 0; }
@@ -276,7 +284,7 @@
 </svg>
 
 <div class="app" id="app">
-  <section class="col"><div class="label">專案</div><div class="scroll" id="projects"></div></section>
+  <section class="col"><div class="label">專案<i class="dot"></i><span style="letter-spacing:0;font-weight:400">今天有動</span></div><div class="scroll" id="projects"></div></section>
 
   <section class="col">
     <div class="bar" id="bar">
@@ -285,12 +293,11 @@
       <span id="busy">更新中…</span>
       <button class="round" data-act="search" id="search-btn" aria-label="搜尋"><svg><use href="#i-search"/></svg></button>
       <button class="round" data-act="more" aria-label="更多"><svg><use href="#i-more"/></svg></button>
+      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button>
     </div>
     <div id="pinbar"><span>釘選模式：點任何一張卡片（包含版本清單裡的），把它<b>釘選</b>到最上面；已釘選的會取消。</span><button class="f" data-act="pin-cancel">取消</button></div>
     <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
   </section>
-
-  <section class="col"><button class="label go" data-act="talk"><i id="mascot"></i>AI 助手<span>看對話 ›</span></button><div class="scroll" id="tasks"></div></section>
 </div>
 
 <!-- AI 對話：一個專案一欄，看得到這個專案和 AI 助手說了什麼 -->
@@ -384,8 +391,7 @@ function projName(name) {
 /* ---------- 專案 ---------- */
 function renderProjects() {
   // 案號與「今天有動」放在名稱上方的小字，不佔名稱的寬度
-  const row = (p, [code, name], cls) => { const top = [code, p.today ? "<b>今天有動</b>" : ""].filter(Boolean).join("　");
-    return `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${top ? `<small>${top}</small>` : ""}<em>${name}</em></span></button>`; };
+  const row = (p, [code, name], cls) => `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${code ? `<small>${code}</small>` : ""}<em>${name}</em></span>${p.today ? '<i class="dot"></i>' : ""}</button>`;
   const active = state.projects.filter(p => p.active), rest = state.projects.filter(p => !p.active);
   $("app").classList.toggle("many", state.projects.length > 7);
   $("projects").innerHTML = row({path: "", today: false}, ["", "全部專案"], "all") + active.map(p => row(p, projName(p.name))).join("") +
@@ -407,21 +413,21 @@ const GROUP = { version: n => `另有<br>${n} 個舊版`, series: n => `同系�
 function fileCard(f, opts = {}) {
   const where = opts.project ? [projName(f.project)[1], esc(f.rel.replace(/\\/g, "/"))].filter(Boolean).join("／") : esc(f.rel.replace(/\\/g, "/"));
   const n = f.versions ? f.versions.length + (f.more || 0) : 0;
-  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (opts.mark ? `<span class="tag latest">${opts.mark}</span>` : "") + (f.new ? `<span class="tag">新增</span>` : "") +
+  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (opts.mark ? `<span class="tag latest">${opts.mark}</span>` : "") + ""+
     "";
-  const warn = (f.later || f.oldpin ? `<span class="tag warn">${f.oldpin ? "較舊的版本" : "之後已有新版"}</span>` : "") + (f.check ? `<span class="tag warn">版號待確認</span>` : "");
+  const warn = f.later ? "・<span class='hint'>之後有新版</span>" : f.oldpin ? "・<span class='hint'>舊版</span>" : "";
   return `<div class="file ${f.pinned ? "pinned" : ""} ${openedPaths.has(f.path) ? "opened" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
     <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
-      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}</div>${warn ? `<div class="m">${warn}</div>` : ""}</span></button>
-    ${n ? `<button class="ver" data-ver="${esc(f.path)}">${f.later ? `共<br>${n + 1} 個版本` : GROUP[f.group](n)}</button>` : ""}</div>`;
+      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}${warn}</div></span></button>
+    ${n ? `<button class="ver" data-ver="${esc(f.path)}">${f.group === "batch" ? (n + 1) + "<br>張" : "+" + n + "<br>版"}</button>` : ""}</div>`;
 }
 
 function renderFilters() {   // 用最近一次的資料加上目前的選擇來畫；點了篩選鈕會先呼叫它，讓按鈕立刻變色
-  const d = state.last || {subs: [], kinds: {}};
-  const f = (attr, val, label, on, color, count) => `<button class="f ${on ? "on" : ""}" data-${attr}="${esc(val)}"${color ? ` style="--k:${color}"` : ""}>${color ? "<i></i>" : ""}${label}${count ? ` <small>${count}</small>` : ""}</button>`;
-  $("filters").innerHTML = Object.keys(SINCE).map(k => f("since", k, SINCE[k], state.since === k)).join("") + `<span class="gap"></span>` +
-    (state.project && (d.subs.length >= 1 || state.sub) ? `<button class="f ${state.sub ? "on" : ""}" data-act="subs">${icon("folder")}<span>${esc(state.sub ? base(state.sub) : "資料夾")}</span></button>${state.sub ? `<button class="f" data-act="clear-sub" aria-label="取消資料夾篩選" style="padding:0 1.45rem">${icon("x")}</button>` : ""}<span class="gap"></span>` : "") +
-    Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k).map(k => f("kind", k, KIND[k][0], state.kind === k, KIND[k][1], d.kinds[k])).join("");
+  const f = (val, label) => `<button class="f ${state.since === val ? "on" : ""}" data-since="${val}">${label}</button>`;
+  const picked = [state.sub ? base(state.sub) : "", state.kind ? KIND[state.kind][0] : ""].filter(Boolean).join("・");
+  $("filters").innerHTML = Object.keys(SINCE).map(k => f(k, SINCE[k])).join("") + `<span class="gap"></span>` +
+    `<button class="f" data-act="filter">${icon("folder")}篩選</button>` +
+    (picked ? `<button class="f on" data-act="clear-filter"><span>${esc(picked)}</span><span class="x">✕</span></button>` : "");
   fades();
 }
 
@@ -487,7 +493,7 @@ async function loadFiles(quiet) {
     html += `<div class="sum">${SINCE[state.since]}動了 <b>${d.total}</b> 份${state.kind ? KIND[state.kind][0] : "：" + parts}${d.new ? `　其中新增 <b>${d.new}</b> 份` : ""}</div>`;
   }
   for (const x of d.files) {
-    const sec = x.pinned ? "釘選" : x.frequent ? "常用" : bucket(x.mtime);
+    const sec = x.pinned ? "釘選" : bucket(x.mtime);
     if (sec !== last) { html += `<div class="sec">${sec}</div>`; last = sec; }
     html += fileCard(x, {project: !state.project});
   }
@@ -517,25 +523,15 @@ async function openFile(path, reveal, card) {
 }
 
 /* ---------- AI 助手 ---------- */
-async function loadTasks() {
+async function loadTasks() {   // 找檔案畫面只留一顆「AI 對話」鈕：史萊姆的樣子＋幾件在等你
   let d;
   try { d = await api("/api/tasks"); } catch (e) { return; }
   state.tasks = d.tasks;
   noticeStates(d.tasks);
-  const live = d.tasks.filter(t => t.state !== "idle");
   const top = ["failed", "waiting", "running", "done"].find(s => d.tasks.some(t => t.state === s)) || "idle";
+  const need = d.tasks.filter(t => t.state === "waiting" || t.state === "failed").length;
   $("mascot").innerHTML = slime(top);
-  let html = live.map(t => {
-    const [done, total] = t.progress;
-    return `<button class="task s-${t.state}" data-task="${esc(t.id)}"><div class="n">${esc(t.title)}</div>
-      <div class="st">${esc(t.state_text)}${total ? ` <span style="white-space:nowrap">${done}/${total}</span>` : ""}${t.where ? `<em>・在 ${esc(t.where)}</em>` : ""}</div>
-      ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</button>`;
-  }).join("");
-  const box = t => `<div class="empty" style="padding:1.2rem .5rem;font-size:.92rem;line-height:1.7">${t}</div>`;
-  if (d.error) html += box(`<span style="color:var(--failed)">${esc(d.error)}</span>`);
-  else if (!live.length) html = box(d.github_configured ? "目前沒有進行中的任務" :
-    "還沒設定要看哪裡的 AI 助手。<br>在桌面寵物上按右鍵 →<br>「追蹤 AI 助手的 GitHub 專案」<br><small>（沒看到寵物的話，請先雙擊 pet.pyw）</small>");
-  $("tasks").innerHTML = html;
+  $("ai-count").innerHTML = need ? `<b>${need}</b>件等你` : "AI 對話";
 }
 function taskSheet(id) {
   const t = state.tasks.find(x => x.id === id) || (state.threads || {})[id];
@@ -811,13 +807,17 @@ function groupSheet(path) {
       mark: f.later && v.path === f.path ? SINCE[state.since] + "的版本" : ""})).join("")}
     ${f.more ? `<p class="wide">還有 ${f.more} 個更舊的沒有列出，請用「在檔案總管開啟」查看。</p>` : ""}</div>`);
 }
-function subsSheet() {
+function subsSheet() {   // 「篩選」：資料夾（可以一層層往下）與檔案類型，都收在這裡，平常不佔畫面
+  const d = state.last || {subs: [], kinds: {}};
   const parts = state.sub ? state.sub.split(/[\\/]/) : [], sep = state.sub.includes("\\") ? "\\" : "/";
   const crumbs = parts.map((p, i) => `<button class="f ${i === parts.length - 1 ? "on" : ""}" data-sub="${esc(parts.slice(0, i + 1).join(sep))}">${esc(p)}</button>`).join("<span>›</span>");
-  sheet(head(state.sub ? "目前只看這個資料夾" : "只看哪個資料夾？") + `<div class="list three">
+  const folders = state.project ? `<p class="wide" style="margin:.2rem .3rem 0;color:var(--text);font-weight:700">只看哪個資料夾</p>
     ${state.sub ? `<div class="wide filters" style="align-items:center;flex-wrap:wrap"><button class="f" data-sub="">全部資料夾</button><span>›</span>${crumbs}</div>` : ""}
-    ${state.sub && state.subs.length ? `<p class="wide" style="margin:.3rem">再縮小到裡面的：</p>` : ""}
-    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 份</small></span></button>`).join("")}</div>`);
+    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 份</small></span></button>`).join("")}` : "";
+  const kinds = Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k);
+  sheet(head("篩選") + `<div class="list three">${folders}
+    <p class="wide" style="margin:.5rem .3rem 0;color:var(--text);font-weight:700">只看哪種檔案</p>
+    ${kinds.map(k => `<button class="big ${state.kind === k ? "main" : ""}" data-kind="${k}" style="--k:${KIND[k][1]}"><i class="dot" style="background:${KIND[k][1]}"></i><span>${KIND[k][0]}<small>${d.kinds[k] || 0} 份</small></span></button>`).join("")}</div>`);
 }
 function moreSheet() {
   const c = cur();
@@ -979,7 +979,7 @@ document.addEventListener("click", async ev => {
       $("files").innerHTML = `<div class="empty">正在讀取${d.proj ? "「" + esc(name(d.proj)) + "」的" : ""}檔案清單…</div>`;
       await refresh();
     }
-    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; resetList(); renderFilters(); await loadFiles(); }
+    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; closeSheet(); resetList(); renderFilters(); await loadFiles(); }
     else if ("since" in d) { state.since = state.since === d.since ? "" : d.since; resetList(); renderFilters(); await loadFiles(); }
     else if ("sub" in d) { state.sub = d.sub; closeSheet(); resetList(); await loadFiles(); }
     else if ("open" in d && state.pinMode) { setPinMode(false); closeSheet(); const r = await api("/api/pin", {path: d.open, on: !el.closest(".file").classList.contains("pinned")}); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
@@ -1014,7 +1014,8 @@ document.addEventListener("click", async ev => {
     else if (d.act === "pin-cancel") setPinMode(false);
     else if (d.act === "close") closeSheet();
     else if (d.act === "search") { const on = !$("bar").classList.contains("searching"); setSearch(on); if (!on) { resetList(); loadFiles(); } }
-    else if (d.act === "subs") subsSheet();
+    else if (d.act === "subs" || d.act === "filter") subsSheet();
+    else if (d.act === "clear-filter") { state.sub = ""; state.kind = ""; resetList(); renderFilters(); await loadFiles(); }
     else if (d.act === "clear-sub") { state.sub = ""; resetList(); await loadFiles(); }
     else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
     else if (d.act === "folders") foldersSheet();
