@@ -56,7 +56,15 @@
   .proj.sel .dot { background: var(--accent-ink); }
 
   /* 中間：一排篩選 + 大卡片 */
-  .bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .5rem 0; }
+  .bar { display: none; align-items: center; gap: .5rem; padding: 0 .5rem; }
+  .bar.searching { display: flex; }
+  .fhead { display: flex; align-items: center; gap: .8rem; padding: .45rem .5rem .1rem 1rem; min-height: 3.9rem; }
+  .fhead h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col:has(.setbtn).below::after { bottom: 3.9rem; }   /* 「往下還有」的提示放在設定鈕上面，不要蓋住它 */
+  .setbtn { flex: none; position: relative; z-index: 2; background: var(--panel); margin: .4rem .5rem .5rem; min-height: 3rem; border-radius: .8rem; color: var(--dim); font-size: .95rem; text-align: center; border: 1px solid var(--line); }
+  .setbtn:active { background: var(--card); }
+  #fchip .f { height: 3rem; }
+  .sec span { margin-left: .6rem; letter-spacing: 0; font-weight: 400; color: var(--text); }
   .filters { display: flex; gap: .4rem; overflow-x: auto; flex: 1; scrollbar-width: none; padding: .1rem; }
   .filters::-webkit-scrollbar { display: none; }
   .f { flex: none; height: 3.3rem; padding: 0 1rem; border-radius: .8rem; background: var(--card); font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: .45rem; white-space: nowrap; }
@@ -284,16 +292,16 @@
 </svg>
 
 <div class="app" id="app">
-  <section class="col"><div class="label">專案<i class="dot"></i><span style="letter-spacing:0;font-weight:400">今天有動</span></div><div class="scroll" id="projects"></div></section>
+  <section class="col"><div class="label">專案<i class="dot"></i><span style="letter-spacing:0;font-weight:400">今天有動</span></div><div class="scroll" id="projects"></div>
+    <button class="setbtn" data-act="more">設定</button></section>
 
   <section class="col">
+    <div class="fhead" id="fhead"><h2 id="ftitle">全部專案</h2><span id="fchip"></span><span id="busy">更新中…</span>
+      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button></div>
     <div class="bar" id="bar">
       <div class="filters" id="filters"></div>
       <input id="q" placeholder="輸入檔名或資料夾名稱" autocomplete="off" spellcheck="false" enterkeyhint="search">
-      <span id="busy">更新中…</span>
-      <button class="round" data-act="search" id="search-btn" aria-label="搜尋"><svg><use href="#i-search"/></svg></button>
-      <button class="round" data-act="more" aria-label="更多"><svg><use href="#i-more"/></svg></button>
-      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button>
+      <button class="round" data-act="search" id="search-btn" aria-label="結束搜尋"><svg><use href="#i-x"/></svg></button>
     </div>
     <div id="pinbar"><span>釘選模式：點任何一張卡片（包含版本清單裡的），把它<b>釘選</b>到最上面；已釘選的會取消。</span><button class="f" data-act="pin-cancel">取消</button></div>
     <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
@@ -469,7 +477,7 @@ async function loadFiles(quiet) {
   }
   const kindName = state.kind ? KIND[state.kind][0] : "檔案";
   // 背景還在讀清單（第一次，或慢速磁碟上的更新）：過一下自己再問一次，不必使用者動手
-  $("bar").classList.toggle("updating", !!d.scanning && d.files.length > 0);   // 畫面上是上次的清單，背景還在更新
+  $("fhead").classList.toggle("updating", !!d.scanning && d.files.length > 0);   // 畫面上是上次的清單，背景還在更新
   if (d.scanning) rescan = setTimeout(() => { if (seq === fileSeq && ($("scroll").scrollTop < 5 || !d.files.length)) loadFiles(true); }, 1500);
   const cname = (cur() || {}).name;
   if (!d.files.length && d.scanning && !(state.kind || state.since || state.sub || state.q)) {
@@ -487,14 +495,20 @@ async function loadFiles(quiet) {
     grid.innerHTML = `<div class="empty">${msg}${why}<br>${undo}</div>`;
     return;
   }
+  $("ftitle").innerHTML = cur() ? projName(cur().name)[1] : "全部專案";
+  const picked = [state.sub ? base(state.sub) : "", state.kind ? KIND[state.kind][0] : "", state.since ? SINCE[state.since] : ""].filter(Boolean).join("・");
+  $("fchip").innerHTML = picked ? `<button class="f on" data-act="clear-filter"><span>只看 ${esc(picked)}</span><span class="x">✕</span></button>` : "";
   let html = "", last = null;
+  // 區段標題直接寫份數：「上週 11 份」就是報告的第一句話，不必另外按按鈕
+  const secOf = x => x.pinned ? "釘選" : bucket(x.mtime), cnt = {};
+  d.files.forEach(x => { const s = secOf(x); cnt[s] = (cnt[s] || 0) + 1; });
   if (state.since) {  // 報告用的一句話摘要，可以直接唸
     const parts = Object.keys(KIND).filter(k => d.kinds[k]).map(k => `${KIND[k][0]} ${d.kinds[k]}`).join("・");
     html += `<div class="sum">${SINCE[state.since]}動了 <b>${d.total}</b> 份${state.kind ? KIND[state.kind][0] : "：" + parts}${d.new ? `　其中新增 <b>${d.new}</b> 份` : ""}</div>`;
   }
   for (const x of d.files) {
-    const sec = x.pinned ? "釘選" : bucket(x.mtime);
-    if (sec !== last) { html += `<div class="sec">${sec}</div>`; last = sec; }
+    const sec = secOf(x);
+    if (sec !== last) { html += `<div class="sec">${sec}<span>${cnt[sec]} 份</span></div>`; last = sec; }
     html += fileCard(x, {project: !state.project});
   }
   if (d.capped) html += `<div class="empty" style="padding:1rem">已經顯示 ${d.files.length} 張，還有 ${d.total - d.files.length} 個更舊的。<br>請用上面的時間、資料夾、類型或搜尋縮小範圍。</div>`;
@@ -824,6 +838,8 @@ function moreSheet() {
   sheet(head(c ? `「${esc(c.name)}」與設定` : "設定") + `<div class="list two">
     ${c ? `<button class="big" data-reveal="${esc(c.path)}">${icon("folder")}<span>在檔案總管開啟這個專案<small>直接看它的資料夾</small></span></button>
       <button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
+    <button class="big" data-act="filter">${icon("folder")}<span>只看某個資料夾或某種檔案<small>例如只看 03_法規、只看 PDF</small></span></button>
+    <button class="big" data-act="search-open">${icon("search")}<span>用檔名搜尋<small>需要鍵盤</small></span></button>
     <button class="big" data-act="pin-mode"><span>釘選檔案到最上面<small>按了之後點一張卡片；也可以直接長按卡片</small></span></button>
     <button class="big" data-act="sources">${icon("folder")}<span>已加入的資料夾<small>查看、新增或移除（不會動到檔案）</small></span></button>
     <button class="big" data-act="bigger">字放大</button><button class="big" data-act="smaller">字縮小</button>
@@ -909,7 +925,6 @@ function setScale(delta) {
 function setPinMode(on) { if (state.pinMode !== on) guard(); state.pinMode = on; document.body.classList.toggle("pinmode", on); fades(); }
 function setSearch(on) {
   $("bar").classList.toggle("searching", on);
-  $("search-btn").innerHTML = icon(on ? "x" : "search");
   const c = cur();
   $("q").placeholder = c ? `在「${c.name}」裡找：輸入檔名或資料夾名稱` : "在全部專案裡找：輸入檔名或資料夾名稱";
   if (on) $("q").focus(); else { $("q").value = ""; state.q = ""; }
@@ -1013,9 +1028,10 @@ document.addEventListener("click", async ev => {
     else if (d.act === "pin-mode") { setPinMode(true); closeSheet(); }
     else if (d.act === "pin-cancel") setPinMode(false);
     else if (d.act === "close") closeSheet();
-    else if (d.act === "search") { const on = !$("bar").classList.contains("searching"); setSearch(on); if (!on) { resetList(); loadFiles(); } }
+    else if (d.act === "search") { setSearch(false); resetList(); loadFiles(); }
+    else if (d.act === "search-open") { closeSheet(); setSearch(true); }
     else if (d.act === "subs" || d.act === "filter") subsSheet();
-    else if (d.act === "clear-filter") { state.sub = ""; state.kind = ""; resetList(); renderFilters(); await loadFiles(); }
+    else if (d.act === "clear-filter") { state.sub = ""; state.kind = ""; state.since = ""; resetList(); renderFilters(); await loadFiles(); }
     else if (d.act === "clear-sub") { state.sub = ""; resetList(); await loadFiles(); }
     else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
     else if (d.act === "folders") foldersSheet();
