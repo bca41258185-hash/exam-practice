@@ -532,6 +532,11 @@ class ConversationTest(Base):
             cols = {c["name"]: [t["id"] for t in c["threads"]] for c in got["columns"]}
             self.assertEqual(cols, {"甲案": ["in_a"], "乙案_tools": ["me/tools#1"]}, "本機的依資料夾歸屬；GitHub 的名稱對得上就自動歸屬")
             self.assertEqual(sorted(t["id"] for t in got["loose"]), ["elsewhere", "me/other#2"])
+            self.put("丙案_沒有對話/c.pdf")
+            panel._folders(fresh=True)
+            wide = panel.conversations([str(self.root / "丙案_沒有對話"), "/不是專案"])
+            self.assertEqual([(c["name"], len(c["threads"])) for c in wide["columns"]],
+                             [("丙案_沒有對話", 0), ("乙案_tools", 1), ("甲案", 1)], "進行中但沒有對話的專案也有一欄；順序固定依名稱")
             panel.link_repo("me/other", str(self.root / "甲案"))
             cols = {c["name"]: sorted(t["id"] for t in c["threads"]) for c in panel.conversations()["columns"]}
             self.assertEqual(cols["甲案"], ["in_a", "me/other#2"], "手動指定後歸到那個專案")
@@ -614,6 +619,10 @@ class ConversationTest(Base):
         b = ai_tasks.branch_task("o/r", "claude/y", commit)
         self.assertEqual((b["session"], b["messages"][0]["text"]), ("session_01ZZZabc999", "加上搜尋"))
         self.assertEqual(ai_tasks.session_id(None, 5, "沒有連結"), "")
+        bare = {"number": 1, "title": "T", "state": "open", "updated_at": "2026-11-10T00:00:00Z", "created_at": "2026-11-09T00:00:00Z",
+                "head": {"ref": "claude/x"}, "body": "輸出成表格。\n\nhttps://claude.ai/code/session_01DemoFire4567"}
+        task = ai_tasks.pr_task("o/r", bare, [], time.time())
+        self.assertEqual((task["session"], task["messages"][0]["text"]), ("session_01DemoFire4567", "輸出成表格。"), "連結用來回覆，不顯示在對話裡")
 
     def test_pr_comments_become_a_conversation(self):
         pr = {"number": 3, "title": "T", "state": "open", "draft": True, "updated_at": "2026-11-10T00:00:00Z", "created_at": "2026-11-09T00:00:00Z",
@@ -674,7 +683,8 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/tasks")[0], 200)
         self.assertEqual(self.call("/api/ping")[1], {"ok": True})
         code, conv = self.call("/api/conversations")
-        self.assertEqual((code, conv["columns"], [p["name"] for p in conv["projects"]]), (200, [], ["甲案"]))
+        self.assertEqual((code, [(c["name"], c["threads"]) for c in conv["columns"]], [p["name"] for p in conv["projects"]]),
+                         (200, [("甲案", [])], ["甲案"]), "進行中的專案即使沒有對話也有一欄")
         self.assertEqual(self.call("/api/link_repo", {"repo": "x/y", "project": ""})[0], 400)
         self.assertEqual(self.call("/api/reply", {"thread": "nope", "text": "嗨"})[0], 400)
         self.assertEqual(self.call("/api/reply", {"thread": 5, "text": "嗨"})[0], 400)

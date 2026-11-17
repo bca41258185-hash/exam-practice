@@ -640,8 +640,10 @@ def _guess_project(repo: str, candidates: list[str]) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
-def conversations() -> dict:
-    """把 AI 助手的對話依專案分欄。在這台電腦上進行的對話依它工作的資料夾歸屬；
+def conversations(active: list[str] | None = None) -> dict:
+    """把 AI 助手的對話依專案分欄。active 是「最近有在動」的專案：就算沒有對話也給它一欄，
+    這樣同時在跑的五六個專案都在畫面上，一眼看得出哪個有事、哪個沒事。
+    在這台電腦上進行的對話依它工作的資料夾歸屬；
     GitHub 上的依「這個 GitHub 專案屬於哪個專案」的指定（沒指定就用名稱猜，猜不到放在「還沒指定專案」）。"""
     data = ai_tasks.all_tasks()
     cfg = core.load_config()
@@ -669,9 +671,12 @@ def conversations() -> dict:
             by_project.setdefault(owner, []).append(t)
         else:
             loose.append(t)
-    order = {p: i for i, p in enumerate(current)}
+    for p in active or []:
+        if p in current:
+            by_project.setdefault(p, [])
+    # 欄位順序固定依專案名稱，不因誰剛有動靜而換位（位置會變就建立不了手感）
     columns = [{"path": p, "name": os.path.basename(p) or p, "threads": threads}
-               for p, threads in sorted(by_project.items(), key=lambda kv: order[kv[0]])]
+               for p, threads in sorted(by_project.items(), key=lambda kv: os.path.basename(kv[0]).lower())]
     return {"columns": columns, "loose": loose, "repos": cfg.get("github_repos", []), "cli": bool(claude_cli()),
             "projects": [{"path": p, "name": os.path.basename(p) or p} for p in current],
             "error": data.get("error", ""), "github_configured": data.get("github_configured", False)}
@@ -889,7 +894,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"folders": folder_info(q["project"])})
             elif url.path == "/api/conversations":
                 try:
-                    self._send(200, conversations())
+                    busy = [p["path"] for p in self.index.project_list() if p["active"]]
+                    self._send(200, conversations(busy))
                 except Exception:
                     self._send(200, {"columns": [], "loose": [], "repos": [], "projects": [], "github_configured": True,
                                      "error": "暫時讀不到 AI 助手的對話，稍後會自動再試。"})

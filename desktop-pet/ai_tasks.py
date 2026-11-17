@@ -200,7 +200,7 @@ def session_id(*texts) -> str:
 
 
 _FOOTER = re.compile(r"\n+-{3,}\s*\n_?Generated (?:by|with) \[?Claude Code.*$|\n+🤖 Generated with.*$"
-                     r"|\n+(?:Co-Authored-By|Claude-Session):.*$", re.S)
+                     r"|\n+(?:Co-Authored-By|Claude-Session):.*$|\n*https?://claude\.ai/code/session_\S+\s*$", re.S)
 
 
 def pr_messages(pr: dict, comments: list[dict] | None) -> list[dict]:

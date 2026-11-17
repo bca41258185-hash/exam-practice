@@ -134,8 +134,25 @@
   #talk-cols { flex: 1; min-width: 0; display: flex; gap: .5rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
   #talk-cols::-webkit-scrollbar { display: none; }
   /* 一次並排三欄（和草圖一樣）；專案更多時往左滑 */
-  .tcol { flex: 0 0 calc((100% - 1rem) / 3); min-width: 20rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
-  .tcol.few { flex: 1 1 0; }
+  .tcol { flex: 1 1 0; min-width: 26rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
+  /* 摘要欄：沒展開的專案。窄窄一條，但看得到史萊姆、狀態與最後一句話 */
+  .ccol { flex: 0 0 11.5rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; border-top: .3rem solid var(--s, var(--line)); display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .6rem .6rem .5rem; text-align: center; min-height: 0; overflow: hidden; }
+  .ccol:active { background: var(--card); }
+  .ccol .slime { width: 4.2rem; height: 3.9rem; margin-top: .3rem; }
+  .ccol b { font-size: 1rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+  .ccol .cst { font-size: .82rem; font-weight: 700; color: var(--s); line-height: 1.3; }
+  .ccol .prog { display: block; width: 100%; height: .35rem; border-radius: .2rem; background: var(--line); overflow: hidden; margin-top: 0; }
+  .ccol .prog i { display: block; height: 100%; background: var(--s); }
+  .ccol .csnip { flex: 1; min-height: 0; overflow: hidden; font-size: .8rem; line-height: 1.45; color: var(--dim); text-align: left; width: 100%; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+  .ccol .csnip em { font-style: normal; color: var(--text); }
+  .ccol .cgo { flex: none; font-size: .78rem; color: var(--accent); display: flex; align-items: center; gap: .25rem; }
+  .ccol .cgo svg { width: .95rem; height: .95rem; }
+  .ccol.need { animation: needme 1.8s ease-in-out infinite; }   /* 等你或出錯：邊框輕輕閃，提醒這一欄有事 */
+  @keyframes needme { 50% { box-shadow: inset 0 0 0 2px var(--s); } }
+  #talk-counts { display: flex; flex-direction: column; gap: .4rem; }
+  .tcount { display: flex; flex-direction: column; align-items: center; width: 100%; padding: .45rem 0; border-radius: .9rem; background: var(--panel); border-left: .3rem solid var(--s); font-size: .74rem; color: var(--s); font-weight: 700; text-align: center; }
+  .tcount b { font-size: 1.35rem; line-height: 1.1; }
+  .tcount:active { background: var(--card-hi); }
   .thead { display: flex; align-items: center; gap: .4rem; padding: .3rem .5rem .25rem .4rem; }
   .thead .f { height: 2.6rem; font-size: .88rem; padding: 0 .8rem; }
   .tabs { display: flex; gap: .35rem; overflow-x: auto; padding: 0 .5rem .35rem; scrollbar-width: none; flex: none; }
@@ -275,7 +292,7 @@
 
 <!-- AI 對話：一個專案一欄，看得到這個專案和 AI 助手說了什麼 -->
 <div id="talk">
-  <nav><button class="navbtn" data-act="files"><svg><use href="#i-folder"/></svg>找檔案</button></nav>
+  <nav><button class="navbtn" data-act="files"><svg><use href="#i-folder"/></svg>找檔案</button><div id="talk-counts"></div></nav>
   <div id="talk-cols"></div>
 </div>
 
@@ -663,21 +680,59 @@ async function loadTalk() {
   state.threads = {};
   [...d.columns.flatMap(c => c.threads), ...d.loose].forEach(t => state.threads[t.id] = t);
   noticeStates(Object.values(state.threads));
-  const box = $("talk-cols");
+  renderTalk();
+}
+
+/* 多專案的協調：所有進行中的專案都排在畫面上（位置固定），需要處理的展開成完整對話，其餘收成摘要欄。
+   點摘要欄就展開它；能同時展開幾欄，依螢幕寬度與專案數量決定（專案少全部展開，多了只展開一兩欄）。 */
+let focusList = [];   // 最近想看的專案，排前面的優先展開
+try { focusList = JSON.parse(localStorage.getItem("focus") || "[]"); } catch (e) {}
+const lead = c => [...c.threads].sort((x, y) => RANK[x.state] - RANK[y.state] || y.updated - x.updated)[0];
+const RANK = {failed: 0, waiting: 1, running: 2, done: 3, idle: 4};
+function allColumns(d) {
+  const cols = d.columns.map(c => ({key: c.path, name: projName(c.name)[1], threads: c.threads, path: c.path}));
+  if (d.loose.length) cols.push({key: "__loose", name: "還沒指定專案", threads: d.loose, path: ""});
+  return cols;
+}
+function expandedSet(cols) {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize), room = $("talk-cols").clientWidth / rem;
+  const can = cols.filter(c => c.threads.length), n = cols.length;
+  let count = Math.min(3, can.length);
+  while (count > 1 && count * 30 + (n - count) * 11.5 > room) count--;       // 展開欄至少 30 個字寬，摘要欄 11.5
+  // 先照使用者最近點過的；還有空位，就給最需要處理的（出錯 › 等你 › 正在做 › 最近有更新）
+  const wanted = focusList.filter(k => can.some(c => c.key === k));
+  const byNeed = [...can].sort((x, y) => RANK[lead(x).state] - RANK[lead(y).state] || lead(y).updated - lead(x).updated).map(c => c.key);
+  return new Set([...wanted, ...byNeed.filter(k => !wanted.includes(k))].slice(0, count));
+}
+function focusOn(key) {
+  focusList = [key, ...focusList.filter(k => k !== key)].slice(0, 12);
+  try { localStorage.setItem("focus", JSON.stringify(focusList)); } catch (e) {}
+}
+function compactColumn(c) {   // 摘要欄：史萊姆、名稱、狀態、進度、最後一句話。整欄都可以點
+  if (!c.threads.length) return `<button class="ccol s-idle" data-proj-files="${esc(c.path)}">${slime("idle")}
+    <b>${c.name}</b><span class="cst">沒有進行中的對話</span><span class="csnip"></span><span class="cgo">${icon("folder")}看檔案</span></button>`;
+  const t = lead(c), [done, total] = t.progress || [0, 0], last = (t.messages || [])[t.messages ? t.messages.length - 1 : 0];
+  const need = t.state === "failed" || t.state === "waiting";
+  return `<button class="ccol s-${t.state} ${need ? "need" : ""}" data-focus="${esc(c.key)}">${slime(t.state, t.id)}
+    <b>${c.name}</b><span class="cst">${esc(t.state_text || "")}${total ? ` ${done}/${total}` : ""}</span>
+    ${total ? `<span class="prog"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ""}
+    <span class="csnip">${last ? `<em>${last.role === "ai" ? "AI 助手" : "你"}：</em>${esc(tidy(last.text).slice(0, 90))}` : esc(t.title)}</span>
+    <span class="cgo">${c.threads.length > 1 ? c.threads.length + " 段對話・" : ""}點我展開</span></button>`;
+}
+function renderTalk() {
+  const d = state.talk, box = $("talk-cols");
+  if (!d) return;
   // 記住每一欄捲到哪裡：使用者正在往上翻舊訊息時，更新不可以把他拉回底部
   const keep = {};
   box.querySelectorAll(".msgs").forEach(m => keep[m.dataset.threadId] = {top: m.scrollTop, atEnd: m.scrollHeight - m.scrollTop - m.clientHeight < 40});
-  const left = box.scrollLeft;
-  let html = d.columns.map(c => talkColumn(c.path, projName(c.name)[1],
-    c.threads, `<button class="f" data-proj-files="${esc(c.path)}">${icon("folder")}檔案</button>`)).join("");
-  if (d.loose.length) html += talkColumn("__loose", "還沒指定專案", d.loose,
-    d.loose.some(t => t.repo) && d.projects.length ? `<button class="f" data-act="link">指定專案</button>` : "");
-  if (!d.columns.length && !d.loose.length) html = `<section class="tcol few"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
+  const left = box.scrollLeft, cols = allColumns(d), open = expandedSet(cols);
+  let html = cols.map(c => !open.has(c.key) ? compactColumn(c) : talkColumn(c.key, c.name, c.threads, c.key === "__loose"
+    ? (d.loose.some(t => t.repo) && d.projects.length ? `<button class="f" data-act="link">指定專案</button>` : "")
+    : `<button class="f" data-proj-files="${esc(c.path)}">${icon("folder")}檔案</button>`)).join("");
+  if (!cols.length) html = `<section class="tcol"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
     d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面寵物上按右鍵 →「追蹤 AI 助手的 GitHub 專案」<br><small>在這台電腦上用 Claude Code 進行的對話會自動出現，不必設定。</small>"}</div></section>`;
-  else if (d.error) html += `<section class="tcol"><div class="tnote" style="color:var(--failed)">${esc(d.error)}</div></section>`;
+  else if (d.error) html += `<section class="ccol"><span class="csnip" style="color:var(--failed)">${esc(d.error)}</span></section>`;
   box.innerHTML = html;
-  const n = box.querySelectorAll(".tcol").length;
-  box.querySelectorAll(".tcol").forEach(c => c.classList.toggle("few", n <= 3));
   box.scrollLeft = left;
   box.querySelectorAll(".msgs").forEach(m => {
     const id = m.dataset.threadId, t = state.threads[id], k = keep[id];
@@ -685,11 +740,17 @@ async function loadTalk() {
     m.scrollTop = k && !k.atEnd && seenLast[id] === last ? k.top : m.scrollHeight;   // 新的對話、或原本就在最底：顯示最新一則
     seenLast[id] = last;
   });
+  // 左邊的總數：幾件等你、幾件出錯、幾件正在做。點了跳到下一個那種狀態的專案
+  const tops = cols.filter(c => c.threads.length).map(c => ({key: c.key, state: lead(c).state}));
+  $("talk-counts").innerHTML = [["failed", "出錯"], ["waiting", "等你"], ["running", "在做"]].map(([s, label]) => {
+    const n = tops.filter(x => x.state === s).length;
+    return n ? `<button class="tcount s-${s}" data-next="${s}"><b>${n}</b>${label}</button>` : "";
+  }).join("");
 }
 function setMode(talk) {
   document.body.classList.toggle("talk", talk);
   try { localStorage.setItem("mode", talk ? "talk" : "files"); } catch (e) {}
-  if (talk) { closeSheet(); $("talk-cols").innerHTML = `<section class="tcol few"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
+  if (talk) { closeSheet(); $("talk-cols").innerHTML = `<section class="tcol"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
   else refresh();
 }
 function linkSheet() {
@@ -829,14 +890,22 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-focus],[data-next],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("runner" in d) {   // 點跑來的史萊姆：帶你到那件事的對話
+    if ("focus" in d) { focusOn(d.focus); renderTalk(); }
+    else if ("next" in d) {   // 左邊的數字：輪流跳到下一個這種狀態的專案
+      const hits = allColumns(state.talk).filter(c => c.threads.length && lead(c).state === d.next).map(c => c.key);
+      const open = expandedSet(allColumns(state.talk));
+      focusOn(hits.find(k => !open.has(k)) || hits[(hits.indexOf(focusList[0]) + 1) % hits.length]);
+      renderTalk();
+      const s = document.querySelector(`.tcol[data-col="${CSS.escape(focusList[0])}"]`); if (s) s.scrollIntoView({behavior: "smooth", inline: "nearest", block: "nearest"});
+    }
+    else if ("runner" in d) {   // 點跑來的史萊姆：帶你到那件事的對話
       const id = d.runner, t = runners[id] && runners[id].task;
       dismiss(id);
-      if (t) { const col = Object.values(state.talk ? state.talk.columns : []).find(c => c.threads.some(x => x.id === id)); picked[col ? col.path : "__loose"] = id; }
+      if (t) { const col = Object.values(state.talk ? state.talk.columns : []).find(c => c.threads.some(x => x.id === id)); const key = col ? col.path : "__loose"; picked[key] = id; focusOn(key); }
       if (!document.body.classList.contains("talk")) setMode(true); else await loadTalk();
       setTimeout(() => { const s = document.querySelector(`.slime[data-slime="${CSS.escape(id)}"]`); if (s) s.closest(".tcol").scrollIntoView({behavior: "smooth", inline: "center", block: "nearest"}); }, 700);
     }
@@ -925,6 +994,7 @@ function fades() {
   el.parentElement.classList.toggle("below", el.scrollHeight - el.scrollTop - el.clientHeight > 3.2 * parseFloat(getComputedStyle(document.documentElement).fontSize))); }
 document.querySelectorAll(".col > .scroll").forEach(el => { el.addEventListener("scroll", fades, {passive: true}); new MutationObserver(fades).observe(el, {childList: true, subtree: true}); });
 window.addEventListener("resize", fades);
+window.addEventListener("resize", () => { if (document.body.classList.contains("talk")) renderTalk(); });   // 寬度變了，能展開幾欄也跟著變
 $("filters").addEventListener("scroll", fades, {passive: true});
 setScale(0);
 refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
