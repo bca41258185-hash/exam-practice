@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -645,6 +646,16 @@ def conversations() -> dict:
     data = ai_tasks.all_tasks()
     cfg = core.load_config()
     links = cfg.get("repo_links", {})
+    sent = cfg.get("sent", {})
+    for t in data["tasks"]:
+        t["can_reply"] = reply_route(t)
+        mine = [m for m in sent.get(t["id"], []) if isinstance(m, dict) and isinstance(m.get("text"), str)]
+        if mine:
+            known = {m["text"] for m in t.get("messages", []) if m["role"] == "user"}
+            # 這台電腦上的對話會自己出現在紀錄裡；只有還沒出現的才補上
+            extra = [{"role": "user", "text": m["text"], "ts": float(m.get("ts") or 0), "sent": True}
+                     for m in mine if m["text"] not in known]
+            t["messages"] = sorted(t.get("messages", []) + extra, key=lambda m: m["ts"])[-ai_tasks.MSG_KEEP:]
     current = projects()
     by_project: dict[str, list[dict]] = {}
     loose: list[dict] = []
@@ -661,9 +672,106 @@ def conversations() -> dict:
     order = {p: i for i, p in enumerate(current)}
     columns = [{"path": p, "name": os.path.basename(p) or p, "threads": threads}
                for p, threads in sorted(by_project.items(), key=lambda kv: order[kv[0]])]
-    return {"columns": columns, "loose": loose, "repos": cfg.get("github_repos", []),
+    return {"columns": columns, "loose": loose, "repos": cfg.get("github_repos", []), "cli": bool(claude_cli()),
             "projects": [{"path": p, "name": os.path.basename(p) or p} for p in current],
             "error": data.get("error", ""), "github_configured": data.get("github_configured", False)}
+
+
+# ---------------------------------------------------------------- 回覆 AI 助手
+# 用 Claude Code 官方的指令列工具把訊息送進對話：
+#   雲端的對話：claude -p --cloud <對話代號>          （訊息排進那段雲端對話，助手在雲端繼續做）
+#   這台電腦上的對話：claude -p --resume <對話代號>   （在這台電腦上接續那段對話）
+# 訊息一律從標準輸入送進去，不放在指令參數裡，避免特殊符號被系統誤解。
+REPLY_MAX = 2000
+
+
+def claude_cli() -> str:
+    custom = core.load_config().get("claude_path", "")
+    return custom if custom and os.path.isfile(custom) else (shutil.which("claude") or "")
+
+
+def reply_route(task: dict) -> str:
+    """這段對話可以怎麼回覆：'cloud'、'local'，或 ''（沒有管道）。"""
+    if task.get("source") == "GitHub":
+        return "cloud" if task.get("session") else ""
+    return "local" if task.get("cwd") and os.path.isdir(task["cwd"]) else ""
+
+
+def _run_quiet(args: list[str], text: str, cwd: str | None, wait: float | None):
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    proc = subprocess.Popen(args, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            creationflags=flags)
+    if wait is None:   # 這台電腦上的對話：助手可能要做好幾分鐘，送出後就不等了
+        def feed():
+            try:
+                proc.communicate(text.encode("utf-8"))
+            except OSError:
+                pass
+        threading.Thread(target=feed, daemon=True).start()
+        return 0, "", ""
+    try:
+        out, err = proc.communicate(text.encode("utf-8"), timeout=wait)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        raise TimeoutError
+    return proc.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
+
+
+def send_reply(thread_id: str, text: str) -> str:
+    """把一則回覆送給某段對話的 AI 助手。回傳用的管道（'cloud' 或 'local'）。"""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("empty")
+    if len(text) > REPLY_MAX:
+        raise PermissionError(f"訊息太長了（最多 {REPLY_MAX} 個字）。")
+    task = next((t for t in ai_tasks.all_tasks()["tasks"] if t["id"] == thread_id), None)
+    if not task:
+        raise PermissionError("找不到這段對話，可能已經結束了。")
+    route = reply_route(task)
+    if not route:
+        raise PermissionError("這段對話沒有可以回覆的管道（助手沒有留下對話連結）。請到 claude.ai 或 GitHub 回覆。")
+    cli = claude_cli()
+    if not cli:
+        raise PermissionError("要回覆 AI 助手，這台電腦需要先安裝 Claude Code 並登入。安裝方式見說明文件「回覆 AI 助手」。")
+    sid = task.get("session") if route == "cloud" else task["id"]
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{4,80}", sid or ""):
+        raise PermissionError("這段對話的代號不正確，無法回覆。")
+    args = [cli, "-p", "--cloud", sid, "--output-format", "json"] if route == "cloud" else [cli, "-p", "--resume", sid]
+    try:
+        code, out, err = _run_quiet(args, text, None if route == "cloud" else task["cwd"], 60 if route == "cloud" else None)
+    except TimeoutError:
+        raise PermissionError("送出逾時了，請確認網路後再試一次。") from None
+    except OSError:
+        raise PermissionError("無法執行 Claude Code，請確認它已安裝好。") from None
+    if route == "cloud":
+        ok = code == 0
+        try:
+            ok = ok and json.loads(out.strip().splitlines()[-1]).get("ok", True)
+        except (ValueError, IndexError, AttributeError):
+            pass
+        if not ok:
+            raise PermissionError("沒有送出去：" + _cli_problem(out + "\n" + err))
+    with core._LOCK:   # 雲端的回覆這裡讀不回來，所以自己記一份，讓畫面上看得到剛才說了什麼
+        log = dict(core.load_config().get("sent", {}))
+        log[thread_id] = (log.get(thread_id, []) + [{"text": text[:MSG_LOG], "ts": time.time()}])[-20:]
+        core.set_config(sent=dict(list(log.items())[-40:]))
+    return route
+
+
+MSG_LOG = 900
+
+
+def _cli_problem(output: str) -> str:
+    low = output.lower()
+    if "archived" in low:
+        return "那段對話已經封存，不能再接收訊息。"
+    if "not found" in low:
+        return "找不到那段對話（可能不是用同一個帳號建立的）。"
+    if "auth login" in low or "sign-in" in low or "sign in" in low or "authentication" in low:
+        return "這台電腦的 Claude Code 還沒有登入。請開啟終端機執行 claude auth login。"
+    if "policy" in low or "not enabled" in low or "aren't available" in low:
+        return "你的帳號或組織目前不能使用雲端對話。"
+    return "Claude Code 回報了錯誤，請稍後再試。"
 
 
 @_locked
@@ -815,6 +923,10 @@ class Handler(BaseHTTPRequestHandler):
                 except FileNotFoundError:   # 檔案被移走了：讓下一次查詢重新掃描，清單才不會留著它
                     self.index.data = {k: (0, rows) for k, (_, rows) in self.index.data.items()}
                     raise
+            elif path == "/api/reply":
+                if not isinstance(body.get("thread"), str) or not isinstance(body.get("text"), str):
+                    raise ValueError("格式不對")
+                self._send(200, {"via": send_reply(body["thread"], body["text"])})
             elif path == "/api/link_repo":
                 link_repo(body["repo"], body.get("project") or "")
                 self._send(200, {"ok": True})

@@ -155,6 +155,12 @@
   .tfoot:active { background: var(--card-hi); }
   .tfoot .st { font-size: .9rem; font-weight: 700; color: var(--s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tfoot .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .rbar { flex: none; display: flex; align-items: center; width: calc(100% - 1rem); min-height: 3.2rem; margin: 0 .5rem .5rem; padding: 0 .5rem 0 1rem; border-radius: .8rem; background: var(--bg); border: 1px solid var(--line); color: var(--dim); font-size: 1rem; }
+  .rbar span { margin-left: auto; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-radius: .6rem; padding: .45rem 1rem; font-size: .9rem; }
+  .rbar:active { background: var(--card); }
+  .rbar.off { font-size: .8rem; min-height: 2.2rem; border-style: dashed; }
+  #reply-text { width: 100%; min-height: 6.5rem; resize: none; border-radius: .8rem; border: 2px solid var(--accent); background: var(--card); color: var(--text); font: inherit; font-size: 1.1rem; line-height: 1.5; padding: .7rem .9rem; outline: 0; user-select: text; }
+  .big[disabled] { opacity: .5; pointer-events: none; }
   .tnote { color: var(--dim); font-size: .9rem; line-height: 1.7; text-align: center; margin: auto; padding: 1rem; }
 
   /* 彈出面板、提示 */
@@ -484,7 +490,7 @@ function talkColumn(key, title, threads, extra) {
     const who = m.role !== prev ? `<div class="who ${m.role}">${m.role === "ai" ? "AI 助手" : "你"}</div>` : "";
     prev = m.role;
     const long = m.text.length > 260 && i < all.length - 1;   // 較早的長訊息先收起來，點一下展開
-    return who + `<div class="msg ${m.role} ${long ? "clip" : ""}" ${long ? 'data-act="unclip"' : ""}>${esc(tidy(m.text))}<small>${clock(m.ts)}</small></div>`;
+    return who + `<div class="msg ${m.role} ${long ? "clip" : ""}" ${long ? 'data-act="unclip"' : ""}>${esc(tidy(m.text))}<small>${clock(m.ts)}${m.sent ? "・從這裡送出" : ""}</small></div>`;
   }).join("");
   const empty = `<div class="tnote">${local ? "這段對話還沒有內容。" :
     "這段對話是在雲端進行的，內容不在這台電腦上。<br>這裡只能顯示助手在 GitHub 留下的說明與留言。<br>點下面的狀態列可以看進度與下一步。"}</div>`;
@@ -496,7 +502,32 @@ function talkColumn(key, title, threads, extra) {
       <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}<em>　${esc(threads.length > 1 ? "" : cur.title)}</em></div>
       ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}
       ${cur.doing && cur.state === "running" ? `<div class="doing" style="font-size:.8rem;color:var(--dim);margin-top:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">正在：${esc(cur.doing)}</div>` : ""}
-    </button></section>`;
+    </button>
+    ${cur.can_reply ? `<button class="rbar" data-reply="${esc(cur.id)}">回覆 AI 助手…<span>送出</span></button>`
+      : `<div class="rbar off">這段對話不能從這裡回覆，請到 GitHub 或 claude.ai</div>`}</section>`;
+}
+/* 回覆 AI 助手：副螢幕上不好打字，所以先給幾句常用的話，點了會填進去，可以再改 */
+const QUICK = ["好，照這樣繼續。", "請先暫停，等我確認。", "請說明目前的進度和遇到的問題。", "這部分請重做，原因是："];
+function replySheet(id) {
+  const t = (state.threads || {})[id];
+  if (!t) return;
+  const lastAi = [...(t.messages || [])].reverse().find(m => m.role === "ai");
+  const where = t.can_reply === "cloud"
+    ? "訊息會送進雲端的那段對話，助手會在雲端接著做。它的回覆這裡讀不到，請到手機的 Claude App 或 claude.ai 看；它更新 GitHub 上的成果時，這一欄會跟著更新。"
+    : "會在這台電腦上接續那段對話。助手回覆後，會出現在這一欄。";
+  if (!state.talk.cli) {
+    sheet(head("回覆 AI 助手") + `<div class="list"><p style="color:var(--text);font-size:1rem">這台電腦還沒有安裝 Claude Code，所以沒辦法從這裡送出回覆。</p>
+      <p>安裝並登入一次之後就可以用：<br>1. 到 claude.com/claude-code 下載安裝 Claude Code。<br>2. 開啟終端機（命令提示字元），輸入 <b style="color:var(--text)">claude auth login</b>，用你平常的 Claude 帳號登入。<br>3. 回到這裡重新點「回覆 AI 助手」。</p></div>`);
+    return;
+  }
+  sheet(head("回覆：" + esc(t.title)) + `<div class="list">
+    ${lastAi ? `<div class="msg ai" style="max-width:100%;max-height:6.5rem;overflow:hidden">${esc(tidy(lastAi.text).slice(0, 220))}</div>` : ""}
+    <div class="filters" style="flex-wrap:wrap">${QUICK.map(q => `<button class="f" data-quick="${esc(q)}" style="height:2.8rem;font-size:.92rem;font-weight:400">${esc(q)}</button>`).join("")}</div>
+    <textarea id="reply-text" maxlength="2000" placeholder="在這裡輸入要對 AI 助手說的話（可以先點上面的句子再修改）"></textarea>
+    <div class="list two"><button class="big main" data-act="send-reply" data-thread="${esc(id)}" style="justify-content:center">送出</button>
+      <button class="big" data-act="close" style="justify-content:center">取消</button></div>
+    <p style="margin:.2rem .3rem 0">${where}</p></div>`);
+  setTimeout(() => { const box = $("reply-text"); if (box) box.focus(); }, 350);
 }
 let talkSeq = 0;
 async function loadTalk() {
@@ -673,11 +704,24 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("thread" in d) { picked[d.key] = d.thread; delete seenLast[d.thread]; loadTalk(); }
+    if ("reply" in d) replySheet(d.reply);
+    else if ("quick" in d) { const box = $("reply-text"); box.value = d.quick; box.focus(); }
+    else if (d.act === "send-reply") {
+      const box = $("reply-text"), text = box.value.trim();
+      if (!text) { toast("還沒有輸入內容", true); box.focus(); return; }
+      el.disabled = true; el.textContent = "送出中…";          // 送出期間不能再按，避免同一句話送兩次
+      try {
+        const r = await api("/api/reply", {thread: d.thread, text});
+        closeSheet(); delete seenLast[d.thread];
+        toast(r.via === "cloud" ? "已送進雲端的對話，助手會接著做" : "已送出，助手正在這台電腦上處理");
+        loadTalk();
+      } catch (e) { el.disabled = false; el.textContent = "送出"; toast(e.message, true); }
+    }
+    else if ("thread" in d) { picked[d.key] = d.thread; delete seenLast[d.thread]; loadTalk(); }
     else if ("projFiles" in d) { Object.assign(state, {project: d.projFiles, kind: "", since: "", sub: "", q: "", last: null, files: []}); resetList(); setMode(false); }
     else if ("link" in d) { await api("/api/link_repo", {repo: d.link, project: d.project}); closeSheet(); toast("已指定，這個 GitHub 專案的對話會顯示在那一欄"); loadTalk(); }
     else if (d.act === "talk") setMode(true);

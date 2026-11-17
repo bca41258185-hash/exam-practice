@@ -187,7 +187,20 @@ def _ts(iso: str) -> float:
         return 0.0
 
 
-_FOOTER = re.compile(r"\n+-{3,}\s*\n_?Generated (?:by|with) \[?Claude Code.*$|\n+🤖 Generated with.*$", re.S)
+_SESSION = re.compile(r"claude\.ai/code/(session_[A-Za-z0-9]{6,})")
+
+
+def session_id(*texts) -> str:
+    """助手在成果說明或提交訊息的結尾會附上它那段雲端對話的連結；有了它才能把回覆送進去。"""
+    for text in texts:
+        m = _SESSION.search(text) if isinstance(text, str) else None
+        if m:
+            return m.group(1)
+    return ""
+
+
+_FOOTER = re.compile(r"\n+-{3,}\s*\n_?Generated (?:by|with) \[?Claude Code.*$|\n+🤖 Generated with.*$"
+                     r"|\n+(?:Co-Authored-By|Claude-Session):.*$", re.S)
 
 
 def pr_messages(pr: dict, comments: list[dict] | None) -> list[dict]:
@@ -234,6 +247,7 @@ def pr_task(repo: str, pr: dict, checks: list[dict] | None = None, now: float | 
                     "state": state, "state_text": text, "updated": updated, "url": pr.get("html_url", ""),
                     "where": repo.split("/")[-1], "branch": (pr.get("head") or {}).get("ref", ""),
                     "draft": bool(pr.get("draft")), "repo": repo, "messages": pr_messages(pr, comments),
+                    "session": session_id(body, *[c.get("body") for c in comments or [] if isinstance(c, dict)]),
                     "prompt": "", "reply": _CHECKBOX.sub("", body).strip()[:400], "todos": todos})
 
 
@@ -249,7 +263,8 @@ def branch_task(repo: str, name: str, commit: dict, now: float | None = None) ->
     return _finish({"id": f"{repo}@{name}", "source": "GitHub", "title": msg.splitlines()[0][:80] if msg else name,
                     "state": state, "state_text": text, "updated": updated, "url": commit.get("html_url", ""),
                     "where": repo.split("/")[-1], "branch": name, "prompt": "", "reply": msg[:400], "todos": [],
-                    "repo": repo, "messages": [{"role": "ai", "text": msg[:MSG_CHARS], "ts": updated}] if msg else []})
+                    "repo": repo, "session": session_id(c.get("message")),
+                    "messages": [{"role": "ai", "text": _FOOTER.sub("", msg)[:MSG_CHARS], "ts": updated}] if msg else []})
 
 
 def _fetch_repo(repo: str, token: str, prefixes: tuple[str, ...]) -> list[dict]:

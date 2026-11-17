@@ -542,6 +542,79 @@ class ConversationTest(Base):
         finally:
             ai_tasks.github_tasks = orig
 
+    def fake_cli(self, exit_code=0, output='{"ok": true}'):
+        """假的 claude 指令：把收到的參數、工作目錄與標準輸入記下來。"""
+        log = Path(self.tmp.name) / "cli.log"
+        cli = Path(self.tmp.name) / "claude"
+        cli.write_text("#!/bin/sh\nprintf '%%s\\n' \"$PWD\" \"$*\" > '%s'\ncat >> '%s'\necho '%s'\nexit %d\n"
+                       % (log, log, output, exit_code), "utf-8")
+        cli.chmod(0o755)
+        core.set_config(claude_path=str(cli))
+        return log
+
+    @unittest.skipIf(os.name == "nt", "假指令是 shell 腳本")
+    def test_reply_goes_to_cloud_or_local_session(self):
+        self.put("甲案/a.pdf")
+        self.session("loc1", str(self.root / "甲案"), ["整理甲案", "完成"])
+        cloud = {"id": "o/r#5", "source": "GitHub", "repo": "o/r", "title": "T", "state": "waiting", "updated": time.time(),
+                 "session": "session_01ABCdef234", "messages": [{"role": "ai", "text": "做好了", "ts": 5.0}]}
+        nolink = dict(cloud, id="o/r#6", session="")
+        orig = ai_tasks.github_tasks
+        ai_tasks.github_tasks = lambda: ([cloud, nolink], "")
+        try:
+            which = panel.shutil.which
+            panel.shutil.which = lambda name: None   # 假裝這台電腦沒裝 Claude Code
+            try:
+                with self.assertRaisesRegex(PermissionError, "安裝 Claude Code"):
+                    panel.send_reply("o/r#5", "嗨")
+            finally:
+                panel.shutil.which = which
+            log = self.fake_cli()
+            tricky = '好，繼續。"引號" & 符號 | $(rm) `x` 換行\n第二行'
+            self.assertEqual(panel.send_reply("o/r#5", tricky), "cloud")
+            lines = log.read_text("utf-8").split("\n", 2)
+            self.assertEqual(lines[1], "-p --cloud session_01ABCdef234 --output-format json", "訊息不放在參數裡")
+            self.assertEqual(lines[2], tricky, "訊息原封不動從標準輸入送進去")
+            conv = panel.conversations()
+            mine = [m for c in conv["columns"] + [{"threads": conv["loose"]}] for th in c["threads"] if th["id"] == "o/r#5" for m in th["messages"]]
+            self.assertEqual([(m["role"], m["text"], bool(m.get("sent"))) for m in mine], [("ai", "做好了", False), ("user", tricky, True)])
+            self.assertTrue(conv["cli"])
+            self.assertEqual({th["id"]: th["can_reply"] for c in conv["columns"] + [{"threads": conv["loose"]}] for th in c["threads"]},
+                             {"loc1": "local", "o/r#5": "cloud", "o/r#6": ""})
+            with self.assertRaisesRegex(PermissionError, "沒有可以回覆的管道"):
+                panel.send_reply("o/r#6", "嗨")
+            with self.assertRaises(ValueError):
+                panel.send_reply("o/r#5", "   ")
+            with self.assertRaisesRegex(PermissionError, "太長"):
+                panel.send_reply("o/r#5", "字" * 2001)
+            with self.assertRaisesRegex(PermissionError, "找不到這段對話"):
+                panel.send_reply("nope", "嗨")
+            # 這台電腦上的對話：在它工作的資料夾接續
+            self.assertEqual(panel.send_reply("loc1", "再檢查一次"), "local")
+            for _ in range(100):
+                if log.exists() and "再檢查一次" in log.read_text("utf-8"):
+                    break
+                time.sleep(0.02)
+            lines = log.read_text("utf-8").split("\n", 2)
+            self.assertEqual((lines[0], lines[1], lines[2]), (str(self.root / "甲案"), "-p --resume loc1", "再檢查一次"))
+            # 指令回報失敗時，說得出原因
+            self.fake_cli(1, "Error: cloud session x is archived and cannot accept new messages")
+            with self.assertRaisesRegex(PermissionError, "已經封存"):
+                panel.send_reply("o/r#5", "嗨")
+            self.fake_cli(1, "Cloud sessions need a claude.ai sign-in. Run `claude auth login`")
+            with self.assertRaisesRegex(PermissionError, "claude auth login"):
+                panel.send_reply("o/r#5", "嗨")
+        finally:
+            ai_tasks.github_tasks = orig
+
+    def test_session_link_is_found_in_pr_body_and_commits(self):
+        self.assertEqual(ai_tasks.session_id("x\n🤖 Generated\n\nhttps://claude.ai/code/session_01CoaPSFuCF4"), "session_01CoaPSFuCF4")
+        commit = {"commit": {"message": "加上搜尋\n\nCo-Authored-By: X <n@a.com>\nClaude-Session: https://claude.ai/code/session_01ZZZabc999",
+                             "committer": {"date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}}
+        b = ai_tasks.branch_task("o/r", "claude/y", commit)
+        self.assertEqual((b["session"], b["messages"][0]["text"]), ("session_01ZZZabc999", "加上搜尋"))
+        self.assertEqual(ai_tasks.session_id(None, 5, "沒有連結"), "")
+
     def test_pr_comments_become_a_conversation(self):
         pr = {"number": 3, "title": "T", "state": "open", "draft": True, "updated_at": "2026-11-10T00:00:00Z", "created_at": "2026-11-09T00:00:00Z",
               "html_url": "https://github.com/o/r/pull/3", "head": {"ref": "claude/x"},
@@ -603,6 +676,8 @@ class ServerTest(Base):
         code, conv = self.call("/api/conversations")
         self.assertEqual((code, conv["columns"], [p["name"] for p in conv["projects"]]), (200, [], ["甲案"]))
         self.assertEqual(self.call("/api/link_repo", {"repo": "x/y", "project": ""})[0], 400)
+        self.assertEqual(self.call("/api/reply", {"thread": "nope", "text": "嗨"})[0], 400)
+        self.assertEqual(self.call("/api/reply", {"thread": 5, "text": "嗨"})[0], 400)
         self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
         for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
             self.assertEqual(self.call("/api/open", bad)[0], 400, bad)
