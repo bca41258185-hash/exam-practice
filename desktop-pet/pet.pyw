@@ -1,15 +1,17 @@
-"""檔案管家桌面寵物 —— 看牠就知道 AI 助手做到哪了。雙擊本檔執行（Python 3.9+，免裝套件）。
+"""檔案管家桌面寵物（一隻史萊姆）—— 看牠就知道 AI 助手做到哪了。雙擊本檔執行（Python 3.9+，免裝套件）。
 
-  睡覺      沒有任務在跑
-  敲筆電    有助手正在執行（腳下是目前任務的進度條）
-  舉牌「!」 有助手做完一輪，等你看
-  冒汗      有助手出錯（自動檢查失敗）
+  攤平睡覺        沒有任務在跑
+  一下一下地彈    有助手正在執行（腳下是目前任務的進度條）
+  頭上冒「!」搖晃  有助手做完一輪，等你看
+  發抖冒汗        有助手出錯
+  有事情時，牠會跳到滑鼠游標旁邊告訴你是哪一件，說完再回原位。
   頭上的標籤寫出各狀態的任務數量（執行／等你／出錯）。
 
 操作：點一下看任務清單｜雙擊開啟副螢幕觸控面板｜拖曳移動｜右鍵設定
 """
 from __future__ import annotations
 
+import math
 import queue
 import random
 import re
@@ -29,6 +31,9 @@ import pet_core as core  # noqa: E402
 W, H = 150, 168
 KEY = "#ff00fe"  # Windows 上用來挖空背景的顏色
 FONT = {"win32": "Microsoft JhengHei UI", "darwin": "PingFang TC"}.get(sys.platform, "TkDefaultFont")
+# 史萊姆的膚色（身體、輪廓）隨狀態改變
+SKINS = {"sleep": ("#a9c1ea", "#5d77a8"), "idle": ("#8fd0ff", "#2f79b5"), "running": ("#7fc2f5", "#2f79b5"),
+         "waiting": ("#f9cf8c", "#b9791b"), "failed": ("#f59a91", "#b23a30"), "happy": ("#93dba9", "#2f8a4f")}
 COLORS = {"running": "#5aa9e6", "waiting": "#f4b860", "failed": "#ef6b60", "done": "#62c483", "idle": "#8b93a1"}
 LABELS = {"running": "執行", "waiting": "等你", "failed": "出錯"}
 POLL_SECONDS = 15
@@ -86,6 +91,10 @@ class Pet:
         self.known: dict[str, str] | None = None  # 上一輪各任務的狀態，用來偵測轉變
         self.happy_until = 0.0
         self.walk_dx = 0
+        self.target: tuple[int, int] | None = None   # 正要跑去的位置
+        self.home: tuple[int, int] | None = None     # 跑出去之前待的地方
+        self.arrived = None                          # 抵達後要做的事
+        self.hop = 0.0                               # 跳躍動畫的進度（0 表示沒在跳）
         self.dragging = False
         self.moved = False
         self.modal = 0
@@ -145,9 +154,13 @@ class Pet:
                 t = news[0][0]
                 text = {"waiting": "做完一輪了，等你看！", "failed": "出錯了，需要你看一下。", "done": "已經完成並採用！"}[t["state"]]
                 extra = f"\n（另外還有 {len(news) - 1} 件有新進度）" if len(news) > 1 else ""
-                self.say(f"「{t['title'][:22]}」\n{text}{extra}", seconds=12)
                 if t["state"] == "done":
-                    self.happy_until = time.time() + 6
+                    self.happy_until = time.time() + 8
+
+                def tell(msg=f"「{t['title'][:22]}」\n{text}{extra}"):   # 先跑到滑鼠旁邊，到了再說是哪一件；說完回原位
+                    self.say(msg, seconds=12)
+                    self.root.after(12500, self.go_home)
+                self.run_to_pointer(tell)
         self.known = now
         if self.popup:
             self._fill_popup()
@@ -158,9 +171,10 @@ class Pet:
 
     # ------------------------------------------------------------ 外觀
     def _draw(self) -> None:
-        c, f, mood = self.canvas, self.frame, self.mood
+        """畫史萊姆。身體會隨狀態變形：睡覺時攤平、工作時一下一下彈、等你時左右搖、出錯時發抖、完成時跳起來。"""
+        c, mood, t = self.canvas, self.mood, time.time()
         c.delete("all")
-        fur, line, pink = "#f4b860", "#5b3a1e", "#f28fa0"
+        ink = "#1b2230"
         # 頭上的狀態標籤：寫出文字，不必記顏色
         shown = [(COLORS[s], f"{LABELS[s]} {self.counts[s]}") for s in ("running", "waiting", "failed") if self.counts.get(s)]
         if self.error:  # 連不上或設定有問題：不要讓人以為「沒事」
@@ -170,89 +184,136 @@ class Pet:
         x = W / 2 - len(shown) * 24 + 1
         for color, text in shown:
             c.create_rectangle(x, 4, x + 46, 26, fill=color, outline="white", width=2)
-            c.create_text(x + 23, 15, text=text, font=(FONT, 9, "bold"), fill="#1c1c1c")
+            c.create_text(x + 23, 15, text=text, font=(FONT, 9, "bold"), fill=ink)
             x += 48
 
-        bob = {"sleep": (0, 0, 1, 1, 1, 1, 0, 0)[f // 4 % 8], "waiting": (0, 2, 4, 2)[f // 2 % 4],
-               "failed": f % 2, "happy": (0, 3, 5, 3)[f // 2 % 4]}.get(mood, (0, 1, 2, 1)[f // 3 % 4])
-        y = 36 + bob
-        ox = 4  # 貓身水平位移
-        # 尾巴、耳朵、身體
-        c.create_arc(ox + 84, y + 62, ox + 126, y + 112, start=-70, extent=200, style="arc", outline=fur, width=9)
-        for x0, x1, x2 in ((22, 30, 52), (108, 100, 78)):
-            s = 1 if x0 < 60 else -1
-            c.create_polygon(ox + x0, y + 4, ox + x1, y + 44, ox + x2, y + 24, fill=fur, outline=line, width=2)
-            c.create_polygon(ox + x0 + 6 * s, y + 14, ox + x1 + 4 * s, y + 36, ox + x2 - 6 * s, y + 26, fill=pink, outline="")
-        c.create_oval(ox + 14, y + 16, ox + 116, y + 112, fill=fur, outline=line, width=2)
-        c.create_oval(ox + 38, y + 66, ox + 92, y + 112, fill="#fde9c9", outline="")
-        # 眼睛
-        for ex in (ox + 46, ox + 84):
-            if mood == "sleep":
-                c.create_arc(ex - 8, y + 48, ex + 8, y + 60, start=200, extent=140, style="arc", outline=line, width=3)
-            elif mood == "happy":
-                c.create_arc(ex - 8, y + 46, ex + 8, y + 62, start=20, extent=140, style="arc", outline=line, width=3)
-            elif mood != "failed" and f % 40 in (0, 1):
-                c.create_line(ex - 7, y + 54, ex + 7, y + 54, fill=line, width=3)
-            else:
-                dx, dy = ((-2, 0, 2, 0)[f // 2 % 4], 3) if mood == "running" else (0, 0)
-                c.create_oval(ex - 7, y + 45, ex + 7, y + 63, fill=line, outline="")
-                c.create_oval(ex - 3 + dx, y + 48 + dy, ex + 2 + dx, y + 53 + dy, fill="white", outline="")
-        if mood == "failed":  # 八字眉與汗滴
-            c.create_line(ox + 36, y + 42, ox + 54, y + 37, fill=line, width=3)
-            c.create_line(ox + 94, y + 42, ox + 76, y + 37, fill=line, width=3)
-            c.create_polygon(ox + 22, y + 34, ox + 16, y + 48, ox + 28, y + 48, fill="#7cc4f0", outline="")
-            c.create_oval(ox + 16, y + 42, ox + 28, y + 54, fill="#7cc4f0", outline="")
-        # 腮紅、鼻子、嘴
-        c.create_oval(ox + 26, y + 62, ox + 40, y + 70, fill=pink, outline="")
-        c.create_oval(ox + 90, y + 62, ox + 104, y + 70, fill=pink, outline="")
-        c.create_polygon(ox + 61, y + 62, ox + 69, y + 62, ox + 65, y + 67, fill=line)
-        if mood == "failed":
-            c.create_arc(ox + 57, y + 68, ox + 73, y + 80, start=20, extent=140, style="arc", outline=line, width=2)
+        # 各狀態的形變：sx、sy 是寬高倍率，lift 是離地高度，lean 是左右偏移
+        sx, sy, lift, lean = 1.0, 1.0, 0.0, 0.0
+        if self.hop:                      # 正跑向滑鼠：每一步都跳起來
+            phase = math.sin(self.hop * math.pi)
+            sx, sy, lift = 1 - .1 * phase, 1 + .14 * phase, 26 * phase
+        elif mood == "sleep":
+            wave = math.sin(t * 1.6)
+            sx, sy = 1.16 + .03 * wave, .74 - .03 * wave
+        elif mood == "running":
+            phase = abs(math.sin(t * 4.6))
+            sx, sy, lift = 1.08 - .14 * phase, .9 + .18 * phase, 12 * phase
+        elif mood == "waiting":
+            lean = 5 * math.sin(t * 4.4)
+            sx, sy = 1 + .03 * math.sin(t * 8.8), 1 - .03 * math.sin(t * 8.8)
+        elif mood == "failed":
+            lean = 1.6 * (1 if int(t * 14) % 2 else -1)
+            sx, sy = 1.05, .93
+        elif mood == "happy":
+            phase = abs(math.sin(t * 5.2))
+            sx, sy, lift = 1.1 - .18 * phase, .88 + .24 * phase, 22 * phase
         else:
-            c.create_arc(ox + 55, y + 62, ox + 65, y + 74, start=180, extent=180, style="arc", outline=line, width=2)
-            c.create_arc(ox + 65, y + 62, ox + 75, y + 74, start=180, extent=180, style="arc", outline=line, width=2)
+            wave = math.sin(t * 2.4)
+            sx, sy = 1 + .05 * wave, 1 - .05 * wave
 
-        if mood == "sleep":
-            for i, (zx, zy, size) in enumerate(((112, 22, 10), (124, 8, 13), (136, -8, 16))):
-                if (f // 5) % 4 > i:
-                    c.create_text(ox + zx, y + zy, text="z", font=(FONT, size, "bold"), fill="#6b7a99")
-            for px in (ox + 48, ox + 82):
-                c.create_oval(px - 9, y + 98, px + 9, y + 112, fill=fur, outline=line, width=2)
-        elif mood == "running":  # 筆電與輪流敲鍵盤的爪子
-            c.create_polygon(ox + 34, y + 112, ox + 96, y + 112, ox + 90, y + 84, ox + 40, y + 84,
-                             fill="#3b4252", outline="#1f2430", width=2)
-            glow = ("#8fd3ff", "#b7e3ff")[f // 2 % 2]
-            c.create_polygon(ox + 44, y + 106, ox + 86, y + 106, ox + 84, y + 90, ox + 46, y + 90, fill=glow, outline="")
-            for i, px in enumerate((ox + 36, ox + 94)):
-                up = 4 if (f + i) % 2 else 0
-                c.create_oval(px - 8, y + 96 - up, px + 8, y + 110 - up, fill=fur, outline=line, width=2)
-        else:  # 舉牌
-            alert = mood in ("waiting", "failed")
-            col = COLORS["failed"] if mood == "failed" else COLORS["waiting"] if alert else COLORS["done"]
-            wave = (0, -2, 0, 2)[f // 2 % 4] if alert else 0
-            c.create_line(ox + 112, y + 98, ox + 122 + wave, y + 56, fill="#8a5a2b", width=4)
-            c.create_rectangle(ox + 104 + wave, y + 22, ox + 142 + wave, y + 58, fill=col, outline=line, width=2)
-            c.create_text(ox + 123 + wave, y + 40, text="!" if alert else "✓", font=(FONT, 18, "bold"), fill="#1c1c1c")
-            c.create_oval(ox + 102, y + 88, ox + 120, y + 104, fill=fur, outline=line, width=2)
-            c.create_oval(ox + 30, y + 96, ox + 48, y + 110, fill=fur, outline=line, width=2)
+        skin, edge = SKINS.get(mood, SKINS["idle"])
+        cx, base = W / 2 + lean, H - 22
+        bw, bh = 104 * sx, 88 * sy
+        top = base - lift - bh
+        shadow = 1 - min(lift, 26) / 60
+        c.create_oval(cx - 44 * shadow, base - 3, cx + 44 * shadow, base + 5, fill="#aab4c4", outline="")
+        body = [cx - bw / 2, base - lift - 8, cx - bw / 2, top + bh * .5, cx - bw * .3, top, cx + bw * .3, top,
+                cx + bw / 2, top + bh * .5, cx + bw / 2, base - lift - 8, cx + bw * .34, base - lift, cx - bw * .34, base - lift]
+        c.create_polygon(body, smooth=True, fill=skin, outline=edge, width=3)
+        c.create_oval(cx - bw * .32, top + bh * .16, cx - bw * .12, top + bh * .3, fill="white", outline="")   # 反光
+        ey = top + bh * .56
+        blink = mood not in ("sleep", "happy") and int(t * 10) % 42 < 2
+        for ex in (cx - bw * .17, cx + bw * .17):
+            if mood == "sleep":
+                c.create_arc(ex - 8, ey - 8, ex + 8, ey + 6, start=200, extent=140, style="arc", outline=ink, width=3)
+            elif mood == "happy":
+                c.create_arc(ex - 8, ey - 4, ex + 8, ey + 10, start=20, extent=140, style="arc", outline=ink, width=3)
+            elif blink:
+                c.create_line(ex - 6, ey, ex + 6, ey, fill=ink, width=3)
+            else:
+                c.create_oval(ex - 5.5, ey - 8, ex + 5.5, ey + 7, fill=ink, outline="")
+                c.create_oval(ex - 3, ey - 6, ex + 1, ey - 2, fill="white", outline="")
+        my = top + bh * .76
+        if mood == "failed":
+            c.create_arc(cx - 9, my, cx + 9, my + 12, start=20, extent=140, style="arc", outline=ink, width=3)
+            drop = (t * 1.3) % 1   # 汗滴往下流
+            c.create_oval(cx + bw * .36, top + bh * .2 + 16 * drop, cx + bw * .36 + 8, top + bh * .2 + 11 + 16 * drop, fill="#8fd3ff", outline="")
+        elif mood != "sleep":
+            c.create_arc(cx - 9, my - 8, cx + 9, my + 6, start=200, extent=140, style="arc", outline=ink, width=3)
+        if mood in ("waiting", "failed"):   # 頭上的驚嘆號，一跳一跳
+            pop = 3 * abs(math.sin(t * 5))
+            bx, by = cx + bw * .36, top - 6 - pop
+            c.create_oval(bx - 12, by - 12, bx + 12, by + 12, fill=COLORS[mood], outline="white", width=2)
+            c.create_text(bx, by, text="!", font=(FONT, 14, "bold"), fill=ink)
+        elif mood == "sleep":
+            for i, size in enumerate((10, 13, 16)):
+                if int(t * 1.6) % 4 > i:
+                    c.create_text(cx + bw * .34 + i * 10, top + 4 - i * 14, text="z", font=(FONT, size, "bold"), fill="#6b7a99")
+        elif mood == "running":   # 冒出小光點，表示正在忙
+            for i in range(3):
+                rise = (t * .9 + i / 3) % 1
+                c.create_oval(cx - 30 + i * 30 - 3, top - 4 - 16 * rise - 3, cx - 30 + i * 30 + 3, top - 4 - 16 * rise + 3,
+                              fill=COLORS["running"], outline="")
 
         # 腳下的進度條：優先代表「正在執行」的任務；沒有的話才是等你或出錯的那一件
-        withbar = [t for t in self.tasks if t["progress"][1] and t["state"] in ("running", "waiting", "failed")]
-        top = next((t for t in withbar if t["state"] == "running"), withbar[0] if withbar else None)
-        if top:
-            done, total = top["progress"]
+        withbar = [task for task in self.tasks if task["progress"][1] and task["state"] in ("running", "waiting", "failed")]
+        top_task = next((task for task in withbar if task["state"] == "running"), withbar[0] if withbar else None)
+        if top_task:
+            done, total = top_task["progress"]
             c.create_rectangle(14, H - 12, W - 14, H - 3, fill="#2d323c", outline="white")
             if done:
-                c.create_rectangle(15, H - 11, 15 + (W - 30) * done / total, H - 4, fill=COLORS[top["state"]], outline="")
+                c.create_rectangle(15, H - 11, 15 + (W - 30) * done / total, H - 4, fill=COLORS[top_task["state"]], outline="")
+
+    # ------------------------------------------------------------ 有事時跑到滑鼠旁邊
+    def run_to_pointer(self, then=None) -> None:
+        """跳到滑鼠游標旁邊（不蓋住游標）。then 是抵達後要做的事，例如說出是哪一件。"""
+        if self.dragging or self.modal:
+            return then() if then else None
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        px, py = self.root.winfo_pointerxy()
+        if px < 0 or py < 0:   # 游標不在這個螢幕上
+            return then() if then else None
+        if self.target is None and self.home is None:
+            self.home = (self.root.winfo_x(), self.root.winfo_y())   # 記住原本待的地方，之後回去
+        x = px + 28 if px + 28 + W <= sw else px - W - 28
+        self.target = (max(0, min(x, sw - W)), max(0, min(py - H // 2, sh - H)))
+        self.arrived = then
+
+    def go_home(self) -> None:
+        if self.home and not self.dragging:
+            self.target, self.arrived, self.home = self.home, None, None
+
+    def _step(self) -> None:
+        """往目標前進一步。每步 22 像素，配合 _draw 裡的跳躍形變。"""
+        if self.target is None:
+            self.hop = 0.0
+            return
+        if self.dragging:
+            self.target = self.home = None
+            return
+        x, y = self.root.winfo_x(), self.root.winfo_y()
+        dx, dy = self.target[0] - x, self.target[1] - y
+        dist = math.hypot(dx, dy)
+        if dist <= 22:
+            self.root.geometry(f"+{self.target[0]}+{self.target[1]}")
+            done, self.target, self.arrived, self.hop = self.arrived, None, None, 0.0
+            if done:
+                done()
+            return
+        self.hop = (self.hop + .17) % 1 or .01
+        self.root.geometry(f"+{round(x + dx / dist * 22)}+{round(y + dy / dist * 22)}")
+        self._place(self.bubble)
 
     def _tick(self) -> None:
         self.frame += 1
-        self._walk()
+        self._step()
+        if self.target is None and self.frame % 2 == 0:
+            self._walk()
         self._draw()
-        self.root.after(130, self._tick)
+        self.root.after(60, self._tick)
 
     def _walk(self) -> None:
-        if self.dragging or self.modal or self.popup or not self.walk_var.get() or self.mood in ("sleep", "running"):
+        if self.dragging or self.modal or self.popup or self.home or not self.walk_var.get() or self.mood in ("sleep", "running"):
             self.walk_dx = 0
             return
         if self.walk_dx == 0:
@@ -288,7 +349,7 @@ class Pet:
         x = max(4, min(self.root.winfo_x() + W // 2 - bw // 2, self.root.winfo_screenwidth() - bw - 4))
         sw, sh, px, py = self.root.winfo_screenwidth(), self.root.winfo_screenheight(), self.root.winfo_x(), self.root.winfo_y()
         y = py - bh - 4
-        if y < 0:  # 上面放不下 → 放下面；上下都放不下 → 放到旁邊，不可以蓋住小貓（不然就點不到牠來收起清單）
+        if y < 0:  # 上面放不下 → 放下面；上下都放不下 → 放到旁邊，不可以蓋住史萊姆（不然就點不到牠來收起清單）
             if py + H + 4 + bh <= sh:
                 y = py + H + 4
             else:

@@ -136,8 +136,7 @@
   /* 一次並排三欄（和草圖一樣）；專案更多時往左滑 */
   .tcol { flex: 0 0 calc((100% - 1rem) / 3); min-width: 20rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
   .tcol.few { flex: 1 1 0; }
-  .thead { display: flex; align-items: center; gap: .5rem; padding: .45rem .5rem .35rem .9rem; }
-  .thead h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thead { display: flex; align-items: center; gap: .4rem; padding: .3rem .5rem .25rem .4rem; }
   .thead .f { height: 2.6rem; font-size: .88rem; padding: 0 .8rem; }
   .tabs { display: flex; gap: .35rem; overflow-x: auto; padding: 0 .5rem .35rem; scrollbar-width: none; flex: none; }
   .tabs::-webkit-scrollbar { display: none; }
@@ -151,10 +150,68 @@
   .msg.clip { max-height: 9.5rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
   .who { font-size: .72rem; color: var(--dim); margin: .1rem .2rem -.25rem; }
   .who.user { align-self: flex-end; }
-  .tfoot { flex: none; display: block; width: calc(100% - 1rem); margin: 0 .5rem .5rem; padding: .55rem .8rem; border-radius: .8rem; background: var(--card); border-left: .35rem solid var(--s); }
-  .tfoot:active { background: var(--card-hi); }
-  .tfoot .st { font-size: .9rem; font-weight: 700; color: var(--s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tfoot .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .tstat { flex: 1; min-width: 0; display: flex; align-items: center; gap: .6rem; min-height: 3.6rem; padding: .25rem .5rem .25rem .2rem; border-radius: .8rem; }
+  .tstat:active { background: var(--card); }
+  .tstat .tt { flex: 1; min-width: 0; }
+  .tstat h2 { font-size: 1.1rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tstat .st { font-size: .85rem; font-weight: 700; color: var(--s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .1rem; }
+  .tstat .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .tstat .prog { margin-top: .3rem; }
+
+  /* 史萊姆 */
+  .slime { flex: none; width: 3.3rem; height: 3.1rem; overflow: visible; }
+  .slime.away { visibility: hidden; }
+  #mascot { display: inline-flex; margin-right: .5rem; } #mascot .slime { width: 2.2rem; height: 2.05rem; }
+  .sl-skin { fill: color-mix(in srgb, var(--s) 82%, white); stroke: color-mix(in srgb, var(--s) 62%, black); stroke-width: 2; }
+  .sl-shine { fill: rgba(255,255,255,.6); stroke: none; }
+  .sl-eyes ellipse { fill: #1b2230; stroke: none; transform-box: fill-box; transform-origin: center; animation: blink 4.2s infinite; }
+  .sl-lids, .sl-smile, .sl-frown { fill: none; stroke: #1b2230; stroke-width: 2.2; stroke-linecap: round; }
+  .sl-lids, .sl-frown, .sl-drop, .sl-mark, .sl-zzz { display: none; }
+  .sl-shadow { fill: rgba(0,0,0,.35); stroke: none; transform-box: fill-box; transform-origin: center; }
+  .sl-drop { fill: #8fd3ff; stroke: none; }
+  .sl-mark circle { fill: var(--s); stroke: #fff; stroke-width: 1.5; } .sl-mark text { fill: #14161a; font-size: 13px; font-weight: 800; stroke: none; }
+  .sl-zzz { fill: #9db0d0; font-size: 11px; font-weight: 800; stroke: none; }
+  .sl-body { transform-box: fill-box; transform-origin: 50% 100%; animation: jelly 2.6s ease-in-out infinite; }
+  @keyframes jelly { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.06, .93); } }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+  /* 正在做：一下一下地彈 */
+  .sl-running .sl-body { animation: work .7s ease-in-out infinite; }
+  @keyframes work { 0%, 100% { transform: translateY(0) scale(1.08, .9); } 45% { transform: translateY(-13%) scale(.94, 1.08); } }
+  .sl-running .sl-shadow { animation: shrink .7s ease-in-out infinite; }
+  @keyframes shrink { 45% { transform: scale(.75); opacity: .6; } }
+  /* 等你：頭上冒出驚嘆號，左右搖 */
+  .sl-waiting .sl-mark, .sl-failed .sl-mark { display: block; animation: pop 1.1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes pop { 50% { transform: translateY(-2px) scale(1.15); } }
+  .sl-waiting .sl-body { animation: sway 1.3s ease-in-out infinite; }
+  @keyframes sway { 0%, 100% { transform: rotate(-5deg) scale(1.03, .97); } 50% { transform: rotate(5deg) scale(.98, 1.03); } }
+  /* 出錯：發抖、冒汗、嘴角往下 */
+  .sl-failed .sl-body { animation: shiver .28s linear infinite; }
+  @keyframes shiver { 0%, 100% { transform: translateX(-1.2px) scale(1.04, .95); } 50% { transform: translateX(1.2px) scale(1.04, .95); } }
+  .sl-failed .sl-smile { display: none; } .sl-failed .sl-frown, .sl-failed .sl-drop { display: block; }
+  .sl-failed .sl-drop { animation: drip 1.2s ease-in infinite; }
+  @keyframes drip { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(12px); opacity: 0; } }
+  /* 完成：開心地跳 */
+  .sl-done .sl-body { animation: joy 1s cubic-bezier(.3, 0, .3, 1) infinite; }
+  @keyframes joy { 0%, 100% { transform: translateY(0) scale(1.12, .86); } 40% { transform: translateY(-24%) scale(.92, 1.1); } 70% { transform: translateY(0) scale(1.1, .9); } }
+  .sl-done .sl-eyes { display: none; } .sl-done .sl-lids { display: block; }
+  /* 停著：攤平睡覺 */
+  .sl-idle .sl-body { animation: snooze 3.6s ease-in-out infinite; }
+  @keyframes snooze { 0%, 100% { transform: scale(1.14, .78); } 50% { transform: scale(1.1, .83); } }
+  .sl-idle .sl-eyes { display: none; } .sl-idle .sl-lids { display: block; transform: translateY(3px) scaleY(-1); transform-box: fill-box; transform-origin: center; }
+  .sl-idle .sl-smile { display: none; } .sl-idle .sl-zzz { display: block; animation: zzz 2.4s ease-in-out infinite; } .sl-idle .z2 { animation-delay: 1.2s; }
+  @keyframes zzz { 0% { opacity: 0; transform: translateY(4px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+
+  /* 跑出來找你的史萊姆 */
+  .runner { position: fixed; z-index: 25; display: flex; align-items: flex-end; gap: .3rem; transform: translate(-50%, -50%); transition: left .9s cubic-bezier(.45, 0, .3, 1), top .9s cubic-bezier(.45, 0, .3, 1); filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
+  .runner .slime { width: 4.4rem; height: 4.1rem; }
+  .runner.hopping .slime { animation: hop calc(.9s / var(--hops, 3)) ease-in-out calc(var(--hops, 3)); }
+  @keyframes hop { 0%, 100% { transform: translateY(0) scale(1.12, .86); } 50% { transform: translateY(-1.7rem) scale(.92, 1.1); } }
+  .runner .say { max-width: 15rem; background: #fffbe6; color: #3b2a12; border-radius: .9rem .9rem .9rem .2rem; padding: .5rem .75rem; font-size: .95rem; line-height: 1.4; margin-bottom: 1.6rem; opacity: 0; transition: opacity .3s .9s; text-align: left; }
+  .runner .say b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .runner .say small { display: block; font-size: .72rem; opacity: .65; }
+  .runner:not(.leaving) .say { opacity: 1; } .runner.leaving .say { display: none; }
+  @media (prefers-reduced-motion: reduce) { .slime *, .runner, .runner .slime { animation: none !important; transition: none !important; } }
+
   .rbar { flex: none; display: flex; align-items: center; width: calc(100% - 1rem); min-height: 3.2rem; margin: 0 .5rem .5rem; padding: 0 .5rem 0 1rem; border-radius: .8rem; background: var(--bg); border: 1px solid var(--line); color: var(--dim); font-size: 1rem; }
   .rbar span { margin-left: auto; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-radius: .6rem; padding: .45rem 1rem; font-size: .9rem; }
   .rbar:active { background: var(--card); }
@@ -213,7 +270,7 @@
     <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
   </section>
 
-  <section class="col"><button class="label go" data-act="talk">AI 助手<span>看對話 ›</span></button><div class="scroll" id="tasks"></div></section>
+  <section class="col"><button class="label go" data-act="talk"><i id="mascot"></i>AI 助手<span>看對話 ›</span></button><div class="scroll" id="tasks"></div></section>
 </div>
 
 <!-- AI 對話：一個專案一欄，看得到這個專案和 AI 助手說了什麼 -->
@@ -444,7 +501,10 @@ async function loadTasks() {
   let d;
   try { d = await api("/api/tasks"); } catch (e) { return; }
   state.tasks = d.tasks;
+  noticeStates(d.tasks);
   const live = d.tasks.filter(t => t.state !== "idle");
+  const top = ["failed", "waiting", "running", "done"].find(s => d.tasks.some(t => t.state === s)) || "idle";
+  $("mascot").innerHTML = slime(top);
   let html = live.map(t => {
     const [done, total] = t.progress;
     return `<button class="task s-${t.state}" data-task="${esc(t.id)}"><div class="n">${esc(t.title)}</div>
@@ -467,6 +527,70 @@ function taskSheet(id) {
     ${t.todos.length ? `<ul>${t.todos.map(x => `<li class="${x.status}">${esc(x.text)}</li>`).join("")}</ul>` : ""}
     ${t.prompt ? `<p>你交代的：${esc(t.prompt)}</p>` : ""}${t.reply ? `<p>${esc(t.reply)}</p>` : ""}
     ${t.url ? `<button class="big" data-url="${esc(t.url)}">在 GitHub 開啟</button>` : ""}</div>`);
+}
+
+/* ---------- 史萊姆：AI 助手的樣子。平常待在頁面上方，狀態改變時會跳到游標（或手指最後碰的位置）來找你 ---------- */
+function slime(state, id) {
+  return `<svg class="slime sl-${state} s-${state}" viewBox="0 0 64 60" ${id ? `data-slime="${esc(id)}"` : ""} aria-hidden="true">
+    <ellipse class="sl-shadow" cx="32" cy="55" rx="21" ry="3.5"/>
+    <g class="sl-body"><path class="sl-skin" d="M7 46 C7 22 20 8 32 8 C44 8 57 22 57 46 C57 53 49 54 32 54 C15 54 7 53 7 46Z"/>
+      <ellipse class="sl-shine" cx="21" cy="21" rx="6.5" ry="3.6" transform="rotate(-28 21 21)"/>
+      <g class="sl-eyes"><ellipse cx="24" cy="34" rx="3.3" ry="4.4"/><ellipse cx="40" cy="34" rx="3.3" ry="4.4"/></g>
+      <g class="sl-lids"><path d="M20 35 q4 -3 8 0"/><path d="M36 35 q4 -3 8 0"/></g>
+      <path class="sl-smile" d="M27 43 Q32 47 37 43"/><path class="sl-frown" d="M27 46 Q32 42 37 46"/>
+      <circle class="sl-drop" cx="50" cy="24" r="2.6"/></g>
+    <g class="sl-mark"><circle cx="52" cy="11" r="9"/><text x="52" y="15.5" text-anchor="middle">!</text></g>
+    <text class="sl-zzz" x="47" y="14">z</text><text class="sl-zzz z2" x="54" y="7">z</text></svg>`;
+}
+const pointer = {x: innerWidth / 2, y: innerHeight * .55, known: false};   // 游標或手指最後的位置
+["pointermove", "pointerdown"].forEach(t => document.addEventListener(t, ev => { pointer.x = ev.clientX; pointer.y = ev.clientY; pointer.known = true; }, {passive: true}));
+const knownState = {};     // 每件事上次的狀態，用來發現「剛做完」「剛出錯」
+let stateSeeded = false;
+const runners = {};        // 正跑出來找你的史萊姆
+const CALL = {waiting: "做完了，等你看！", failed: "出錯了，需要你看一下。", done: "完成了！"};
+function noticeStates(tasks) {
+  for (const t of tasks) {
+    const before = knownState[t.id];
+    knownState[t.id] = t.state;
+    if (stateSeeded && before && before !== t.state && CALL[t.state]) summon(t);   // 第一次載入只記錄，不打擾
+  }
+  stateSeeded = true;
+}
+function homeOf(id) {   // 這隻史萊姆平常待的地方：對話畫面是它那一欄的上方，找檔案畫面是右上角
+  const el = document.querySelector(`.talk .slime[data-slime="${CSS.escape(id)}"]`) || document.querySelector("body:not(.talk) #mascot .slime") || document.querySelector(".slime");
+  const r = el ? el.getBoundingClientRect() : {left: innerWidth / 2, top: 8, width: 44, height: 40};
+  return {x: r.left + r.width / 2, y: r.top + r.height / 2, el};
+}
+function summon(t) {
+  if (runners[t.id]) dismiss(t.id, true);
+  if (Object.keys(runners).length >= 3) return;   // 一次最多三隻，不要滿畫面都是
+  const home = homeOf(t.id), n = Object.keys(runners).length;
+  const el = document.createElement("button");
+  el.className = `runner s-${t.state}`; el.dataset.runner = t.id;
+  el.innerHTML = slime(t.state) + `<span class="say"><b>${esc(t.title)}</b>${CALL[t.state]}<small>點我看這件事</small></span>`;
+  el.style.left = home.x + "px"; el.style.top = home.y + "px";
+  document.body.appendChild(el);
+  if (home.el) home.el.classList.add("away");
+  const r = runners[t.id] = {el, task: t, timer: 0};
+  const go = () => {   // 跳到游標旁邊；游標之後移開很遠就再跟一次
+    const size = 64, x = Math.min(innerWidth - 150, Math.max(size, pointer.x + 46 + n * 30)), y = Math.min(innerHeight - size, Math.max(size, pointer.y + 34 + n * 26));
+    const dist = Math.hypot(x - parseFloat(el.style.left), y - parseFloat(el.style.top));
+    if (dist < 150 && r.arrived) return;
+    el.classList.add("hopping"); el.style.setProperty("--hops", Math.max(2, Math.round(dist / 170)));
+    el.style.left = x + "px"; el.style.top = y + "px"; r.arrived = true;
+    setTimeout(() => el.classList.remove("hopping"), 950);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(go));
+  r.follow = setInterval(go, 1800);
+  r.timer = setTimeout(() => dismiss(t.id), 25000);   // 沒人理它，一陣子後自己回去
+}
+function dismiss(id, now) {
+  const r = runners[id];
+  if (!r) return;
+  clearInterval(r.follow); clearTimeout(r.timer); delete runners[id];
+  const home = homeOf(id);
+  r.el.classList.add("leaving", "hopping"); r.el.style.left = home.x + "px"; r.el.style.top = home.y + "px";
+  setTimeout(() => { r.el.remove(); document.querySelectorAll(".slime.away").forEach(s => { if (!Object.keys(runners).length) s.classList.remove("away"); }); }, now ? 0 : 900);
 }
 
 /* ---------- AI 對話：一個專案一欄 ---------- */
@@ -493,16 +617,16 @@ function talkColumn(key, title, threads, extra) {
     return who + `<div class="msg ${m.role} ${long ? "clip" : ""}" ${long ? 'data-act="unclip"' : ""}>${esc(tidy(m.text))}<small>${clock(m.ts)}${m.sent ? "・從這裡送出" : ""}</small></div>`;
   }).join("");
   const empty = `<div class="tnote">${local ? "這段對話還沒有內容。" :
-    "這段對話是在雲端進行的，內容不在這台電腦上。<br>這裡只能顯示助手在 GitHub 留下的說明與留言。<br>點下面的狀態列可以看進度與下一步。"}</div>`;
+    "這段對話是在雲端進行的，內容不在這台電腦上。<br>這裡只能顯示助手在 GitHub 留下的說明與留言。<br>點上面的史萊姆可以看進度與下一步。"}</div>`;
   return `<section class="tcol s-${cur.state}" data-col="${esc(key)}">
-    <div class="thead"><h2>${title}</h2>${extra || ""}</div>
+    <div class="thead">
+      <button class="tstat s-${cur.state}" data-task="${esc(cur.id)}">${slime(cur.state, cur.id)}
+        <span class="tt"><h2>${title}</h2>
+          <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}${cur.doing && cur.state === "running" ? `<em>　正在：${esc(cur.doing)}</em>` : threads.length > 1 ? "" : `<em>　${esc(cur.title)}</em>`}</div>
+          ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</span></button>
+      ${extra || ""}</div>
     ${threads.length > 1 ? `<div class="tabs">${threads.map(t => `<button class="tab s-${t.state} ${t.id === cur.id ? "on" : ""}" data-thread="${esc(t.id)}" data-key="${esc(key)}">${esc(t.title)}</button>`).join("")}</div>` : ""}
     <div class="msgs" data-thread-id="${esc(cur.id)}">${msgs || empty}</div>
-    <button class="tfoot s-${cur.state}" data-task="${esc(cur.id)}">
-      <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}<em>　${esc(threads.length > 1 ? "" : cur.title)}</em></div>
-      ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}
-      ${cur.doing && cur.state === "running" ? `<div class="doing" style="font-size:.8rem;color:var(--dim);margin-top:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">正在：${esc(cur.doing)}</div>` : ""}
-    </button>
     ${cur.can_reply ? `<button class="rbar" data-reply="${esc(cur.id)}">回覆 AI 助手…<span>送出</span></button>`
       : `<div class="rbar off">這段對話不能從這裡回覆，請到 GitHub 或 claude.ai</div>`}</section>`;
 }
@@ -538,6 +662,7 @@ async function loadTalk() {
   state.talk = d;
   state.threads = {};
   [...d.columns.flatMap(c => c.threads), ...d.loose].forEach(t => state.threads[t.id] = t);
+  noticeStates(Object.values(state.threads));
   const box = $("talk-cols");
   // 記住每一欄捲到哪裡：使用者正在往上翻舊訊息時，更新不可以把他拉回底部
   const keep = {};
@@ -704,11 +829,18 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("reply" in d) replySheet(d.reply);
+    if ("runner" in d) {   // 點跑來的史萊姆：帶你到那件事的對話
+      const id = d.runner, t = runners[id] && runners[id].task;
+      dismiss(id);
+      if (t) { const col = Object.values(state.talk ? state.talk.columns : []).find(c => c.threads.some(x => x.id === id)); picked[col ? col.path : "__loose"] = id; }
+      if (!document.body.classList.contains("talk")) setMode(true); else await loadTalk();
+      setTimeout(() => { const s = document.querySelector(`.slime[data-slime="${CSS.escape(id)}"]`); if (s) s.closest(".tcol").scrollIntoView({behavior: "smooth", inline: "center", block: "nearest"}); }, 700);
+    }
+    else if ("reply" in d) replySheet(d.reply);
     else if ("quick" in d) { const box = $("reply-text"); box.value = d.quick; box.focus(); }
     else if (d.act === "send-reply") {
       const box = $("reply-text"), text = box.value.trim();
