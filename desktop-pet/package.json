@@ -1,0 +1,26 @@
+{
+  "name": "desk-pet",
+  "version": "1.0.0",
+  "description": "桌面寵物",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win portable --x64 --publish never",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.deskpet.app",
+    "productName": "DeskPet",
+    "files": ["main.js", "preload.js", "pet.html", "pet.js", "draw.js", "assets/**"],
+    "directories": { "buildResources": "build", "output": "dist" },
+    "win": { "target": ["portable"] },
+    "portable": { "artifactName": "DeskPet-${version}-win.exe" },
+    "mac": { "target": ["dmg"], "category": "public.app-category.entertainment", "extendInfo": { "LSUIElement": true } },
+    "dmg": { "artifactName": "DeskPet-${version}-mac-${arch}.dmg" }
+  }
+}
