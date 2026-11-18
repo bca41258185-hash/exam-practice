@@ -272,12 +272,16 @@
     const fly = state === 'roll';            // 御劍飛行
     const med = state === 'sleep';           // 打坐修煉
     const trib = state === 'tribulation';    // 渡劫
-    const zap = trib && st < 2.3 && (st * 8 % 2) < 1.1;
+    const zap = (trib && st < 2.3 && (st * 8 % 2) < 1.1) || (state === 'struck' && (st * 10 % 2) < 1.2);
     const flip = state === 'leap';                          // 輕功：空中翻筋斗
     const float = state === 'hover' || state === 'land';    // 踏空、飄落
     const taichi = state === 'taichi';                      // 打太極
     const climb = state === 'climb', hang = state === 'hang';   // 壁虎遊牆功、倒掛
     const drink = state === 'drink', gaze = state === 'gaze';   // 喝水、看遠方
+    const strike = state === 'strike' ? (fit.move || 'palm') : '';   // 出招
+    const vanish = state === 'vanish', appear = state === 'appear';  // 縮地成寸
+    const warn = state === 'warn', struck = state === 'struck';      // 天雷預告、被劈
+    const rl = fit.realm || 0, onGround = !air && !flip && !float && !climb && !hang && !fly && !vanish && !appear;
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
     if (state === 'idle' || state === 'peek' || state === 'eat') sy = 1 + 0.02 * Math.sin(t * 2.4);
@@ -292,6 +296,12 @@
     if (state === 'peek') rot = -0.13;
     if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
     if (float) { lift = 6 + Math.sin(t * 6) * 2; }
+    if (strike === 'palm') { rot = 0.12; sx = 1.06; }
+    if (strike === 'circle') rot = Math.sin(st * 4) * 0.25;
+    if (strike === 'flick') sy = 1 + Math.sin(st * 20) * 0.03;
+    if (vanish) { const p = Math.min(1, st / 0.38); sx = sy = Math.max(0.02, 1 - p); rot = p * 4; }
+    if (appear) { const p = Math.min(1, st / 0.35); sx = sy = Math.max(0.02, p); }
+    if (warn) { sx = 1 + Math.sin(t * 30) * 0.02; }
     if (drink) rot = -0.18 - Math.max(0, Math.sin(st * 2.2)) * 0.12;   // 仰頭喝
     if (gaze) { rot = -0.08; lift = 2 + Math.sin(t * 1.5) * 1.5; }
     if (climb) rot = -Math.PI / 2;                   // 腳貼著牆（左右牆都一樣，因為已經先左右翻轉）
@@ -304,6 +314,22 @@
 
     // 影子
     if (!air && !flip && !float && !climb && !hang) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
+    if (onGround && rl >= 7) {   // 大乘：腳踏祥雲
+      ctx.save(); ctx.globalAlpha = 0.95; ctx.lineWidth = 2;
+      for (const [x, rx] of [[74, 16], [126, 16], [100, 22]]) ellipse(ctx, x, 186, rx, 7, '#F3F7F2', C.qi);
+      ctx.restore();
+    } else if (onGround && rl >= 1) {   // 築基以上：腳下一圈靈氣
+      ctx.save(); ctx.globalAlpha = 0.3 + Math.sin(t * 2) * 0.12; ctx.lineWidth = 2.5;
+      ellipse(ctx, 100, 187, 44 + Math.sin(t * 2) * 3, 7, null, C.qi);
+      ctx.restore();
+    }
+    if (fit.done) {   // 渡劫圓滿：一層金光
+      ctx.save();
+      const g = ctx.createRadialGradient(100, 150 - lift, 20, 100, 150 - lift, 82);
+      g.addColorStop(0, 'rgba(245,184,46,0.28)'); g.addColorStop(1, 'rgba(245,184,46,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(100, 150 - lift, 82, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     if (taichi) {
       ctx.save(); ctx.translate(100, 186 - lift - 94 + Math.sin(t * 2) * 3); ctx.rotate(t * 1.6); ctx.globalAlpha = 0.95;
       const R = 15;
@@ -390,6 +416,14 @@
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = C.line;
     ellipse(ctx, 0, -32, 40, 32, null, C.line);
+    if (rl >= 2 && !zap) {   // 金丹以上：肚子裡一顆金丹在發光
+      ctx.save();
+      const pulse = 0.35 + Math.sin(t * 2.6) * 0.15;
+      const g = ctx.createRadialGradient(0, -16, 1, 0, -16, 13);
+      g.addColorStop(0, `rgba(255,214,90,${pulse + 0.3})`); g.addColorStop(1, 'rgba(255,214,90,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -16, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     // 眉心印記
     ctx.fillStyle = C.mark;
     ctx.beginPath(); ctx.moveTo(6, -55); ctx.quadraticCurveTo(9.5, -50, 6, -46); ctx.quadraticCurveTo(2.5, -50, 6, -55); ctx.fill();
@@ -476,6 +510,57 @@
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const top = 186 - lift - (TALL_HATS.includes(hat) || sp.ears === 'rabbit' ? 92 : 76) * sy;
+    if (rl >= 3 && !o.mini && onGround && (t % 37) < 3.4) {   // 元嬰以上：偶爾冒出一個半透明的小分身揮手
+      const p = (t % 37) / 3.4, a = Math.sin(p * Math.PI);
+      ctx.save(); ctx.globalAlpha = 0.55 * a;
+      ctx.translate(100 - dir * 58, 96 - a * 10); ctx.scale(0.36, 0.36); ctx.translate(-100, -186);
+      drawPet(ctx, { state: 'happy', dir, t, st: p * 1.2, outfit: { species: fit.species, hat: 'none', robe: fit.robe, gear: 'none', realm: 0 }, look: { x: 0, y: 0 }, mini: true });
+      ctx.restore();
+    }
+    if (strike === 'palm') {   // 降龍十八掌：一道金色的龍形氣勁往前衝
+      for (let i = 0; i < 7; i++) {
+        const p = (st * 1.6 + i * 0.12) % 1;
+        spark(ctx, 100 + dir * (36 + p * 64), 150 + Math.sin(p * 9 + i) * 12, 7 - p * 3, 1 - p, i % 2 ? C.gold : '#FFD45C');
+      }
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - st * 0.7); ctx.strokeStyle = C.gold; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(100 + dir * 70, 150, 16 + st * 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    if (strike === 'circle') {   // 太極畫圓：繞身體一大圈氣流
+      ctx.save(); ctx.lineWidth = 4; ctx.strokeStyle = C.qi; ctx.globalAlpha = 0.8;
+      const a0 = st * 6;
+      ctx.beginPath(); ctx.arc(100, 150 - lift, 62, a0, a0 + Math.PI * 1.4); ctx.stroke();
+      ctx.strokeStyle = C.line; ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.arc(100, 150 - lift, 62, a0 + Math.PI, a0 + Math.PI * 2.4); ctx.stroke();
+      ctx.restore();
+    }
+    if (strike === 'bell') {   // 金鐘罩：一口金色的鐘罩住自己
+      const p = Math.min(1, st / 0.3), y0 = 186 - (186 - 70) * p;
+      ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = 'rgba(245,184,46,0.35)'; ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(100, y0); ctx.bezierCurveTo(60, y0, 60, 150, 46, 186); ctx.lineTo(154, 186); ctx.bezierCurveTo(140, 150, 140, y0, 100, y0);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 0.8; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(52, 176); ctx.lineTo(148, 176); ctx.stroke();
+      ellipse(ctx, 100, y0 - 4, 5, 5, C.gold, C.line);
+      ctx.restore();
+    }
+    if (strike === 'flick') {   // 彈指神通：一顆氣彈射出去
+      const p = (st * 2.2) % 1;
+      spark(ctx, 100 + dir * (30 + p * 70), 140, 6, 1 - p * 0.6, C.qi);
+      ellipse(ctx, 100 + dir * (30 + p * 70), 140, 3, 3, '#FFFFFF');
+    }
+    if (appear) {   // 出現時地上一圈結界
+      ctx.save(); ctx.globalAlpha = 1 - Math.min(1, st / 0.65); ctx.strokeStyle = C.qi; ctx.lineWidth = 3;
+      ellipse(ctx, 100, 150, 30 + st * 70, 30 + st * 70, null, C.qi);
+      ctx.restore();
+    }
+    if (warn) {   // 天雷預告：頭上一朵烏雲閃電光
+      const flash = (t * 6 % 1) < 0.5;
+      ctx.save(); ctx.fillStyle = flash ? '#6B6580' : '#4A4560'; ctx.strokeStyle = C.line; ctx.lineWidth = 2;
+      for (const [x, y, r] of [[82, 44, 14], [100, 36, 18], [120, 44, 14]]) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+      if (flash) { ctx.strokeStyle = C.bolt; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(100, 54); ctx.lineTo(94, 66); ctx.lineTo(104, 66); ctx.lineTo(97, 80); ctx.stroke(); }
+      ctx.restore();
+    }
+    if (struck) bolt(ctx, 100, top + 8, Math.floor(st * 8) + 3);
     if (gaze) {
       const ox = dir > 0 ? 1 : -1;
       ctx.save(); ctx.globalAlpha = 0.75; ctx.strokeStyle = C.qi; ctx.lineWidth = 2; ctx.setLineDash([4, 6]); ctx.lineDashOffset = -t * 20;
@@ -539,7 +624,7 @@
       ctx.fillStyle = '#E5484D'; ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('!', 100 + dir * 44, top + 18);
     }
-    if (o.bubble) bubble(ctx, o.bubble.text, o.bubble.age);
+    if (o.bubble && !o.mini) bubble(ctx, o.bubble.text, o.bubble.age);
     ctx.restore();
   }
 

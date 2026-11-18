@@ -27,6 +27,12 @@ function loadCfg() {
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { /* 首次啟動 */ }
   if (![0.75, 1, 1.5].includes(cfg.scale)) cfg.scale = 1;
   if (!STRETCH.includes(cfg.stretch)) cfg.stretch = 50;
+  if (cfg.xpVersion !== 2) {
+    let r = 0; while (r + 1 < OLD_NEED.length && cfg.xp >= OLD_NEED[r + 1]) r++;
+    cfg.xp = NEED[r]; cfg.xpVersion = 2;
+    saveCfg();   // 換算完馬上存，免得下次又換算一次
+  }
+  if (process.env.PET_TEST_XP) cfg.xp = Number(process.env.PET_TEST_XP) || 0;   // 測試用：假裝修為是這個數字（不存檔）
   if (!Array.isArray(cfg.notes)) cfg.notes = [];
   cfg.notes = cfg.notes.filter((n) => n && typeof n.text === 'string' && Number.isFinite(n.at));
   if (!cfg.todos || !Array.isArray(cfg.todos.items)) cfg.todos = { date: '', items: [] };
@@ -37,6 +43,7 @@ function loadCfg() {
   }
 }
 function saveCfg() {
+  if (process.env.PET_TEST_XP) return;   // 測試模式：不寫入真正的存檔
   try { fs.writeFileSync(cfgFile(), JSON.stringify(cfg)); } catch { /* 存不了就算了 */ }
 }
 
@@ -58,7 +65,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying) } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), move: strikeMove } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -114,9 +121,21 @@ function startGaze() {
   set('gaze', 20000);   // 陪你看遠方 20 秒
   const f = Q.pick(Q.FAR);
   sayLines(['看看 6 公尺外', '遠眺 20 秒～', ...Q.verseLines(f)], 3200);
-  setTimeout(() => { if (state === 'gaze') { set('happy', 1400); say('眼睛舒服多了吧', true); } }, 20000);
+  setTimeout(() => { if (state === 'gaze') { gain(5); stat('gazes'); set('happy', 1400); say('眼睛舒服多了吧，修為 +5', true); } }, 20000);
+}
+let activeSec = 0, awaySec = 0, awayGained = 0;
+function checkXp(idle) {
+  if (idle < 60) {
+    awaySec = 0; awayGained = 0;
+    activeSec += 10;
+    if (activeSec >= 60) { activeSec -= 60; gain(1); daily().min += 1; stat('totalMin'); }
+  } else {
+    awaySec += 10;
+    if (awaySec >= 120 && awayGained < 120) { awaySec -= 120; awayGained += 1; gain(1); }   // 每兩分鐘 +1，最多 120
+  }
 }
 function checkHealth(idle) {
+  checkXp(idle);
   if (idle >= 60) return;   // 你不在電腦前：不累積
   waterAcc += 10; eyeAcc += 10;
   if (cfg.eyes && eyeAcc >= 20 * 60 && healthFree()) { eyeAcc = 0; startGaze(); return; }
@@ -141,13 +160,14 @@ function checkStretch() {
   try { idle = powerMonitor.getSystemIdleTime(); } catch { return; }
   if (morningDue() && idle < 60 && !BUSY.includes(state)) { morning(); return; }   // 電腦整晚沒關，隔天回來也算
   checkHealth(idle);
+  checkThunder(idle);
   if (idle >= BREAK_SEC) {   // 你離開座位了：重新計時；如果是被提醒之後才去休息，回來時誇你
     if (reminded) praise = true;
     sitSince = Date.now(); reminded = false;
     return;
   }
   if (praise && idle < 5 && !['drag', 'fall', 'tribulation'].includes(state)) {
-    praise = false; gain(10); set('happy', 1600); sayLines(['休息得好！修為 +10', Q.pick(Q.CHEER)]);
+    praise = false; gain(15); stat('breaks'); set('happy', 1600); sayLines(['休息得好！修為 +15', Q.pick(Q.CHEER)]);
     return;
   }
   if (!cfg.stretch) return;
@@ -181,7 +201,8 @@ function smoothPlace() {
   const a = Math.min(1, (Date.now() - tickAt) / TICK);
   place({ x: prevPos.x + (pos.x - prevPos.x) * a, y: prevPos.y + (pos.y - prevPos.y) * a });
 }
-ipcMain.on('frame', smoothPlace);
+const fromComp = (e) => comp && !comp.win.isDestroyed() && e.sender === comp.win.webContents;
+ipcMain.on('frame', (e) => (fromComp(e) ? compPlace() : smoothPlace()));
 
 const GREET = [[5, '道友早安'], [11, '該用午膳了'], [14, '午後宜打坐'], [18, '道友晚安好'], [23, '夜深了，歇息吧']];
 function greeting() {
@@ -194,19 +215,47 @@ const CHAT = ['此地靈氣不錯', '道心要穩', '喝口靈茶吧', '閉目�
 
 // ---- 修為與境界 ----
 const REALMS = ['煉氣', '築基', '金丹', '元嬰', '化神', '煉虛', '合體', '大乘', '渡劫'];
-const NEED = [0, 100, 400, 1200, 3000, 7000, 15000, 30000, 60000];
+// 約一週修到渡劫（平常一天大約 800 修為）；渡劫期修到 6000 就圓滿，停在那裡
+const NEED = [0, 150, 500, 1000, 1600, 2300, 3100, 4000, 5000];
+const MAX_XP = 6000;
+const OLD_NEED = [0, 100, 400, 1200, 3000, 7000, 15000, 30000, 60000];   // 舊制，換算用
+// 每個境界解鎖的功夫與特效（角色、裝扮一直都開放；工作工具永遠不鎖）
+const UNLOCK = ['點、拖、甩、吟詩', '腳下靈氣圈、來追我', '金丹微光、御劍飛行', '壁虎遊牆功、元嬰小分身',
+  '雙擊出招', '畫圈縮地成寸', '召喚同門', '腳踏祥雲、大乘語錄', '天雷閃避'];
+const ABILITY = { chase: 1, roll: 2, climb: 3, strike: 4, blink: 5, companion: 6, thunder: 8 };
+function realm() { return realmOf(cfg.xp); }
+function can(a) { return realm() >= ABILITY[a]; }
+function lockLabel(label, a) { return can(a) ? label : `${label}（${REALMS[ABILITY[a]]}解鎖）`; }
 let pending = false, lastPill = 0, lastSave = 0;
 function realmOf(xp) { let i = 0; while (i + 1 < NEED.length && xp >= NEED[i + 1]) i++; return i; }
+function isDone() { return cfg.xp >= MAX_XP; }
 function realmText() {
   const i = realmOf(cfg.xp);
-  return i + 1 < NEED.length ? `${REALMS[i]}期（${Math.floor(cfg.xp)}／${NEED[i + 1]}）` : `${REALMS[i]}期（圓滿）`;
+  if (isDone()) return '渡劫圓滿';
+  return `${REALMS[i]}期（${Math.floor(cfg.xp)}／${i + 1 < NEED.length ? NEED[i + 1] : MAX_XP}）`;
 }
 function gain(n) {
-  const before = realmOf(cfg.xp);
-  cfg.xp += n;
-  if (realmOf(cfg.xp) > before) pending = true;
+  const before = realmOf(cfg.xp), wasDone = isDone();
+  cfg.xp = Math.min(MAX_XP, cfg.xp + n);
+  if (realmOf(cfg.xp) > before || (!wasDone && isDone())) pending = true;
   if (now() - lastSave > 30000) { lastSave = now(); saveCfg(); }
   if (tray) tray.setToolTip('桌面靈寵｜' + realmText());
+  pushState();
+}
+// 今天的次數（摸頭上限、靈丹三顆、早上寫三件事的獎勵）
+function daily() {
+  if (!cfg.daily || cfg.daily.date !== today()) cfg.daily = { date: today(), clicks: 0, pills: 0, wrote: false, min: 0 };
+  return cfg.daily;
+}
+function stat(key, n) {
+  cfg.stats = cfg.stats || {};
+  cfg.stats[key] = (cfg.stats[key] || 0) + (n || 1);
+  const d = today();
+  if (cfg.stats.lastDay !== d) { cfg.stats.lastDay = d; cfg.stats.days = (cfg.stats.days || 0) + 1; }
+}
+function touchGain() {   // 摸頭、點牠：每次 +1，每天最多 30
+  const d = daily();
+  if (d.clicks < 30) { d.clicks += 1; gain(1); }
 }
 
 // ---- 行為 ----
@@ -220,7 +269,7 @@ function decide() {
   if (r < 0.45) { dir = Math.random() < 0.5 ? -1 : 1; return set('walk', rnd(2000, 6000)); }
   if (r < 0.52) return set('sleep', rnd(15000, 40000));
   if (r < 0.60) return startPeek();
-  if (r < 0.68 && near) return startChase();
+  if (r < 0.68 && near && can('chase')) return startChase();
   if (r < 0.69) { say(Math.random() < 0.5 ? CHAT[Math.floor(Math.random() * CHAT.length)] : Q.pick(Q.CHEER)); }
   else if (r < 0.72) encourage();
   else if (r < 0.75) recite();
@@ -232,8 +281,125 @@ function startPeek() {
   dir = pos.x - l.xmin < l.xmax - pos.x ? -1 : 1;
   set('peekout', 15000);
 }
-const KUNGFU = ['leap', 'hover', 'land', 'climb', 'hang'];   // 輕功動作（都在空中，自己處理位置）
+const KUNGFU = ['leap', 'hover', 'land', 'climb', 'hang', 'vanish', 'appear'];   // 輕功動作（都在空中，自己處理位置）
 const BUSY = ['drag', 'fall', 'tribulation', 'roll', ...KUNGFU];
+
+// ---- 雙擊出招（化神）
+let strikeMove = '', lastClickAt = 0;
+const MOVES = { palm: '降龍十八掌！', circle: '太極生兩儀～', bell: '金鐘罩！', flick: '彈指神通！' };
+function startStrike() {
+  const keys = Object.keys(MOVES);
+  strikeMove = keys[Math.floor(Math.random() * keys.length)];
+  stat('strikes'); lastTouch = now();
+  set('strike', 1700); say(MOVES[strikeMove], true);
+}
+
+// ---- 畫圈縮地成寸（煉虛）：游標連畫三圈，牠消失、出現在圈的中心
+let loopPts = [], lastLoop = 0, blinkTo = null;
+function watchLoop(cur, t) {
+  const last = loopPts[loopPts.length - 1];
+  if (!last || Math.hypot(cur.x - last.x, cur.y - last.y) >= 4) loopPts.push({ x: cur.x, y: cur.y, t });
+  loopPts = loopPts.filter((p) => t - p.t < 3000);
+  if (loopPts.length < 12 || t - lastLoop < 6000 || !can('blink')) return;
+  let turn = 0;
+  for (let i = 2; i < loopPts.length; i++) {
+    const a = loopPts[i - 2], b = loopPts[i - 1], c = loopPts[i];
+    const a1 = Math.atan2(b.y - a.y, b.x - a.x), a2 = Math.atan2(c.y - b.y, c.x - b.x);
+    let d = a2 - a1; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    turn += d;
+  }
+  const xs = loopPts.map((p) => p.x), ys = loopPts.map((p) => p.y);
+  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  if (Math.abs(turn) < Math.PI * 2 * 2.7 || size < 40 || size > 600) return;
+  lastLoop = t;
+  const cx = xs.reduce((a, b) => a + b, 0) / xs.length, cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+  loopPts = [];
+  if (BUSY.includes(state) || ['vanish', 'appear'].includes(state)) return;
+  blinkTo = { x: cx, y: cy };
+  lastTouch = t; say('縮地成寸！', true);
+  set('vanish', 380);
+}
+
+// ---- 天雷閃避（渡劫）：天雷先亮光預告，點牠就閃開
+let nextThunder = Date.now() + 5 * 60000;
+function checkThunder(idle) {
+  if (!can('thunder') || isDone() || idle >= 60 || Date.now() < nextThunder) return;
+  if (!healthFree() || ['sleep', 'warn', 'struck'].includes(state)) return;
+  nextThunder = Date.now() + rnd(8, 15) * 60000;
+  lastHealth = Date.now() - 60000;
+  set('warn', 3000); say('天雷將至！點我閃開！', true);
+}
+function dodgeThunder() {
+  const l = limits(), k = cfg.scale;
+  stat('dodges'); gain(20);
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const x1 = Math.max(l.xmin, Math.min(l.xmax, pos.x + side * 170 * k));
+  dir = side;
+  leap = { x0: pos.x, y0: pos.y, x1, y1: l.ground, t0: now(), dur: 520, after: '閃過了！修為 +20' };
+  set('leap', 520);
+}
+
+// ---- 召喚同門（合體）：多一隻跟在旁邊的靈寵
+let comp = null;
+const COMP_STATES = ['sleep', 'taichi', 'drink', 'gaze', 'happy', 'fireworks', 'dizzy', 'startle'];
+function compSpecies() {
+  const all = ['cat', 'fox', 'rabbit', 'panda', 'dragon'];
+  return all.includes(cfg.compSpecies) && cfg.compSpecies !== cfg.species ? cfg.compSpecies : all.find((s) => s !== cfg.species);
+}
+function compSend(ch, arg) { if (comp && !comp.win.isDestroyed()) comp.win.webContents.send(ch, arg); }
+function compPush() {
+  if (!comp) return;
+  compSend('state', { state: comp.state, dir: comp.dir, outfit: { species: compSpecies(), hat: 'none', robe: cfg.robe === 'yuebai' ? 'qing' : 'yuebai', gear: 'none', realm: Math.min(realm(), 2) } });
+}
+function compSet(s) { if (comp && comp.state !== s) { comp.state = s; compPush(); } }
+function openCompanion() {
+  if (comp || !can('companion')) return;
+  const w = W();
+  const cw = new BrowserWindow({
+    x: Math.round(pos.x - dir * 130 * cfg.scale), y: Math.round(pos.y), width: w, height: w,
+    transparent: true, frame: false, resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    skipTaskbar: true, hasShadow: false, show: false, focusable: false, backgroundColor: '#00000000',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  comp = { win: cw, pos: { x: pos.x - dir * 130 * cfg.scale, y: pos.y }, prev: null, state: 'idle', dir, said: 0 };
+  cw.setAlwaysOnTop(cfg.top, 'floating');
+  cw.setIgnoreMouseEvents(true, { forward: true });
+  cw.loadFile('pet.html');
+  cw.once('ready-to-show', () => { cw.showInactive(); compPush(); compSend('say', '師兄好！'); });
+  cw.on('closed', () => { comp = null; });
+  cfg.companion = true; saveCfg();
+  say('同門來了！', true);
+}
+function closeCompanion() {
+  if (comp) { compSend('say', '師兄再見～'); const w = comp.win; setTimeout(() => { if (!w.isDestroyed()) w.close(); }, 1200); }
+  cfg.companion = false; saveCfg();
+}
+function compTick(l, k) {   // 跟在靈寵後面走；靈寵在做的事，同門也跟著做
+  if (!comp || comp.win.isDestroyed()) return;
+  comp.prev = { x: comp.pos.x, y: comp.pos.y };
+  const tx = pos.x - dir * 130 * k, dx = tx - comp.pos.x;
+  comp.pos.y = l.ground;
+  if (Math.abs(dx) > 10 * k) {
+    const d = dx < 0 ? -1 : 1;
+    if (d !== comp.dir) { comp.dir = d; compPush(); }
+    const fast = BUSY.includes(state) || state === 'walk';
+    comp.pos.x += d * Math.min(Math.abs(dx), (fast ? 5 : 2) * k);
+    compSet('walk');
+  } else {
+    if (comp.dir !== dir) { comp.dir = dir; compPush(); }
+    compSet(state === 'strike' ? 'happy' : COMP_STATES.includes(state) ? state : 'idle');
+  }
+  if (Date.now() - comp.said > 90000 && Math.random() < 0.004) {   // 偶爾聊兩句
+    comp.said = Date.now();
+    compSend('say', Q.pick(['師兄等等我', '今天也一起修煉', '師兄好厲害', '我也要御劍！', '一起加油！']));
+  }
+}
+function compPlace() {
+  if (!comp || comp.win.isDestroyed()) return;
+  const a = Math.min(1, (Date.now() - tickAt) / TICK), p = comp.prev || comp.pos;
+  const w = W();
+  comp.win.setBounds({ x: Math.round(p.x + (comp.pos.x - p.x) * a), y: Math.round(p.y + (comp.pos.y - p.y) * a), width: w, height: w });
+}
 
 // ---- 甩動滑鼠：一秒內左右甩四次以上，牠以為你在發劍氣
 let shakeX = null, shakeSign = 0, shakes = [], lastShake = 0;
@@ -302,7 +468,7 @@ function today() {
 }
 function todos() {
   const t = cfg.todos && cfg.todos.date === today() ? cfg.todos : { date: today(), items: [] };
-  const items = [0, 1, 2].map((i) => ({ text: String((t.items[i] || {}).text || '').slice(0, 24), done: !!(t.items[i] || {}).done }));
+  const items = [0, 1, 2].map((i) => ({ text: String((t.items[i] || {}).text || '').slice(0, 24), done: !!(t.items[i] || {}).done, paid: !!(t.items[i] || {}).paid }));
   return { date: today(), items };
 }
 function toggleTodo(i) {
@@ -310,10 +476,13 @@ function toggleTodo(i) {
   if (!t.items[i] || !t.items[i].text) return t;
   t.items[i].done = !t.items[i].done;
   cfg.todos = t; saveCfg();
-  if (t.items[i].done && !BUSY.includes(state)) {
+  if (t.items[i].done && !t.items[i].paid) {
+    t.items[i].paid = true; cfg.todos = t; saveCfg();
     const left = t.items.filter((x) => x.text && !x.done).length;
-    if (left === 0) { gain(30); set('fireworks', 3600); sayLines(['三件都完成了！', '修為 +30', ...Q.verseLines(Q.pick(Q.VERSE))]); }
-    else { gain(10); set('happy', 1500); sayLines([Q.pick(Q.DONE), `還剩 ${left} 件，加油`]); }
+    stat('todosDone');
+    const free = !BUSY.includes(state);
+    if (left === 0) { gain(80); stat('allDone'); if (free) set('fireworks', 3600); sayLines(['三件都完成了！', '修為 +80', ...Q.verseLines(Q.pick(Q.VERSE))]); }
+    else { gain(20); if (free) set('happy', 1500); sayLines([Q.pick(Q.DONE), `修為 +20，還剩 ${left} 件`]); }
   }
   return t;
 }
@@ -325,6 +494,30 @@ function uiWindow(file, opts) {
     show: false, autoHideMenuBar: true, ...opts,
     webPreferences: { preload: path.join(__dirname, 'ui-preload.js'), contextIsolation: true, nodeIntegration: false },
   });
+}
+let recWin = null;
+function openRecords() {
+  if (recWin && !recWin.isDestroyed()) { recWin.show(); recWin.focus(); return; }
+  recWin = uiWindow('records.html', { width: 440, height: 700, resizable: false, title: '修煉紀錄', alwaysOnTop: true, icon: path.join(__dirname, 'assets', 'icon.png') });
+  recWin.loadFile(path.join(__dirname, 'records.html'));
+  recWin.once('ready-to-show', () => recWin.show());
+  recWin.on('closed', () => { recWin = null; });
+}
+function records() {
+  const r = realm(), st = cfg.stats || {};
+  return {
+    realm: r, realmName: REALMS[r], done: isDone(), xp: Math.floor(cfg.xp),
+    cur: isDone() ? MAX_XP : NEED[r], next: isDone() ? MAX_XP : (r + 1 < NEED.length ? NEED[r + 1] : MAX_XP),
+    realms: REALMS.map((name, i) => ({ name, need: NEED[i], unlock: UNLOCK[i], got: r >= i })),
+    stats: { days: st.days || 1, todayMin: daily().min, totalMin: st.totalMin || 0, todosDone: st.todosDone || 0, allDone: st.allDone || 0,
+      breaks: st.breaks || 0, gazes: st.gazes || 0, dodges: st.dodges || 0, strikes: st.strikes || 0 },
+    sources: [
+      { what: '在電腦前用（離開不算）', gain: '每分鐘 +1' }, { what: '劃掉一件事', gain: '+20；三件全成再 +60' },
+      { what: '起身休息後回來', gain: '+15' }, { what: '護眼看完 20 秒', gain: '+5' }, { what: '每天第一次寫好三件事', gain: '+10' },
+      { what: '摸頭、點牠', gain: '+1（每天最多 30）' }, { what: '餵靈丹', gain: '+30（每天三顆）' }, { what: '你離開時牠自己閉關', gain: '每兩分鐘 +1（最多 120）' },
+      { what: '渡劫期閃過天雷', gain: '+20（被劈到也有 +5）' },
+    ],
+  };
 }
 function openNotes() {
   if (noteWin && !noteWin.isDestroyed()) { noteWin.show(); noteWin.focus(); return; }
@@ -348,9 +541,9 @@ function openScroll(toggle) {
   scrollWin.on('closed', () => { scrollWin = null; });
 }
 function refreshUi() {
-  for (const w of [noteWin, scrollWin]) if (w && !w.isDestroyed()) w.webContents.send('ui-refresh');
+  for (const w of [noteWin, scrollWin, recWin]) if (w && !w.isDestroyed()) w.webContents.send('ui-refresh');
 }
-ipcMain.handle('ui-get', () => ({ notes: cfg.notes, todos: todos() }));
+ipcMain.handle('ui-get', () => ({ notes: cfg.notes, todos: todos(), records: records() }));
 ipcMain.handle('ui-notes', (_e, notes) => {
   if (!Array.isArray(notes)) return cfg.notes;
   cfg.notes = notes.filter((n) => n && typeof n.text === 'string' && n.text.trim() && Number.isFinite(n.at)).slice(0, 50)
@@ -359,8 +552,14 @@ ipcMain.handle('ui-notes', (_e, notes) => {
   return cfg.notes;
 });
 ipcMain.handle('ui-todos', (_e, t) => {
-  const items = [0, 1, 2].map((i) => ({ text: String(((t && t.items) || [])[i]?.text || '').trim().slice(0, 24), done: !!((t && t.items) || [])[i]?.done }));
+  const old = todos().items;
+  const items = [0, 1, 2].map((i) => {
+    const text = String(((t && t.items) || [])[i]?.text || '').trim().slice(0, 24);
+    const same = old[i] && old[i].text === text;   // 內容沒改：保留已領過獎勵的紀錄
+    return { text, done: !!((t && t.items) || [])[i]?.done, paid: same ? old[i].paid : false };
+  });
   cfg.todos = { date: today(), items }; saveCfg(); refreshUi();
+  if (items.some((x) => x.text) && !daily().wrote) { daily().wrote = true; gain(10); }   // 每天第一次寫好三件事 +10
   if (items.some((x) => x.text) && !BUSY.includes(state)) { set('happy', 1200); say('好，我幫你記著！', true); }
   return todos();
 });
@@ -392,8 +591,9 @@ function nextLeap() {   // 朝游標跳一大步：落點在游標旁邊，一�
 function feed() {
   lastTouch = now();
   if (['drag', 'fall', 'tribulation'].includes(state)) return;
+  if (daily().pills >= 3) return say('今天的三顆靈丹吃完了，明天再來', true);
   if (now() - lastPill < 30000) return say('丹毒未消，等等再吃', true);
-  lastPill = now();
+  lastPill = now(); daily().pills += 1;
   set('eat', 3200);
 }
 
@@ -404,6 +604,7 @@ function tick() {
   tickN++;
   prevPos = { x: pos.x, y: pos.y };
   watchShake(cur, t);
+  watchLoop(cur, t);
 
   if (state === 'drag') {
     if (lastCur) {
@@ -433,14 +634,23 @@ function tick() {
       if (!leap.after) pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));   // 從牆頂翻下來時起點在螢幕外，不要夾住
       if (p >= 1) {
         const near = Math.hypot(cur.x - (pos.x + 100 * k), cur.y - (pos.y + 124 * k)) < 120 * k;
-        if (leap.after) { set('happy', 1500); say(['倒掛金鉤，帥吧！', '輕功了得吧？'][Math.floor(Math.random() * 2)]); }   // 從牆上翻下來落地
+        if (leap.after) { set('happy', 1500); say(typeof leap.after === 'string' ? leap.after : ['倒掛金鉤，帥吧！', '輕功了得吧？'][Math.floor(Math.random() * 2)], true); }   // 從牆上翻下來、閃過天雷
         else if (deliver && (near || t > chaseUntil)) { landAfter = true; readNote(); set('hover', 900); }
-        else if (near) { landAfter = true; gain(3); say(['抓到道友了！', '承讓承讓～', '身法如何？'][Math.floor(Math.random() * 3)]); set('hover', 900); }
+        else if (near) { landAfter = true; touchGain(); say(['抓到道友了！', '承讓承讓～', '身法如何？'][Math.floor(Math.random() * 3)]); set('hover', 900); }
         else if (t > chaseUntil) { landAfter = true; say('靈力耗盡…'); set('hover', 400); }
         else set('hover', 140);   // 踏空，借力再跳
       }
     } else if (state === 'hover') {
       if (t > until) { if (landAfter) set('land'); else nextLeap(); }
+    } else if (state === 'vanish') {   // 縮成一點不見，再出現在圈的中心
+      if (t > until && blinkTo) {
+        pos.x = Math.max(l.xmin, Math.min(l.xmax, blinkTo.x - 100 * k));
+        pos.y = Math.max(l.ymin, Math.min(l.ground, blinkTo.y - 124 * k));
+        prevPos = { x: pos.x, y: pos.y };   // 瞬移：不要補間滑過去
+        blinkTo = null; set('appear', 650);
+      }
+    } else if (state === 'appear') {
+      if (t > until) { landAfter = true; set('hover', 300); }
     } else if (state === 'climb') {   // 貼著牆往上爬
       const a = area();
       pos.y -= 2.2 * k;
@@ -471,7 +681,6 @@ function tick() {
     pos.x = Math.max(l.xmin, Math.min(l.xmax, pos.x));
     pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));
     if (t > until && pos.y >= l.ground - 1) { pos.y = l.ground; set('idle', 1500); say('收劍！'); }
-    if (tickN % 30 === 0) gain(0.1);
   } else {
     // 地面上的狀態：螢幕配置改變時落回地面
     if (pos.y < l.ground - 2) { vel = { x: 0, y: 0 }; maxSpeed = 0; bounces = 0; set('fall'); }
@@ -479,8 +688,8 @@ function tick() {
 
     if (state === 'walk') {
       pos.x += dir * 1.6 * k;
-      if (pos.x <= l.xmin && dir < 0) { if (Math.random() < 0.35) startClimb(-1); else dir = 1, pushState(); }
-      else if (pos.x >= l.xmax && dir > 0) { if (Math.random() < 0.35) startClimb(1); else dir = -1, pushState(); }
+      if (pos.x <= l.xmin && dir < 0) { if (can('climb') && Math.random() < 0.35) startClimb(-1); else dir = 1, pushState(); }
+      else if (pos.x >= l.xmax && dir > 0) { if (can('climb') && Math.random() < 0.35) startClimb(1); else dir = -1, pushState(); }
     } else if (state === 'peekout') {
       const target = dir < 0 ? l.xmin - 46 * k : l.xmax + 46 * k;
       pos.x += dir * 2 * k;
@@ -489,24 +698,31 @@ function tick() {
       }
     }
 
-    // 修為：平時緩慢累積，打坐時加速
-    if (tickN % 30 === 0) gain(state === 'sleep' ? 1 : 0.1);
     if (pending && ['idle', 'walk', 'sleep'].includes(state)) {
       pending = false; set('tribulation', 3300); say('天劫將至！', true);
     }
 
     if (t > until) {
       if (state === 'eat') { set('happy', 1500); say('修為 +30'); gain(30); }
-      else if (state === 'tribulation') { saveCfg(); set('happy', 1800); sayLines([`突破！${REALMS[realmOf(cfg.xp)]}期`, ...Q.verseLines(Q.pick(Q.VERSE))]); }
+      else if (state === 'tribulation') {
+        saveCfg(); set('happy', 1800);
+        if (isDone()) sayLines(['渡劫圓滿！', '道友與本座，功德圓滿', ...Q.verseLines(Q.pick(Q.VERSE))]);
+        else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...Q.verseLines(Q.pick(Q.VERSE))]);
+        refreshUi();
+      }
       else if (state === 'peek') { set('walk', 2500); }
+      else if (state === 'warn') { gain(5); set('struck', 1100); say('被劈了一下…修為 +5', true); }
+      else if (state === 'struck') { set('dizzy', 1800); }
       else decide();
     }
   }
+  compTick(l, k);
   tickAt = Date.now();
-  if (Date.now() - lastFrameMsg > 200) place();   // 畫面端沒在要（例如被系統暫停）時，照舊每次移動
+  if (Date.now() - lastFrameMsg > 200) { place(); compPlace(); }   // 畫面端沒在要（例如被系統暫停）時，照舊每次移動
 
   // 游標在視窗裡的位置（畫面座標）：角色自己走到靜止的游標底下時，畫面端靠這個判斷要不要接住滑鼠
   send('cursor-at', { x: cur.x - Math.round(pos.x), y: cur.y - Math.round(pos.y) });
+  if (comp) compSend('cursor-at', { x: cur.x - Math.round(comp.pos.x), y: cur.y - Math.round(comp.pos.y) });
   if (tickN % 3 === 0) {
     send('cursor', { x: (cur.x - (pos.x + W() / 2)) / k, y: (cur.y - (pos.y + W() * 0.75)) / k });
   }
@@ -519,14 +735,18 @@ function onClick() {
   const t = now();
   lastTouch = t;
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
-  if (['fall', 'drag', 'tribulation'].includes(state)) return;
+  if (['fall', 'drag', 'tribulation', 'struck', 'vanish', 'appear'].includes(state)) return;
+  if (state === 'warn') { clicks = []; return dodgeThunder(); }
+  const dbl = t - lastClickAt < 380; lastClickAt = t;
+  if (dbl && can('strike') && !BUSY.includes(state) && !['sleep', 'taichi', 'drink', 'gaze', 'strike'].includes(state)) { clicks = []; return startStrike(); }
+  if (state === 'strike') return;
   if (state === 'taichi') { say('別偷懶，一起動！'); return; }
   if (state === 'drink' || state === 'gaze') { say(state === 'drink' ? '咕嚕咕嚕～' : '看遠一點～'); return; }   // 打拳中被點：繼續打
   if (state === 'climb' || state === 'hang') { say('別吵，練功中！'); return; }
-  if (state === 'roll' || KUNGFU.includes(state)) { gain(2); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
+  if (state === 'roll' || KUNGFU.includes(state)) { touchGain(); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
   if (clicks.length >= 5) { clicks = []; set('dizzy', 2600); say('道心不穩啦～'); return; }
-  gain(2);
+  touchGain();
   set('happy', 1500);
 }
 function onDragStart() {
@@ -548,6 +768,7 @@ function onDragEnd() {
 }
 function onRoll(d) {
   if (['drag', 'fall', 'dizzy', 'tribulation', 'eat', ...KUNGFU].includes(state)) return;
+  if (!can('roll')) return say(`御劍要到${REALMS[ABILITY.roll]}才會喔`);
   lastTouch = now();
   if (state !== 'roll') say('御劍追你！');
   set('roll', 10000);   // 追著游標飛十秒；再滾一次滾輪就再延長
@@ -585,11 +806,20 @@ function menu() {
   const login = app.getLoginItemSettings().openAtLogin;
   return Menu.buildFromTemplate([
     { label: '境界：' + realmText(), enabled: false },
+    { label: '修煉紀錄…', click: openRecords },
+    can('companion')
+      ? { label: comp ? '請同門回去' : '召喚同門', click: () => (comp ? closeCompanion() : openCompanion()) }
+      : { label: lockLabel('召喚同門', 'companion'), enabled: false },
+    {
+      label: '同門的角色', visible: can('companion'), submenu: SPECIES.filter(([v]) => v !== cfg.species).map(([v, name]) => ({
+        label: name, type: 'radio', checked: compSpecies() === v, click: () => { cfg.compSpecies = v; saveCfg(); compPush(); },
+      })),
+    },
     { type: 'separator' },
-    { label: '餵靈丹（修為 +30）', click: feed },
+    { label: `餵靈丹（修為 +30，今天還有 ${3 - daily().pills} 顆）`, click: feed },
     { label: '打坐修煉', click: () => set('sleep', 120000) },
-    { label: '御劍飛行', click: () => onRoll(dir) },
-    { label: '來追我', click: () => { lastTouch = now(); startChase(); } },
+    { label: lockLabel('御劍飛行', 'roll'), enabled: can('roll'), click: () => onRoll(dir) },
+    { label: lockLabel('來追我', 'chase'), enabled: can('chase'), click: () => { lastTouch = now(); startChase(); } },
     { label: '躲貓貓', click: () => { lastTouch = now(); startPeek(); } },
     { label: '吟詩一首', click: () => recite(true) },
     { label: '勉勵我一句', click: () => encourage(true) },
@@ -662,10 +892,15 @@ function create() {
     setInterval(tick, TICK);
     setInterval(checkStretch, 10000);
     setInterval(checkNotes, 5000);
+    if (cfg.companion && can('companion')) setTimeout(openCompanion, 2500);
     if (todos().items.some((x) => x.text)) openScroll();
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
-    if (demo === 'drink') setTimeout(startDrink, 2500);
+    if (demo === 'strike') setInterval(() => { if (!BUSY.includes(state)) startStrike(); }, 2600);
+    else if (demo === 'thunder') setTimeout(() => { set('warn', 3000); say('天雷將至！點我閃開！', true); }, 2500);
+    else if (demo === 'companion') setTimeout(openCompanion, 2000);
+    else if (demo === 'records') openRecords();
+    else if (demo === 'drink') setTimeout(startDrink, 2500);
     else if (demo === 'gaze') setTimeout(startGaze, 2500);
     else if (demo === 'ui') { openNotes(); openScroll(); }
     else if (demo === 'todo') {   // 寫兩件事、三秒後劃掉一件、七秒後劃掉另一件（應該放煙火）
@@ -679,7 +914,7 @@ function create() {
     else if (demo === 'stretch') sitSince = Date.now() - cfg.stretch * 60000;   // 假裝已經坐滿時間，下一次檢查就提醒
     else if (demo) setTimeout(() => (demo === 'roll' ? onRoll(1) : startChase()), 2000);
   });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => { win = null; if (comp && !comp.win.isDestroyed()) comp.win.close(); });
 
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png'));
   if (!icon.isEmpty()) {
@@ -690,14 +925,19 @@ function create() {
   }
 }
 
-ipcMain.on('hit', (_e, h) => {
+ipcMain.on('hit', (e, h) => {
+  if (fromComp(e)) { if (FORWARD) comp.win.setIgnoreMouseEvents(!h, { forward: true }); return; }
   if (!win || state === 'drag' || !FORWARD) return;
   win.setIgnoreMouseEvents(!h, { forward: true });
 });
-ipcMain.on('click', onClick);
-ipcMain.on('drag-start', onDragStart);
-ipcMain.on('drag-end', onDragEnd);
-ipcMain.on('roll', (_e, d) => onRoll(d));
+ipcMain.on('click', (e) => {
+  if (!fromComp(e)) return onClick();
+  touchGain(); compSet('happy'); setTimeout(() => compSet('idle'), 1400);   // 點同門：牠開心一下
+  compSend('say', Q.pick(['嘿嘿～', '師兄你看！', '修為 +1']));
+});
+ipcMain.on('drag-start', (e) => { if (!fromComp(e)) onDragStart(); });
+ipcMain.on('drag-end', (e) => { if (!fromComp(e)) onDragEnd(); });
+ipcMain.on('roll', (e, d) => { if (!fromComp(e)) onRoll(d); });
 ipcMain.on('menu', () => { if (win) menu().popup({ window: win }); });
 
 if (!app.requestSingleInstanceLock()) {

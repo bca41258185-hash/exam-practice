@@ -28,6 +28,7 @@
       "draw.js",
       "note.html",
       "scroll.html",
+      "records.html",
       "assets/**"
     ],
     "directories": {
