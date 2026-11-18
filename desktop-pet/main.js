@@ -1,5 +1,5 @@
 // 桌面寵物主程序：視窗、位置物理、行為狀態機、選單。
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell, powerMonitor } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const POEMS = require('./poems');
@@ -9,7 +9,7 @@ const TICK = 33;            // 毫秒
 const FORWARD = process.platform !== 'linux'; // 點擊穿透的滑鼠轉送只有 Windows / macOS 支援
 
 let win, tray;
-let cfg = { scale: 1, top: true, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
+let cfg = { scale: 1, top: true, stretch: 50, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
 
 // 裝扮的選項：[設定值, 選單上的名字]
 const SPECIES = [['cat', '靈貓'], ['fox', '狐仙'], ['rabbit', '玉兔'], ['panda', '熊貓'], ['dragon', '小青龍']];
@@ -25,6 +25,7 @@ const cfgFile = () => path.join(app.getPath('userData'), 'settings.json');
 function loadCfg() {
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { /* 首次啟動 */ }
   if (![0.75, 1, 1.5].includes(cfg.scale)) cfg.scale = 1;
+  if (!STRETCH.includes(cfg.stretch)) cfg.stretch = 50;
   if (cfg.helmet === true && cfg.hat === 'none') cfg.hat = 'douli';   // 舊版的「戴斗笠」
   delete cfg.helmet;
   for (const [key, list] of [['species', SPECIES], ['hat', HATS], ['robe', ROBES], ['gear', GEARS]]) {
@@ -67,13 +68,47 @@ function recite(force) {
   lastPoem = i;
   const p = POEMS[i], m = p.by.match(/^(.*?)(《.*》)$/);
   const tail = p.by.length <= 10 || !m ? ['——' + p.by] : ['——' + m[1], m[2]];   // 出處太長就分兩次說
-  const parts = [...p.lines, ...tail];
+  sayLines([...p.lines, ...tail]);
+}
+function sayLines(parts, gap) {   // 泡泡一次一行，依序說完；其他話插進來就停
+  stopPoem();
   let k = 0;
   (function next() {
     send('say', parts[k]);
     k += 1;
-    poemTimer = k < parts.length ? setTimeout(next, 2600) : null;
+    poemTimer = k < parts.length ? setTimeout(next, gap || 2600) : null;
   })();
+}
+
+// ---- 起身活動提醒：用滑鼠鍵盤多久沒動來判斷你是不是一直坐著
+const STRETCH = [0, 30, 45, 50, 60];   // 分鐘；0 是關掉
+const BREAK_SEC = 180;                 // 滑鼠鍵盤停超過三分鐘，就算你起來休息過了
+let sitSince = Date.now(), lastRemind = 0, reminded = false, praise = false;
+function sittingMinutes() { return Math.floor((Date.now() - sitSince) / 60000); }
+function startTaichi(mins) {
+  if (['drag', 'fall', 'tribulation', 'roll', ...KUNGFU].includes(state)) return false;
+  lastTouch = now();
+  set('taichi', 15000);
+  sayLines([mins ? `坐了 ${mins} 分鐘了！` : '來打一套太極！', '起來跟我動一動～', '吸氣……', '吐氣……', '轉轉脖子、伸伸腰', '看看遠方，讓眼睛歇歇'], 2500);
+  return true;
+}
+function checkStretch() {
+  let idle = 0;
+  try { idle = powerMonitor.getSystemIdleTime(); } catch { return; }
+  if (idle >= BREAK_SEC) {   // 你離開座位了：重新計時；如果是被提醒之後才去休息，回來時誇你
+    if (reminded) praise = true;
+    sitSince = Date.now(); reminded = false;
+    return;
+  }
+  if (praise && idle < 5 && !['drag', 'fall', 'tribulation'].includes(state)) {
+    praise = false; gain(10); set('happy', 1600); say('休息得好！修為 +10', true);
+    return;
+  }
+  if (!cfg.stretch) return;
+  const mins = sittingMinutes();
+  if (mins >= cfg.stretch && Date.now() - lastRemind > 10 * 60000) {   // 沒起來的話，十分鐘後再提醒一次
+    if (startTaichi(mins)) { lastRemind = Date.now(); reminded = true; }
+  }
 }
 function set(s, ms) { state = s; until = now() + (ms || 0); phase = 0; pushState(); }
 function place() {
@@ -261,6 +296,7 @@ function onClick() {
   lastTouch = t;
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
   if (['fall', 'drag', 'tribulation'].includes(state)) return;
+  if (state === 'taichi') { say('別偷懶，一起動！'); return; }   // 打拳中被點：繼續打
   if (state === 'roll' || KUNGFU.includes(state)) { gain(2); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
   if (clicks.length >= 5) { clicks = []; set('dizzy', 2600); say('道心不穩啦～'); return; }
@@ -352,6 +388,17 @@ function menu() {
     },
     { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
+    {
+      label: '起身活動提醒', submenu: [
+        ...STRETCH.map((m) => ({
+          label: m ? `每坐 ${m} 分鐘提醒` : '關閉', type: 'radio', checked: cfg.stretch === m,
+          click: () => { cfg.stretch = m; saveCfg(); sitSince = Date.now(); say(m ? `好，每 ${m} 分鐘叫你起來` : '不提醒了，記得自己動動', true); },
+        })),
+        { type: 'separator' },
+        { label: `已經坐了 ${sittingMinutes()} 分鐘`, enabled: false },
+        { label: '現在就打一套太極', click: () => startTaichi(0) },
+      ],
+    },
     { label: '開機自動啟動', type: 'checkbox', checked: login, visible: process.platform !== 'linux', click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },
     { type: 'separator' },
     { label: '解除安裝…', visible: !!uninstaller(), click: uninstall },
@@ -378,9 +425,11 @@ function create() {
     set('idle', 2500);
     setTimeout(() => say(greeting()), 600);
     setInterval(tick, TICK);
+    setInterval(checkStretch, 10000);
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
-    if (demo) setTimeout(() => (demo === 'roll' ? onRoll(1) : startChase()), 2000);
+    if (demo === 'stretch') sitSince = Date.now() - cfg.stretch * 60000;   // 假裝已經坐滿時間，下一次檢查就提醒
+    else if (demo) setTimeout(() => (demo === 'roll' ? onRoll(1) : startChase()), 2000);
   });
   win.on('closed', () => { win = null; });
 

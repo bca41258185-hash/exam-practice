@@ -275,6 +275,7 @@
     const zap = trib && st < 2.3 && (st * 8 % 2) < 1.1;
     const flip = state === 'leap';                          // 輕功：空中翻筋斗
     const float = state === 'hover' || state === 'land';    // 踏空、飄落
+    const taichi = state === 'taichi';                      // 打太極
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
     if (state === 'idle' || state === 'peek' || state === 'eat') sy = 1 + 0.02 * Math.sin(t * 2.4);
@@ -289,12 +290,24 @@
     if (state === 'peek') rot = -0.13;
     if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
     if (float) { lift = 6 + Math.sin(t * 6) * 2; }
+    if (taichi) { rot = Math.sin(t * 1.4) * 0.16; sy = 1 + Math.sin(t * 2.8) * 0.03; lift = 2 + Math.max(0, Math.sin(t * 1.4)) * 3; }
 
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     // 影子
     if (!air && !flip && !float) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
+    if (taichi) {
+      ctx.save(); ctx.translate(100, 186 - lift - 94 + Math.sin(t * 2) * 3); ctx.rotate(t * 1.6); ctx.globalAlpha = 0.95;
+      const R = 15;
+      ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2E3A3A'; ctx.beginPath(); ctx.arc(0, 0, R, -Math.PI / 2, Math.PI / 2);
+      ctx.arc(0, R / 2, R / 2, Math.PI / 2, Math.PI * 1.5); ctx.arc(0, -R / 2, R / 2, Math.PI / 2, -Math.PI / 2, true); ctx.fill();
+      ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(0, R / 2, R / 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2E3A3A'; ctx.beginPath(); ctx.arc(0, -R / 2, R / 7, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
     if (float) {   // 腳下一朵小雲，踏著借力
       ctx.save(); ctx.globalAlpha = 0.9; ctx.lineWidth = 2;
       ellipse(ctx, 86, 186, 14, 6, '#F3F7F2', C.qi); ellipse(ctx, 114, 186, 14, 6, '#F3F7F2', C.qi); ellipse(ctx, 100, 183, 16, 8, '#F3F7F2', C.qi);
@@ -380,7 +393,7 @@
     const blink = (t % 4.2) < 0.14;
     ctx.fillStyle = C.line; ctx.lineWidth = 2.6;
     const eye = (x) => {
-      if (med || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
+      if (med || taichi || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey); ctx.quadraticCurveTo(x, ey + (med ? 4 : 0), x + 5, ey); ctx.stroke();
       } else if (flip) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey - 3); ctx.lineTo(x + 1, ey); ctx.lineTo(x - 5, ey + 3); ctx.stroke();
@@ -438,6 +451,12 @@
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const top = 186 - lift - (TALL_HATS.includes(hat) || sp.ears === 'rabbit' ? 92 : 76) * sy;
+    if (taichi) {
+      for (let i = 0; i < 2; i++) {
+        const a = t * 1.4 + i * Math.PI;
+        spark(ctx, 100 + Math.cos(a) * 58, 132 + Math.sin(a) * 50, 5, 0.9, i ? C.gold : C.qi);
+      }
+    }
     if (flip) {
       ctx.lineWidth = 3; ctx.strokeStyle = C.qi;
       for (let i = 0; i < 3; i++) {
