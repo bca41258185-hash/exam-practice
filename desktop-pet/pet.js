@@ -19,6 +19,8 @@ pet.onState((s) => {
   S = s;
 });
 pet.onCursor((c) => { look = c; });
+let cursorAt = null;   // 游標在視窗裡的位置（主程序每格送來），滑鼠沒動時也知道
+pet.onCursorAt((c) => { cursorAt = c; });
 pet.onSay((text) => { bubble = { text, start: performance.now() }; });
 
 let last = 0;
@@ -35,12 +37,18 @@ function frame(now) {
     t: now / 1000, st: (now - stStart) / 1000,
     bubble: bubble && { text: bubble.text, age: (now - bubble.start) / 1000 },
   });
+  // 滑鼠不動、角色自己走到游標底下（或走開）時不會有 mousemove，所以每格用游標位置再判斷一次
+  if (!down && cursorAt) {
+    const h = opaqueXY(cursorAt.x, cursorAt.y);
+    if (h !== hit) { hit = h; pet.send('hit', h); }
+  }
 }
 requestAnimationFrame(frame);
 
 // 只有游標在角色的不透明像素上才攔截滑鼠，其餘區域點擊會穿透到桌面。
-function opaqueAt(e) {
-  const x = Math.round(e.clientX * devicePixelRatio), y = Math.round(e.clientY * devicePixelRatio);
+function opaqueAt(e) { return opaqueXY(e.clientX, e.clientY); }
+function opaqueXY(cx, cy) {
+  const x = Math.round(cx * devicePixelRatio), y = Math.round(cy * devicePixelRatio);
   if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) return false;
   return ctx.getImageData(x, y, 1, 1).data[3] > 20;
 }
