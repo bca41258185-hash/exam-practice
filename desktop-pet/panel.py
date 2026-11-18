@@ -638,12 +638,67 @@ def _guess_project(repo: str, candidates: list[str]) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+_FOCUS = {"thread": "", "at": 0.0, "seen": 0.0}   # 桌面史萊姆請面板跳到哪段對話；seen 是面板上次來問的時間
+
+
+def focus_thread(thread_id: str) -> bool:
+    """請已經開著的面板跳到這段對話。回傳 False 表示面板沒開（最近幾秒沒來問），呼叫的人要自己開面板。"""
+    _FOCUS.update(thread=thread_id, at=time.time())
+    return time.time() - _FOCUS["seen"] < 4
+
+
 _PANEL_POINTER = {"inside": False, "at": 0.0}   # 滑鼠或手指現在是不是在觸控面板上（面板回報）
 
 
 def pointer_on_panel() -> bool:
     """游標在觸控面板上時，桌面史萊姆就不跑過去（面板裡的史萊姆會去）。面板沒再回報十分鐘就當作不在。"""
     return _PANEL_POINTER["inside"] and time.time() - _PANEL_POINTER["at"] < 600
+
+
+def _find_task(thread_id: str) -> dict | None:
+    everything = ai_tasks.all_tasks()
+    return next((t for t in everything["tasks"] + everything.get("shelved", []) if t["id"] == thread_id), None)
+
+
+def mark_read(thread_id: str, read: bool) -> int:
+    """標成已讀（看到現在）或未讀（最後一則 AI 訊息又算成新的）。回傳之後的未讀數。"""
+    if read:
+        ai_tasks.set_read(thread_id, None)
+        return 0
+    task = _find_task(thread_id)
+    if not task:
+        raise ValueError("找不到這段對話")
+    last = ai_tasks.last_ai_time(task)
+    ai_tasks.set_read(thread_id, max(0.0, last - 1))
+    return 1 if last else 0
+
+
+def open_image(iid: str) -> str:
+    """用電腦的看圖程式打開對話裡的圖（桌面史萊姆用）。貼上的圖先存成檔案，放在設定資料夾的「對話圖片」裡。"""
+    ref = ai_tasks.image_ref(iid)
+    if not ref:
+        raise ValueError("這張圖已經找不到了")
+    if ref[0] == "url":
+        import webbrowser
+        webbrowser.open(ref[1])
+        return "browser"
+    if ref[0] == "file":
+        target = Path(ref[1])
+        if target.suffix.lower() not in ai_tasks.IMAGE_EXT or not target.is_file():
+            raise FileNotFoundError("這張圖已被移走或刪除")
+    else:
+        data, kind = ai_tasks.load_image(iid)
+        ext = {v: k for k, v in ai_tasks.IMAGE_EXT.items()}.get(kind, ".png")
+        folder = core.data_dir() / "對話圖片"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{iid}{ext}"
+        if not target.exists():
+            target.write_bytes(data)
+    if sys.platform == "win32":
+        os.startfile(str(target))  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(target)])
+    return "opened"
 
 
 def pet_state() -> dict:
@@ -881,7 +936,7 @@ class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body, ctype: str = "application/json") -> None:
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
         self.send_response(code)
-        self.send_header("Content-Type", ctype + "; charset=utf-8")
+        self.send_header("Content-Type", ctype if ctype.startswith("image/") else ctype + "; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -912,6 +967,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             elif url.path == "/api/pet":
                 self._send(200, pet_state())
+            elif url.path == "/api/focus":
+                _FOCUS["seen"] = time.time()
+                fresh = _FOCUS["thread"] and time.time() - _FOCUS["at"] < 20
+                self._send(200, {"thread": _FOCUS["thread"] if fresh else ""})
+                _FOCUS["thread"] = ""
+            elif url.path == "/api/image":
+                try:
+                    data, kind = ai_tasks.load_image(q.get("id", ""))
+                except (KeyError, OSError, ValueError):
+                    self._send(404, {"error": "這張圖已經找不到了（可能被移走或刪除）"})
+                    return
+                self._send(200, data, kind)
             elif url.path == "/api/projects":
                 shown = set(projects())
                 hidden = [{"path": p, "name": os.path.basename(p)} for p in projects(include_hidden=True) if p not in shown]
@@ -970,6 +1037,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise
             elif path == "/api/pet":
                 self._send(200, set_pet(body))
+            elif path == "/api/read":
+                if not isinstance(body.get("thread"), str) or not isinstance(body.get("read"), bool):
+                    raise ValueError("格式不對")
+                self._send(200, {"ok": True, "unread": mark_read(body["thread"], body["read"])})
+            elif path == "/api/open_image":
+                self._send(200, {"did": open_image(body.get("id") or "")})
             elif path == "/api/pointer":
                 _PANEL_POINTER.update(inside=body.get("inside") is True, at=time.time())
                 self._send(200, {"ok": True})

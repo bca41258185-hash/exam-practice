@@ -110,6 +110,10 @@ class Pet:
         self.arrived = None                          # 抵達後要做的事
         self.hop = 0.0                               # 跳躍動畫的進度（0 表示沒在跳）
         self.chasing = False                         # 正跟著游標跑（有事要告訴你的那段時間）
+        self.holding: dict | None = None             # 拿在手上的圖：{"task", "pic", "thumb", "big", "since"}
+        self.known_pic: dict[str, str] | None = None  # 每段對話上次看到的最新一張 AI 圖片
+        self.toss: dict | None = None                # 正丟出來給你看的圖
+        self._hold_job = None
         self.dragging = False
         self.moved = False
         self.modal = 0
@@ -182,8 +186,151 @@ class Pet:
                     self.root.after(12500, self.go_home)
                 self.run_to_pointer(tell)
         self.known = now
+        self._notice_pictures()
         if self.popup:
             self._fill_popup()
+
+    # ------------------------------------------------------------ 拿著圖片跑來
+    def _notice_pictures(self) -> None:
+        latest = {}
+        for t in self.tasks:
+            pics = [x for x in t.get("images") or [] if x.get("role") == "ai"]
+            if pics:
+                latest[t["id"]] = (t, pics[-1])
+        first = self.known_pic is None
+        before, self.known_pic = self.known_pic or {}, {k: v[1]["id"] for k, v in latest.items()}
+        if first:
+            return
+        fresh = [(t, pic) for k, (t, pic) in latest.items() if before.get(k) != pic["id"] and pic.get("ts", 0) > t.get("read_at", 0)]
+        if not fresh:
+            return
+        t, pic = max(fresh, key=lambda x: x[1].get("ts", 0))
+        self.hold_picture(t, pic)
+
+        def tell(msg=f"「{t['title'][:22]}」\n帶了一張圖給你！\n點圖：用看圖程式打開\n點我：跳到這段對話\n按住我：丟給你看"):
+            self.say(msg, seconds=12)
+            self.root.after(12500, self.go_home)
+        self.run_to_pointer(tell)
+
+    def _photo(self, pic: dict, max_w: int, max_h: int):
+        """把圖片做成 Tk 能顯示的大小。Tk 本身只看得懂 PNG、GIF；有裝 Pillow 的話其他格式也行。看不懂就回傳 None。"""
+        try:
+            data, _ = ai_tasks.load_image(pic["id"])
+        except Exception:
+            return None
+        try:
+            from PIL import Image, ImageTk  # 選用：有裝才用
+            import io
+            im = Image.open(io.BytesIO(data))
+            im.thumbnail((max_w, max_h))
+            return ImageTk.PhotoImage(im, master=self.root)
+        except Exception:
+            pass
+        try:
+            import base64
+            photo = tk.PhotoImage(master=self.root, data=base64.b64encode(data))
+        except (tk.TclError, ValueError):
+            return None
+        f = max(1, math.ceil(max(photo.width() / max_w, photo.height() / max_h)))
+        return photo.subsample(f) if f > 1 else photo
+
+    def hold_picture(self, task: dict, pic: dict) -> None:
+        k = self.size / 100
+        self.holding = {"task": task, "pic": pic, "since": time.time(),
+                        "thumb": self._photo(pic, int(58 * k), int(40 * k))}
+
+    def _pic_box(self) -> tuple[float, float, float, float]:
+        """拿著的圖在畫布上的位置（標準大小的座標）。"""
+        return W / 2 - 34, 4, W / 2 + 34, 54
+
+    def _on_picture(self, e) -> bool:
+        k = self.size / 100
+        x0, y0, x1, y1 = self._pic_box()
+        return x0 - 6 <= e.x / k <= x1 + 6 and y0 - 6 <= e.y / k <= y1 + 6
+
+    def _done_with_picture(self) -> None:
+        if self.holding:
+            ai_tasks.set_read(self.holding["task"]["id"], None)
+        self.holding = None
+        self._hide_bubble()
+        self.go_home()
+
+    def view_picture(self) -> None:
+        """點圖：用電腦的看圖程式打開。"""
+        try:
+            panel.open_image(self.holding["pic"]["id"])
+        except Exception as ex:
+            self.say(f"打不開這張圖：{ex}", seconds=6)
+            return
+        self._done_with_picture()
+
+    def jump_to_thread(self) -> None:
+        """點身體：請副螢幕面板跳到那段對話；面板沒開就幫你打開。"""
+        tid = self.holding["task"]["id"]
+        if not panel.focus_thread(tid):
+            panel.launch_browser()
+        self._done_with_picture()
+
+    def throw_picture(self) -> None:
+        """按住：把圖像道具一樣拋出來，落在螢幕中間放大。"""
+        self._hold_job = None
+        if not self.holding or self.toss:
+            return
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        big = self._photo(self.holding["pic"], int(sw * .6), int(sh * .7))
+        win = tk.Toplevel(self.root)
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.config(bg="white", padx=8, pady=8)
+        if big is not None:
+            tk.Label(win, image=big, bd=0, bg="white").pack()
+        else:   # Tk 看不懂這種格式：給一張「相框」，提醒點圖用看圖程式打開
+            tk.Label(win, text="🖼", font=(FONT, 60), bg="white").pack(padx=60, pady=(30, 0))
+            tk.Label(win, text=f"{self.holding['pic'].get('name', '圖片')}\n這種格式這裡顯示不了，\n放開後點一下圖片，用看圖程式打開",
+                     font=(FONT, 12), bg="white", justify="center").pack(padx=40, pady=(4, 30))
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        sx, sy = self.root.winfo_x() + self.w // 2, self.root.winfo_y()
+        ex, ey = (sw - w) // 2, (sh - h) // 2
+        self.toss = {"win": win, "big": big, "from": (sx - w // 2, sy - h // 2), "to": (ex, ey), "step": 0}
+        self.happy_until = time.time() + 1.2
+        self._fly(out=True)
+
+    def _fly(self, out: bool) -> None:
+        """沿著拋物線飛：丟出去往上拋再落下；撿回來時反過來。"""
+        t = self.toss
+        if not t:
+            return
+        n = 12
+        t["step"] += 1
+        p = min(1.0, t["step"] / n)
+        (ax, ay), (bx, by) = (t["from"], t["to"]) if out else (t["to"], t["from"])
+        arc = math.sin(p * math.pi) * (220 if out else 140)
+        x, y = ax + (bx - ax) * p, ay + (by - ay) * p - arc
+        t["win"].geometry(f"+{round(x)}+{round(y)}")
+        if p < 1:
+            self.root.after(22, lambda: self._fly(out))
+        elif out:
+            t["step"] = 0
+            t["landed"] = True
+            if t.get("release"):   # 還沒落地就放開了：落地後馬上撿回來
+                self.catch_picture()
+        else:
+            t["win"].destroy()
+            self.toss = None
+            self.happy_until = time.time() + .8
+
+    def catch_picture(self) -> None:
+        """放開：史萊姆把圖撿回去。"""
+        t = self.toss
+        if not t:
+            return
+        if not t.get("landed"):
+            t["release"] = True
+            return
+        t["step"] = 0
+        t["landed"] = False
+        self._fly(out=False)
 
     @property
     def mood(self) -> str:
@@ -213,6 +360,8 @@ class Pet:
         self.root.geometry(f"{self.w}x{self.h}+{nx}+{ny}")
         self._place(self.bubble)
         self._place(self.popup)
+        if self.holding:   # 手上的圖跟著換大小
+            self.hold_picture(self.holding["task"], self.holding["pic"])
         if save:
             core.set_config(pet_size=size)
 
@@ -239,10 +388,35 @@ class Pet:
 
     def _sync_config(self) -> None:
         """面板改的開關與大小，寵物這邊跟上。"""
+        if self.holding and not self.toss and time.time() - self.holding["since"] > 600:   # 拿了十分鐘沒人理：放下
+            self.holding = None
         cfg = core.load_config()
         size = cfg.get("pet_size", 100)
         self.resize(size if size in panel.PET_SIZES else 100, save=False)
         self.set_visible(cfg.get("pet_visible", True))
+
+    def _draw_picture(self, c, cx, top, bw, bh, lift, t) -> None:
+        """把圖舉在頭上：兩隻小手撐著，平常左右晃，跳的時候晃更大；丟出去時手上是空的、高興地舉手。"""
+        skin, edge = SKINS.get(self.mood, SKINS["idle"])
+        sway = (6 if self.hop else 3) * math.sin(t * (9 if self.hop else 4))
+        x0, y0, x1, y1 = self._pic_box()
+        dy = top - 52   # 圖跟著身體一起上下
+        x0, x1, y0, y1 = x0 + sway, x1 + sway, max(2, y0 + dy), max(2, y0 + dy) + (y1 - y0)
+        for side in (-1, 1):   # 小手
+            hx = cx + side * bw * .32
+            c.create_line(hx, top + bh * .3, (x0 + 10 if side < 0 else x1 - 10), y1 - 2, fill=edge, width=7, capstyle="round")
+            c.create_line(hx, top + bh * .3, (x0 + 10 if side < 0 else x1 - 10), y1 - 2, fill=skin, width=4, capstyle="round")
+        if self.toss:
+            return
+        c.create_rectangle(x0, y0, x1, y1, fill="white", outline="#c9c4b5", width=2)
+        thumb = self.holding.get("thumb")
+        if thumb is not None:
+            c.create_image((x0 + x1) / 2, (y0 + y1) / 2, image=thumb)
+        else:   # 看不懂的格式：畫一張小風景當作圖片
+            c.create_rectangle(x0 + 4, y0 + 4, x1 - 4, y1 - 4, fill="#cfe6ff", outline="")
+            c.create_polygon(x0 + 4, y1 - 4, x0 + 24, y0 + 22, x0 + 40, y1 - 4, fill="#7cb87a", outline="")
+            c.create_polygon(x0 + 26, y1 - 4, x0 + 46, y0 + 16, x1 - 4, y1 - 4, fill="#5c9a5a", outline="")
+            c.create_oval(x1 - 18, y0 + 8, x1 - 9, y0 + 17, fill="#ffd166", outline="")
 
     def _draw(self) -> None:
         """畫史萊姆。身體會隨狀態變形：睡覺時攤平、工作時一下一下彈、等你時左右搖、出錯時發抖、完成時跳起來。"""
@@ -255,6 +429,8 @@ class Pet:
             if len(shown) == 3:   # 放不下四個時，犧牲最不需要你處理的「執行」，保留「等你」「出錯」
                 shown = shown[1:]
             shown.append(("#d7dbe2", "連線?"))
+        if self.holding:   # 頭上舉著圖，標籤先收起來
+            shown = []
         x = W / 2 - len(shown) * 24 + 1
         for color, text in shown:
             c.create_rectangle(x, 4, x + 46, 26, fill=color, outline="white", width=2)
@@ -314,7 +490,9 @@ class Pet:
             c.create_oval(cx + bw * .36, top + bh * .2 + 16 * drop, cx + bw * .36 + 8, top + bh * .2 + 11 + 16 * drop, fill="#8fd3ff", outline="")
         elif mood != "sleep":
             c.create_arc(cx - 9, my - 8, cx + 9, my + 6, start=200, extent=140, style="arc", outline=ink, width=3)
-        if mood in ("waiting", "failed"):   # 頭上的驚嘆號，一跳一跳
+        if self.holding:   # 頭上舉著圖：驚嘆號、Z 字先收起來
+            pass
+        elif mood in ("waiting", "failed"):   # 頭上的驚嘆號，一跳一跳
             pop = 3 * abs(math.sin(t * 5))
             bx, by = cx + bw * .36, top - 6 - pop
             c.create_oval(bx - 12, by - 12, bx + 12, by + 12, fill=COLORS[mood], outline="white", width=2)
@@ -328,6 +506,9 @@ class Pet:
                 rise = (t * .9 + i / 3) % 1
                 c.create_oval(cx - 30 + i * 30 - 3, top - 4 - 16 * rise - 3, cx - 30 + i * 30 + 3, top - 4 - 16 * rise + 3,
                               fill=COLORS["running"], outline="")
+
+        if self.holding:
+            self._draw_picture(c, cx, top, bw, bh, lift, t)
 
         # 腳下的進度條：優先代表「正在執行」的任務；沒有的話才是等你或出錯的那一件
         withbar = [task for task in self.tasks if task["progress"][1] and task["state"] in ("running", "waiting", "failed")]
@@ -557,10 +738,15 @@ class Pet:
     # ------------------------------------------------------------ 滑鼠與選單
     def _press(self, e) -> None:
         self.dragging, self.moved, self._off = True, False, (e.x, e.y)
+        if self.holding and not self.toss:   # 拿著圖：按住一下就丟出來給你看
+            self._hold_job = self.root.after(230, self.throw_picture)
 
     def _drag(self, e) -> None:
-        if abs(e.x - self._off[0]) + abs(e.y - self._off[1]) > 4:
+        if abs(e.x - self._off[0]) + abs(e.y - self._off[1]) > 4 and not self.toss:
             self.moved = True
+            if self._hold_job:
+                self.root.after_cancel(self._hold_job)
+                self._hold_job = None
         if self.moved:
             self.root.geometry(f"+{e.x_root - self._off[0]}+{e.y_root - self._off[1]}")
             self._place(self.bubble)
@@ -568,7 +754,17 @@ class Pet:
 
     def _release(self, e) -> None:
         self.dragging = False
-        if not self.moved:
+        if self._hold_job:
+            self.root.after_cancel(self._hold_job)
+            self._hold_job = None
+        if self.toss:
+            self.catch_picture()
+            return
+        if self.moved:
+            return
+        if self.holding:
+            self.view_picture() if self._on_picture(e) else self.jump_to_thread()
+        else:
             self.toggle_popup()
 
     def _menu_popup(self, e) -> None:

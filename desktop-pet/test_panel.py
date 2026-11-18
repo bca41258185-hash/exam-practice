@@ -769,6 +769,15 @@ class ServerTest(Base):
         self.assertTrue(panel.pointer_on_panel())
         self.call("/api/pointer", {"inside": "yes"})
         self.assertFalse(panel.pointer_on_panel(), "只有 true 才算")
+        # 圖片、已讀、跳到對話
+        self.assertEqual(self.call("/api/image?id=nope")[0], 404)
+        self.assertEqual(self.call("/api/read", {"thread": "x", "read": "yes"})[0], 400)
+        self.assertEqual(self.call("/api/read", {"thread": "x", "read": True})[1]["unread"], 0)
+        self.assertEqual(self.call("/api/open_image", {"id": "nope"})[0], 400)
+        self.assertFalse(panel.focus_thread("t1") and False)
+        self.assertEqual(self.call("/api/focus")[1]["thread"], "t1")
+        self.assertEqual(self.call("/api/focus")[1]["thread"], "", "跳過一次就清掉")
+        self.assertTrue(panel.focus_thread("t2"), "面板剛來問過：視為開著")
         self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
         for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
             self.assertEqual(self.call("/api/open", bad)[0], 400, bad)
@@ -829,6 +838,51 @@ class TasksTest(unittest.TestCase):
         t = ai_tasks.parse_session(f, now=time.time() + 600)
         self.assertEqual((t["state"], t["reply"]), ("waiting", "完成了"))
         self.assertEqual(ai_tasks.local_sessions()[0]["id"], "s1")
+
+    def test_images_and_read(self):
+        import base64
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+        d = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-img"
+        d.mkdir(parents=True, exist_ok=True)
+        work = Path(tempfile.mkdtemp(prefix="work_"))
+        (work / "平面圖.png").write_bytes(png)
+        f = d / "img1.jsonl"
+        b64 = {"type": "base64", "media_type": "image/png", "data": base64.b64encode(png).decode()}
+        now = time.time()
+        iso = lambda ago: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - ago))
+        rows = [
+            {"type": "ai-title", "aiTitle": "看圖"},
+            {"type": "user", "cwd": str(work), "timestamp": iso(300), "message": {"content": [{"type": "text", "text": "看這張"}, {"type": "image", "source": b64}]}},
+            {"type": "user", "timestamp": iso(200), "message": {"content": [{"type": "tool_result", "content": [{"type": "image", "source": b64}]}]}},
+            {"type": "assistant", "timestamp": iso(100), "message": {"content": [{"type": "text", "text": "已存成 平面圖.png，另外 不存在.png 沒做"}]}},
+        ]
+        f.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", "utf-8")
+        t = ai_tasks.parse_session(f)
+        roles = [(x["role"], x["name"]) for x in t["images"]]
+        self.assertEqual(roles, [("user", "貼上的圖片"), ("ai", "AI 看過的圖"), ("ai", "平面圖.png")], "貼的、AI 看的、AI 存的檔案；不存在的檔案不算")
+        for x in t["images"]:
+            self.assertEqual(ai_tasks.load_image(x["id"]), (png, "image/png"))
+        # 新寫入的部分才掃描：再加一張
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "timestamp": iso(50), "message": {"content": [{"type": "image", "source": b64}]}}) + "\n")
+        self.assertEqual(len(ai_tasks.parse_session(f)["images"]), 4)
+        with self.assertRaises(KeyError):
+            ai_tasks.load_image("not-a-real-id")
+        # GitHub 留言裡的圖
+        msgs = ai_tasks.pr_messages({"body": "成果 ![平面](https://example.com/a.png)", "created_at": "2026-01-01T00:00:00Z"}, [])
+        self.assertEqual(msgs[0]["images"][0]["url"], "https://example.com/a.png")
+        # 已讀：從第一次使用起算；之後的 AI 訊息與圖片算新的
+        cfg = {"read": {}}
+        ai_tasks.mark_unread(t, cfg, now - 1000)
+        self.assertEqual(t["unread"], 3, "1 則 AI 訊息 + 2 張 AI 的圖")
+        ai_tasks.mark_unread(t, cfg, now)
+        self.assertEqual(t["unread"], 0)
+        ai_tasks.set_read(t["id"], ai_tasks.last_ai_time(t) - 1)
+        ai_tasks.mark_unread(t, core.load_config(), 0)
+        self.assertEqual(t["unread"], 2, "標成未讀：最後一則（和它附的圖）算新的")
+        ai_tasks.set_read(t["id"], None)
+        ai_tasks.mark_unread(t, core.load_config(), 0)
+        self.assertEqual(t["unread"], 0)
 
     def test_pr_states(self):
         now = time.time()

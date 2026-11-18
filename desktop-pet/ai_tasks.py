@@ -42,11 +42,134 @@ def _finish(task: dict) -> dict:
     by_source = NEXT_STEP_GITHUB if task.get("source") == "GitHub" else {}
     key = task.get("state", "") + ("_draft" if task.pop("draft", False) and task.get("state") == "waiting" else "")
     task["next"] = by_source.get(key) or by_source.get(task.get("state")) or NEXT_STEP.get(task.get("state"), "")
+    if "images" not in task:   # GitHub：圖片在各則留言裡
+        task["images"] = [x for m in task.get("messages") or [] for x in m.pop("images", [])][-IMAGES_KEEP:]
     todos = task.get("todos") or []
     task["progress"] = [sum(t["status"] == "completed" for t in todos), len(todos)]
     doing = next((t["text"] for t in todos if t["status"] == "in_progress"), "")
     task["doing"] = doing or next((t["text"] for t in todos if t["status"] == "pending"), "")
     return task
+
+
+# ---------------------------------------------------------------- 對話裡的圖片
+# 只記「在哪裡」，要看的時候才去讀，不把圖片整個放在記憶體裡。
+#   b64：對話紀錄某一行裡的第 n 張圖（你貼給 AI 的、或 AI 截圖／看過的圖）
+#   file：AI 說「存成 xxx.png」而且檔案真的存在
+#   url：GitHub 留言裡的圖片網址
+IMAGE_EXT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+IMAGES_KEEP = 8                        # 每段對話最多記幾張（最新的）
+_IMAGE_REF: dict[str, tuple] = {}      # 圖片編號 → 在哪裡
+_img_scan: dict[str, tuple] = {}       # 對話紀錄 → (已掃到的位置, 檔案大小, 找到的圖片)
+_PATH_RE = re.compile(r"""(?:[A-Za-z]:[\\/]|[\\/]|\.{1,2}[\\/])?[^\s"'`<>|*?()（）「」『』，。、；：]+\.(?:png|jpe?g|gif|webp)\b""", re.I)
+_MD_IMG = re.compile(r"""!\[[^\]]*\]\((https?://[^)\s]+)\)|<img[^>]+src=["'](https?://[^"']+)["']""", re.I)
+
+
+def _img_id(*parts) -> str:
+    import hashlib
+    return hashlib.sha1("|".join(map(str, parts)).encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def _image_blocks(row: dict):
+    """一行對話紀錄裡的圖片，依出現順序：(誰給的, base64 區塊)。直接貼的算你，工具結果裡的算 AI。"""
+    msg = row.get("message") if isinstance(row.get("message"), dict) else {}
+    content = msg.get("content") if isinstance(msg.get("content"), list) else []
+    for b in content:
+        if not isinstance(b, dict):
+            continue
+        if b.get("type") == "image":
+            yield "user" if row.get("type") == "user" else "ai", b
+        elif b.get("type") == "tool_result" and isinstance(b.get("content"), list):
+            for c in b["content"]:
+                if isinstance(c, dict) and c.get("type") == "image":
+                    yield "ai", c
+
+
+def scan_images(path: Path) -> list[dict]:
+    """找出對話紀錄裡貼上的圖片。只讀上次之後新增的部分，長對話也不會越來越慢。"""
+    st = path.stat()
+    offset, _, found = _img_scan.get(str(path), (0, 0, []))
+    if offset > st.st_size:   # 檔案被改短了：從頭來
+        offset, found = 0, []
+    if offset == st.st_size:
+        return found
+    found = list(found)
+    with open(path, "rb") as f:
+        f.seek(offset)
+        pos = offset
+        for raw in f:
+            if not raw.endswith(b"\n"):   # 還在寫的最後一行：下次再讀
+                break
+            if b'"image"' in raw and b'"base64"' in raw and not b'"isSidechain":true' in raw:
+                try:
+                    row = json.loads(raw)
+                except ValueError:
+                    row = None
+                if isinstance(row, dict) and not row.get("isSidechain"):
+                    when = _ts(row.get("timestamp")) if isinstance(row.get("timestamp"), str) else st.st_mtime
+                    for n, (role, b) in enumerate(_image_blocks(row)):
+                        src = b.get("source") if isinstance(b.get("source"), dict) else {}
+                        if src.get("type") != "base64" or not isinstance(src.get("data"), str):
+                            continue
+                        iid = _img_id(path, pos, n)
+                        _IMAGE_REF[iid] = ("b64", str(path), pos, n)
+                        found.append({"id": iid, "ts": when, "role": role, "name": "貼上的圖片" if role == "user" else "AI 看過的圖"})
+            pos += len(raw)
+    found = found[-IMAGES_KEEP:]
+    _img_scan[str(path)] = (pos, st.st_size, found)
+    return found
+
+
+def file_images(text: str, cwd: str, ts: float, role: str = "ai") -> list[dict]:
+    """訊息裡提到、而且真的存在的圖片檔。"""
+    out = []
+    for m in _PATH_RE.finditer(text or ""):
+        raw = m.group(0).strip()
+        p = Path(raw).expanduser()
+        if not p.is_absolute() and cwd:
+            p = Path(cwd) / p
+        try:
+            if p.suffix.lower() in IMAGE_EXT and p.is_file() and p.stat().st_size < 30 << 20:
+                iid = _img_id("file", p.resolve())
+                _IMAGE_REF[iid] = ("file", str(p.resolve()))
+                if all(x["id"] != iid for x in out):
+                    out.append({"id": iid, "ts": ts, "role": role, "name": p.name})
+        except OSError:
+            continue
+    return out
+
+
+def url_images(text: str, ts: float, role: str) -> list[dict]:
+    out = []
+    for m in _MD_IMG.finditer(text or ""):
+        url = m.group(1) or m.group(2)
+        iid = _img_id("url", url)
+        _IMAGE_REF[iid] = ("url", url)
+        out.append({"id": iid, "ts": ts, "role": role, "name": "GitHub 上的圖", "url": url})
+    return out
+
+
+def load_image(iid: str) -> tuple[bytes, str]:
+    """依編號取出圖片內容與格式。只給得出對話裡出現過的圖。"""
+    import base64
+    ref = _IMAGE_REF.get(iid)
+    if not ref or ref[0] == "url":
+        raise KeyError(iid)
+    if ref[0] == "file":
+        p = Path(ref[1])
+        return p.read_bytes(), IMAGE_EXT.get(p.suffix.lower(), "application/octet-stream")
+    _, path, pos, n = ref
+    with open(path, "rb") as f:
+        f.seek(pos)
+        row = json.loads(f.readline())
+    for i, (_, b) in enumerate(_image_blocks(row)):
+        if i == n:
+            src = b["source"]
+            return base64.b64decode(src["data"]), str(src.get("media_type") or "image/png")
+    raise KeyError(iid)
+
+
+def image_ref(iid: str) -> tuple | None:
+    return _IMAGE_REF.get(iid)
 
 
 # ---------------------------------------------------------------- 本機 Claude Code
@@ -133,7 +256,19 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
                 "reply": reply[:400], "todos": todos, "last_kind": last_kind, "url": "",
                 "where": Path(cwd).name if cwd else "", "cwd": cwd, "branch": branch, "updated": st.st_mtime,
                 "messages": messages[-MSG_KEEP:]}
+        pics = [x for m in messages[-MSG_KEEP:] if m["role"] == "ai" for x in file_images(m["text"], cwd, m["ts"])]
+        info["file_images"] = pics
         _session_cache[str(path)] = ((st.st_mtime, st.st_size), dict(info))
+    try:
+        found = scan_images(path)
+    except OSError:
+        found = []
+    seen, pics = set(), []
+    for x in sorted(found + info.pop("file_images", []), key=lambda x: x["ts"]):
+        if x["id"] not in seen:
+            seen.add(x["id"])
+            pics.append(x)
+    info["images"] = pics[-IMAGES_KEEP:]
     last_kind = info.pop("last_kind", "")
     if (now or time.time()) - info["updated"] < 120:
         info["state"], info["state_text"] = "running", "正在做"
@@ -302,14 +437,15 @@ def pr_messages(pr: dict, comments: list[dict] | None) -> list[dict]:
     out = []
     body = _CHECKBOX.sub("", pr.get("body") or "")
     if body.strip():
-        out.append({"role": "ai", "text": _FOOTER.sub("", body).strip()[:MSG_CHARS], "ts": _ts(pr.get("created_at", ""))})
+        out.append({"role": "ai", "text": _FOOTER.sub("", body).strip()[:MSG_CHARS], "ts": _ts(pr.get("created_at", "")),
+                    "images": url_images(body, _ts(pr.get("created_at", "")), "ai")})
     for c in comments or []:
         text = c.get("body") if isinstance(c, dict) else None
         if not isinstance(text, str) or not text.strip():
             continue
         bot = "Claude Code" in text[-200:] or (c.get("user") or {}).get("type") == "Bot"
         out.append({"role": "ai" if bot else "user", "text": _FOOTER.sub("", text).strip()[:MSG_CHARS],
-                    "ts": _ts(c.get("created_at", ""))})
+                    "ts": _ts(c.get("created_at", "")), "images": url_images(text, _ts(c.get("created_at", "")), "ai" if bot else "user")})
     return out[-MSG_KEEP:]
 
 
@@ -453,12 +589,44 @@ def all_tasks() -> dict:
     except Exception:
         local = []
     cfg = core.load_config()
+    since = cfg.get("read_since") if isinstance(cfg.get("read_since"), (int, float)) else 0
+    if not since:   # 第一次用：在這之前的訊息都算看過，不要一開始就滿畫面「新訊息」
+        since = time.time()
+        core.set_config(read_since=since)
+        cfg = core.load_config()
     every = sorted(local + gh, key=lambda t: (ORDER.get(t["state"], 9), -t["updated"]))
+    for t in every:
+        mark_unread(t, cfg, since)
     tasks = [t for t in every if not is_shelved(t, cfg)]
     shelved = sorted((t for t in every if is_shelved(t, cfg)), key=lambda t: -t["updated"])
     counts = {s: sum(t["state"] == s for t in tasks) for s in ORDER}
     return {"tasks": tasks, "shelved": shelved, "counts": counts, "error": err,
             "github_configured": bool(core.load_config().get("github_repos"))}
+
+
+# ---------------------------------------------------------------- 已讀
+def mark_unread(task: dict, cfg: dict, since: float) -> None:
+    """算出這段對話有幾則你還沒看過的 AI 訊息／圖片。看過到哪裡記在設定的 read 裡（時間）。"""
+    seen = cfg.get("read", {}).get(task["id"])
+    seen = seen if isinstance(seen, (int, float)) and not isinstance(seen, bool) else since
+    new_msgs = [m for m in task.get("messages") or [] if m.get("role") == "ai" and m.get("ts", 0) > seen]
+    new_pics = [x for x in task.get("images") or [] if x.get("role") == "ai" and x.get("ts", 0) > seen]
+    task["read_at"], task["unread"] = seen, len(new_msgs) + len(new_pics)
+
+
+def last_ai_time(task: dict) -> float:
+    times = [m.get("ts", 0) for m in task.get("messages") or [] if m.get("role") == "ai"]
+    times += [x.get("ts", 0) for x in task.get("images") or [] if x.get("role") == "ai"]
+    return max(times, default=0)
+
+
+def set_read(thread_id: str, upto: float | None) -> None:
+    """upto：看到哪個時間為止（None 表示看到現在）。要標回「未讀」就給最後一則 AI 訊息之前的時間。"""
+    with core._LOCK:
+        read = dict(core.load_config().get("read", {}))
+        read.pop(thread_id, None)
+        read[thread_id] = time.time() if upto is None else float(upto)
+        core.set_config(read=dict(list(read.items())[-500:]))
 
 
 def changes(old: dict[str, str], tasks: list[dict]) -> list[tuple[dict, str]]:
