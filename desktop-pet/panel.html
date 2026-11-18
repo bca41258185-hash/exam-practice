@@ -158,6 +158,7 @@
   .tcard-body:active { background: var(--card); }
   .tcard .slime { width: 4.6rem; height: 4.3rem; }
   .tcard b { font-size: 1.12rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cproj { display: block; font-size: .78rem; font-weight: 400; color: var(--dim); }
   .tcard .cst { font-size: .9rem; font-weight: 700; color: var(--s); }
   .tcard .prog { display: block; width: 80%; height: .35rem; border-radius: .2rem; background: var(--line); overflow: hidden; }
   .tcard .prog i { display: block; height: 100%; background: var(--s); }
@@ -675,7 +676,7 @@ function talkColumn(key, title, threads, extra) {
     <div class="thead">
       <button class="tstat s-${cur.state}" data-task="${esc(cur.id)}">${slime(cur.state, cur.id)}
         <span class="tt"><h2>${title}</h2>
-          <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}${cur.doing && cur.state === "running" ? `<em>　正在：${esc(cur.doing)}</em>` : threads.length > 1 ? "" : `<em>　${esc(cur.title)}</em>`}</div>
+          <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}${cur.doing && cur.state === "running" ? `<em>　正在：${esc(cur.doing)}</em>` : ""}</div>
           ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</span></button>
       ${extra || ""}</div>
     ${threads.length > 1 ? `<div class="tabs">${threads.map(t => `<button class="tab s-${t.state} ${t.id === cur.id ? "on" : ""}" data-thread="${esc(t.id)}" data-key="${esc(key)}">${esc(t.title)}</button>`).join("")}</div>` : ""}
@@ -724,26 +725,27 @@ async function loadTalk() {
    細節（子對話、整理舊對話）交給 Claude App；舊對話照樣自動收起來，這裡不另外管理。 */
 const RANK = {failed: 0, waiting: 1, running: 2, done: 3, idle: 4};
 const lead = c => [...c.threads].sort((x, y) => RANK[x.state] - RANK[y.state] || y.updated - x.updated)[0];
-function allColumns(d) {   // 只列有對話的專案；沒在進行的不佔位置
-  const cols = d.columns.filter(c => c.threads.length).map(c => ({key: c.path, name: projName(c.name)[1], threads: c.threads, path: c.path}));
-  if (d.loose.length) cols.push({key: "__loose", name: "其他", threads: d.loose, path: ""});
-  return cols;
+function allThreads(d) {   // 每段 AI 對話一張卡；順序固定（依專案，再依開始的時間），不會因為誰剛有動靜就換位置
+  const out = [];
+  d.columns.forEach(c => c.threads.forEach(t => out.push({t, project: projName(c.name)[1], key: c.path})));
+  d.loose.forEach(t => out.push({t, project: "", key: "__loose"}));
+  return out.sort((x, y) => x.project.localeCompare(y.project) || (x.t.started || 0) - (y.t.started || 0));
 }
-function talkCard(c) {
-  const t = lead(c), [done, total] = t.progress || [0, 0];
+function talkCard({t, project}) {
+  const [done, total] = t.progress || [0, 0];
   const lastAi = [...(t.messages || [])].reverse().find(m => m.role === "ai");
   const need = t.state === "failed" || t.state === "waiting";
   return `<section class="tcard s-${t.state} ${need ? "need" : ""}">
-    <button class="tcard-body" data-open-proj="${esc(c.key)}">${slime(t.state, t.id)}
-      <b>${c.name}</b><span class="cst">${esc(t.state_text || "")}</span>
+    <button class="tcard-body" data-open-thread="${esc(t.id)}">${slime(t.state, t.id)}
+      <b>${esc(t.title)}</b>${project ? `<small class="cproj">${project}</small>` : ""}<span class="cst">${esc(t.state_text || "")}</span>
       ${total ? `<span class="prog"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ""}
-      <span class="csnip">${lastAi ? esc(tidy(lastAi.text).slice(0, 160)) : esc(t.title)}</span></button>
+      <span class="csnip">${lastAi ? esc(tidy(lastAi.text).slice(0, 160)) : ""}</span></button>
     ${t.can_reply ? `<button class="rbar" data-reply="${esc(t.id)}">回覆…<span>送出</span></button>` : ""}</section>`;
 }
 function renderTalk() {
   const d = state.talk, box = $("talk-cols");
   if (!d) return;
-  const cols = allColumns(d), open = cols.find(c => c.key === state.open);
+  const all = allThreads(d), open = all.find(x => x.t.id === state.open);
   if (state.open && !open) state.open = null;
   $("talk-back").innerHTML = open ? `<span style="font-size:1.6rem;line-height:1">←</span>全部` : `${icon("folder")}找檔案`;
   $("talk-back").dataset.act = open ? "talk-home" : "files";
@@ -751,9 +753,9 @@ function renderTalk() {
   const keep = {};
   box.querySelectorAll(".msgs").forEach(m => keep[m.dataset.threadId] = {top: m.scrollTop, atEnd: m.scrollHeight - m.scrollTop - m.clientHeight < 40});
   let html;
-  if (open) html = talkColumn(open.key, open.name, open.threads, open.key === "__loose" && d.projects.length && open.threads.some(t => t.repo)
-    ? `<button class="f" data-act="link">這是哪個專案的？</button>` : "");
-  else if (cols.length) html = cols.map(talkCard).join("");
+  if (open) html = talkColumn(open.key, esc(open.t.title) + (open.project ? `<small class="cproj">${open.project}</small>` : ""), [open.t],
+    open.key === "__loose" && d.projects.length && open.t.repo ? `<button class="f" data-act="link">這是哪個專案的？</button>` : "");
+  else if (all.length) html = all.map(talkCard).join("");
   else html = `<section class="tcol"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
     d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面上的史萊姆按右鍵 →「追蹤 AI 助手的 GitHub 專案」"}</div></section>`;
   box.classList.toggle("overview", !open);
@@ -770,28 +772,6 @@ function setMode(talk) {
   try { localStorage.setItem("mode", talk ? "talk" : "files"); } catch (e) {}
   if (talk) { closeSheet(); state.open = null; $("talk-cols").innerHTML = `<section class="tcol"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
   else refresh();
-}
-/* 管理一個專案的對話：哪些用到中、哪些收起來。收起來的不佔畫面、不算進數字、史萊姆也不會為它跑來 */
-function manageSheet(key) {
-  const c = allColumns(state.talk).find(x => x.key === key);
-  if (!c) return closeSheet();
-  const row = (t, away) => `<div class="file s-${t.state}" style="min-height:4.4rem;border-left:.35rem solid var(--s)">
-    <button class="open" data-view="${esc(t.id)}" data-key="${esc(key)}" ${away ? "disabled" : ""}><span class="t"><div class="n">${esc(t.title)}</div>
-      <div class="m"><b style="color:var(--s)">${esc(t.state_text || "")}</b>・${ago(t.updated)}${(t.children || []).length ? "・子對話 " + t.children.length : ""}・${t.source === "GitHub" ? "雲端" : "這台電腦"}</div></span></button>
-    <button class="ver" data-shelve="${esc(t.id)}" data-on="${away ? "" : "1"}" data-key="${esc(key)}">${away ? "放回來" : "收起來"}</button></div>`;
-  sheet(head(`「${c.name}」的對話`) + `<div class="list">
-    <p>「收起來」的對話不佔畫面、不算進數字，史萊姆也不會為它跑來；之後有新動靜會自己回來。做完或停著超過三天的對話會自動收起來。只是顯示方式，對話本身不會被刪除。</p>
-    <p class="sec" style="padding:0 .3rem">用到中（${c.threads.length}）</p>${c.threads.map(t => row(t, false)).join("") || `<p>沒有。</p>`}
-    <p class="sec" style="padding:.4rem .3rem 0">收起來的（${c.shelved.length}）</p>${c.shelved.map(t => row(t, true)).join("") || `<p>沒有。</p>`}</div>`);
-}
-function childSheet(parent, id) {
-  const t = (state.threads || {})[parent], k = t && (t.children || []).find(x => x.id === id);
-  if (!k) return;
-  sheet(head("子對話：" + esc(k.title)) + `<div class="list s-${k.state}">
-    <p style="color:var(--s);font-weight:700;font-size:1.05rem">${k.state_text}・${ago(k.updated)}　<span style="color:var(--dim);font-weight:400">屬於「${esc(t.title)}」</span></p>
-    <div class="who user" style="align-self:auto">主助手交代它的事</div><div class="msg user" style="max-width:100%;max-height:8rem;overflow:auto">${esc(tidy(k.ask || "（沒有紀錄）"))}</div>
-    <div class="who ai">它最後回報的</div><div class="msg ai" style="max-width:100%;max-height:13rem;overflow:auto">${esc(tidy(k.last || "（還沒有回報）"))}</div>
-    <p style="margin-top:.3rem">子對話是 AI 助手自己派出去分頭做事的，做完會把結果交回主對話。這裡只能看，不能直接回覆它；要調整請在主對話回覆。</p></div>`);
 }
 function linkSheet() {
   const repos = [...new Set(state.talk.loose.filter(t => t.repo).map(t => t.repo))];
@@ -931,29 +911,17 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-manage],[data-shelve],[data-view],[data-child],[data-open-proj],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-open-thread],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("openProj" in d) { state.open = d.openProj; renderTalk(); }
+    if ("openThread" in d) { state.open = d.openThread; renderTalk(); }
     else if (d.act === "talk-home") { state.open = null; renderTalk(); }
-    else if ("manage" in d) manageSheet(d.manage);
-    else if ("child" in d) childSheet(d.parent, d.child);
-    else if ("view" in d) { picked[d.key] = d.view; delete seenLast[d.view]; state.open = d.key; closeSheet(); renderTalk(); }
-    else if ("shelve" in d) {
-      el.disabled = true;
-      await api("/api/shelve", {thread: d.shelve, on: d.on === "1"});
-      toast(d.on === "1" ? "已收起來，可以在「對話」裡放回來" : "已放回來");
-      await loadTalk(); manageSheet(d.key);
-    }
     else if ("runner" in d) {   // 點跑來的史萊姆：帶你到那件事的對話
       const id = d.runner, t = runners[id] && runners[id].task;
       dismiss(id);
-      const col = state.talk && state.talk.columns.find(c => c.threads.some(x => x.id === id));
-      const key = col ? col.path : "__loose";
-      if (t) picked[key] = id;
       if (!document.body.classList.contains("talk")) setMode(true);
-      state.open = key; await loadTalk();   // 直接進入那件事的對話
+      state.open = id; await loadTalk();   // 直接進入那段對話
     }
     else if ("reply" in d) replySheet(d.reply);
     else if ("quick" in d) { const box = $("reply-text"); box.value = d.quick; box.focus(); }

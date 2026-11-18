@@ -626,6 +626,17 @@ class ConversationTest(Base):
         task = ai_tasks.pr_task("o/r", bare, [], time.time())
         self.assertEqual((task["session"], task["messages"][0]["text"]), ("session_01DemoFire4567", "輸出成表格。"), "連結用來回覆，不顯示在對話裡")
 
+    def test_title_follows_claude_naming(self):
+        f = self.session("named", str(self.root), ["第一句話", "好"])
+        self.assertEqual(ai_tasks.parse_session(f)["title"], "第一句話", "沒有名字時用第一句話")
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write("\n" + json.dumps({"type": "ai-title", "aiTitle": "建蔽容積檢討"}, ensure_ascii=False))
+        self.assertEqual(ai_tasks.parse_session(f)["title"], "建蔽容積檢討", "Claude 自動取的名字")
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write("\n" + json.dumps({"type": "custom-title", "customTitle": "信義案容積"}, ensure_ascii=False))
+            fh.write("\n" + json.dumps({"type": "ai-title", "aiTitle": "後來又自動取的名字"}, ensure_ascii=False))
+        self.assertEqual(ai_tasks.parse_session(f)["title"], "信義案容積", "自己用 /rename 改的名字優先")
+
     def test_sub_conversations_hang_under_their_parent(self):
         self.put("甲案/a.pdf")
         f = self.session("parent", str(self.root / "甲案"), ["幫我請三位審查者來看", "好，我派出去了。"])

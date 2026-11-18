@@ -86,7 +86,7 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
     if cached and cached[0] == (st.st_mtime, st.st_size):
         info = dict(cached[1])
     else:
-        title = prompt = reply = cwd = branch = last_kind = ""
+        title = custom = prompt = reply = cwd = branch = last_kind = ""
         todos: list[dict] = []
         messages: list[dict] = []   # 你和助手的對話（只留文字，不含它執行工具的過程）
         for o in _read_slices(path):
@@ -96,7 +96,9 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
                 cwd = o["cwd"] or cwd
             if isinstance(o.get("gitBranch"), str):
                 branch = o["gitBranch"] or branch
-            if t == "ai-title":
+            if t == "custom-title":   # 你在 Claude 裡用 /rename 改的名字，優先
+                custom = o.get("customTitle") if isinstance(o.get("customTitle"), str) and o.get("customTitle") else custom
+            elif t == "ai-title":
                 title = o.get("aiTitle") if isinstance(o.get("aiTitle"), str) and o.get("aiTitle") else title
             elif t == "summary":
                 title = title or str(o.get("summary") or "")
@@ -126,7 +128,8 @@ def parse_session(path: Path, now: float | None = None) -> dict | None:
                 last_kind = "tool" if tools else ("reply" if txt else last_kind)
         if not (title or prompt):
             return None
-        info = {"id": path.stem, "source": "本機", "title": (title or prompt)[:60], "prompt": prompt[:300],
+        # 名稱跟 Claude 裡顯示的一樣：自己改的名字 → Claude 自動取的名字 → 第一句話
+        info = {"id": path.stem, "source": "本機", "title": (custom or title or prompt)[:60], "started": messages[0]["ts"] if messages else st.st_mtime, "prompt": prompt[:300],
                 "reply": reply[:400], "todos": todos, "last_kind": last_kind, "url": "",
                 "where": Path(cwd).name if cwd else "", "cwd": cwd, "branch": branch, "updated": st.st_mtime,
                 "messages": messages[-MSG_KEEP:]}
@@ -337,6 +340,7 @@ def pr_task(repo: str, pr: dict, checks: list[dict] | None = None, now: float | 
                     "state": state, "state_text": text, "updated": updated, "url": pr.get("html_url", ""),
                     "where": repo.split("/")[-1], "branch": (pr.get("head") or {}).get("ref", ""),
                     "draft": bool(pr.get("draft")), "repo": repo, "messages": pr_messages(pr, comments),
+                    "started": _ts(pr.get("created_at", "")) or updated,
                     "session": session_id(body, *[c.get("body") for c in comments or [] if isinstance(c, dict)]),
                     "prompt": "", "reply": _CHECKBOX.sub("", body).strip()[:400], "todos": todos})
 
