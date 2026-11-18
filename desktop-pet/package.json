@@ -21,9 +21,12 @@
       "main.js",
       "poems.js",
       "preload.js",
+      "ui-preload.js",
       "pet.html",
       "pet.js",
       "draw.js",
+      "note.html",
+      "scroll.html",
       "assets/**"
     ],
     "directories": {

@@ -267,7 +267,7 @@
     const sp = SPECIES[fit.species] || SPECIES.cat;
     const state = o.state, t = o.t, st = o.st, dir = o.dir < 0 ? -1 : 1;
     const look = o.look || { x: 0, y: 0 };
-    const moving = state === 'walk' || state === 'chase';
+    const moving = state === 'walk' || state === 'chase' || state === 'climb';
     const air = state === 'drag' || state === 'fall';
     const fly = state === 'roll';            // 御劍飛行
     const med = state === 'sleep';           // 打坐修煉
@@ -276,6 +276,7 @@
     const flip = state === 'leap';                          // 輕功：空中翻筋斗
     const float = state === 'hover' || state === 'land';    // 踏空、飄落
     const taichi = state === 'taichi';                      // 打太極
+    const climb = state === 'climb', hang = state === 'hang';   // 壁虎遊牆功、倒掛
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
     if (state === 'idle' || state === 'peek' || state === 'eat') sy = 1 + 0.02 * Math.sin(t * 2.4);
@@ -290,13 +291,16 @@
     if (state === 'peek') rot = -0.13;
     if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
     if (float) { lift = 6 + Math.sin(t * 6) * 2; }
+    if (climb) rot = -Math.PI / 2;                   // 腳貼著牆（左右牆都一樣，因為已經先左右翻轉）
+    if (hang) rot = Math.PI + Math.sin(t * 3) * 0.08;   // 倒掛，輕輕晃
+    if (state === 'spin') rot = st * Math.PI * 4;   // 被劍氣吹得原地轉圈
     if (taichi) { rot = Math.sin(t * 1.4) * 0.16; sy = 1 + Math.sin(t * 2.8) * 0.03; lift = 2 + Math.max(0, Math.sin(t * 1.4)) * 3; }
 
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     // 影子
-    if (!air && !flip && !float) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
+    if (!air && !flip && !float && !climb && !hang) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
     if (taichi) {
       ctx.save(); ctx.translate(100, 186 - lift - 94 + Math.sin(t * 2) * 3); ctx.rotate(t * 1.6); ctx.globalAlpha = 0.95;
       const R = 15;
@@ -439,6 +443,15 @@
       ctx.beginPath(); ctx.moveTo(0, -29); ctx.quadraticCurveTo(3, -25, 6, -29); ctx.quadraticCurveTo(9, -25, 12, -29); ctx.stroke();
     }
 
+    // 叼著傳音符（黃符紅字）
+    if (fit.carry) {
+      ctx.save(); ctx.translate(8, -18); ctx.rotate(0.25 + Math.sin(t * 8) * 0.06);
+      ctx.fillStyle = '#F7D154'; ctx.strokeStyle = C.line; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.rect(-6, -6, 12, 26); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = C.mark; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-2, -2); ctx.lineTo(2, 2); ctx.lineTo(-2, 6); ctx.lineTo(2, 10); ctx.lineTo(-2, 14); ctx.stroke();
+      ctx.restore();
+    }
     // 飯糰
     if (state === 'eat') pill(ctx, 36, -20 - chew * 2, Math.max(0.3, 1 - st / 3.2), t);
 
@@ -451,6 +464,16 @@
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const top = 186 - lift - (TALL_HATS.includes(hat) || sp.ears === 'rabbit' ? 92 : 76) * sy;
+    if (state === 'fireworks') {   // 三件事都完成：放煙火
+      const cols = [C.gold, C.mark, C.qi, '#8E6BD9'];
+      for (let b = 0; b < 3; b++) {
+        const p = ((st + b * 0.45) % 1.35) / 1.35, bx = 50 + b * 50, by = 60 - b % 2 * 18;
+        for (let i = 0; i < 10; i++) {
+          const a = i * Math.PI / 5 + b;
+          spark(ctx, bx + Math.cos(a) * p * 34, by + Math.sin(a) * p * 34 + p * p * 10, 4.5, 1 - p, cols[(i + b) % 4]);
+        }
+      }
+    }
     if (taichi) {
       for (let i = 0; i < 2; i++) {
         const a = t * 1.4 + i * Math.PI;

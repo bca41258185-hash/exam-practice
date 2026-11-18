@@ -1,5 +1,5 @@
 // 桌面寵物主程序：視窗、位置物理、行為狀態機、選單。
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell, powerMonitor, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const POEMS = require('./poems');
@@ -9,7 +9,7 @@ const TICK = 33;            // 毫秒
 const FORWARD = process.platform !== 'linux'; // 點擊穿透的滑鼠轉送只有 Windows / macOS 支援
 
 let win, tray;
-let cfg = { scale: 1, top: true, stretch: 50, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
+let cfg = { scale: 1, top: true, stretch: 50, notes: [], todos: { date: '', items: [] }, scrollPos: null, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
 
 // 裝扮的選項：[設定值, 選單上的名字]
 const SPECIES = [['cat', '靈貓'], ['fox', '狐仙'], ['rabbit', '玉兔'], ['panda', '熊貓'], ['dragon', '小青龍']];
@@ -26,6 +26,9 @@ function loadCfg() {
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { /* 首次啟動 */ }
   if (![0.75, 1, 1.5].includes(cfg.scale)) cfg.scale = 1;
   if (!STRETCH.includes(cfg.stretch)) cfg.stretch = 50;
+  if (!Array.isArray(cfg.notes)) cfg.notes = [];
+  cfg.notes = cfg.notes.filter((n) => n && typeof n.text === 'string' && Number.isFinite(n.at));
+  if (!cfg.todos || !Array.isArray(cfg.todos.items)) cfg.todos = { date: '', items: [] };
   if (cfg.helmet === true && cfg.hat === 'none') cfg.hat = 'douli';   // 舊版的「戴斗笠」
   delete cfg.helmet;
   for (const [key, list] of [['species', SPECIES], ['hat', HATS], ['robe', ROBES], ['gear', GEARS]]) {
@@ -54,7 +57,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying) } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -165,12 +168,150 @@ function startPeek() {
   dir = pos.x - l.xmin < l.xmax - pos.x ? -1 : 1;
   set('peekout', 15000);
 }
-const KUNGFU = ['leap', 'hover', 'land'];   // 來追我的輕功動作（都在空中，自己處理位置）
+const KUNGFU = ['leap', 'hover', 'land', 'climb', 'hang'];   // 輕功動作（都在空中，自己處理位置）
+const BUSY = ['drag', 'fall', 'tribulation', 'roll', ...KUNGFU];
+
+// ---- 甩動滑鼠：一秒內左右甩四次以上，牠以為你在發劍氣
+let shakeX = null, shakeSign = 0, shakes = [], lastShake = 0;
+function watchShake(cur, t) {
+  if (shakeX !== null) {
+    const dx = cur.x - shakeX;
+    if (Math.abs(dx) > 22) {
+      const sgn = dx > 0 ? 1 : -1;
+      if (sgn !== shakeSign) { shakes.push(t); shakeSign = sgn; }
+    }
+  }
+  shakeX = cur.x;
+  shakes = shakes.filter((x) => t - x < 1000);
+  if (shakes.length < 4 || t - lastShake < 8000) return;
+  shakes = []; lastShake = t;
+  if (BUSY.includes(state) || ['spin', 'taichi', 'peekout', 'peek'].includes(state)) return;
+  if (Math.abs(cur.x - (pos.x + W() / 2)) > 700 * cfg.scale) return;   // 離太遠感覺不到
+  lastTouch = t;
+  if (Math.random() < 0.55) { set('spin', 1500); say(['好強的劍氣！', '道友好劍法！', '轉～轉～'][Math.floor(Math.random() * 3)]); }
+  else { say(['嚇死本座了！', '劍氣太重，先躲躲'][Math.floor(Math.random() * 2)]); startPeek(); }
+}
+
+// ---- 壁虎遊牆功：走到螢幕邊緣時，有時會貼著牆爬上去，在頂端倒掛一下再翻下來
+function startClimb(side) {
+  const a = area(), k = cfg.scale;
+  dir = side;
+  pos.x = side < 0 ? a.x - 68 * k : a.x + a.width - 132 * k;   // 讓腳貼著牆
+  say(['壁虎遊牆功！', '看我上牆～'][Math.floor(Math.random() * 2)]);
+  set('climb');
+}
+
+// ---- 傳音符：時間到了叼著符跑到游標旁，一句一句念給你聽
+let deliver = null, carrying = false;
+function chunks(text) {   // 泡泡一行放十個字：先在標點斷開，太長的再切
+  const out = [];
+  for (const piece of text.split(/(?<=[，。、！？；,.!?;\s])/)) {
+    const p = piece.trim();
+    for (let i = 0; i < p.length; i += 10) out.push(p.slice(i, i + 10));
+  }
+  return out.filter(Boolean);
+}
+function readNote() {
+  const n = deliver;
+  deliver = null;
+  if (!n) return;
+  const lines = ['傳音符到！', ...chunks(n.text)];
+  carrying = true; pushState();   // 念完才把符放下
+  sayLines(lines, 2800);
+  setTimeout(() => { carrying = false; pushState(); }, lines.length * 2800);
+}
+function checkNotes() {
+  if (deliver) return;
+  const due = cfg.notes.filter((n) => n.at <= Date.now()).sort((a, b) => a.at - b.at)[0];
+  if (!due || ['drag', 'fall', 'tribulation'].includes(state)) return;
+  cfg.notes = cfg.notes.filter((n) => n !== due); saveCfg(); refreshUi();
+  try { new Notification({ title: '傳音符', body: due.text, silent: false }).show(); } catch { /* 系統不支援通知就算了 */ }
+  deliver = due;
+  if (KUNGFU.includes(state) || state === 'roll') { set('idle', 100); }
+  startChase(true);
+}
+
+// ---- 今日三件事
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todos() {
+  const t = cfg.todos && cfg.todos.date === today() ? cfg.todos : { date: today(), items: [] };
+  const items = [0, 1, 2].map((i) => ({ text: String((t.items[i] || {}).text || '').slice(0, 24), done: !!(t.items[i] || {}).done }));
+  return { date: today(), items };
+}
+function toggleTodo(i) {
+  const t = todos();
+  if (!t.items[i] || !t.items[i].text) return t;
+  t.items[i].done = !t.items[i].done;
+  cfg.todos = t; saveCfg();
+  if (t.items[i].done && !BUSY.includes(state)) {
+    const left = t.items.filter((x) => x.text && !x.done).length;
+    if (left === 0) { gain(30); set('fireworks', 3600); say('三件都完成了！修為 +30', true); }
+    else { gain(10); set('happy', 1500); say(`劃掉一件！還剩 ${left} 件`, true); }
+  }
+  return t;
+}
+
+// ---- 傳音符與卷軸的小視窗
+let noteWin = null, scrollWin = null;
+function uiWindow(file, opts) {
+  return new BrowserWindow({
+    show: false, autoHideMenuBar: true, ...opts,
+    webPreferences: { preload: path.join(__dirname, 'ui-preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+}
+function openNotes() {
+  if (noteWin && !noteWin.isDestroyed()) { noteWin.show(); noteWin.focus(); return; }
+  noteWin = uiWindow('note.html', { width: 380, height: 640, resizable: false, title: '寫傳音符', alwaysOnTop: true, icon: path.join(__dirname, 'assets', 'icon.png') });
+  noteWin.loadFile(path.join(__dirname, 'note.html'));
+  noteWin.once('ready-to-show', () => noteWin.show());
+  noteWin.on('closed', () => { noteWin = null; });
+}
+function openScroll(toggle) {
+  if (scrollWin && !scrollWin.isDestroyed()) { if (toggle) scrollWin.close(); else scrollWin.show(); return; }
+  const a = screen.getPrimaryDisplay().workArea, w = 240;
+  const p = cfg.scrollPos && Number.isFinite(cfg.scrollPos.x) ? cfg.scrollPos : { x: a.x + 24, y: a.y + a.height - 360 };
+  scrollWin = uiWindow('scroll.html', {
+    x: Math.round(p.x), y: Math.round(p.y), width: w, height: 260, frame: false, transparent: true, resizable: false,
+    skipTaskbar: true, hasShadow: false, alwaysOnTop: true, backgroundColor: '#00000000',
+  });
+  scrollWin.setAlwaysOnTop(true, 'floating');
+  scrollWin.loadFile(path.join(__dirname, 'scroll.html'));
+  scrollWin.once('ready-to-show', () => scrollWin.showInactive());
+  scrollWin.on('moved', () => { const [x, y] = scrollWin.getPosition(); cfg.scrollPos = { x, y }; saveCfg(); });
+  scrollWin.on('closed', () => { scrollWin = null; });
+}
+function refreshUi() {
+  for (const w of [noteWin, scrollWin]) if (w && !w.isDestroyed()) w.webContents.send('ui-refresh');
+}
+ipcMain.handle('ui-get', () => ({ notes: cfg.notes, todos: todos() }));
+ipcMain.handle('ui-notes', (_e, notes) => {
+  if (!Array.isArray(notes)) return cfg.notes;
+  cfg.notes = notes.filter((n) => n && typeof n.text === 'string' && n.text.trim() && Number.isFinite(n.at)).slice(0, 50)
+    .map((n) => ({ id: String(n.id || Date.now().toString(36)).slice(0, 20), text: n.text.trim().slice(0, 60), at: n.at }));
+  saveCfg(); refreshUi();
+  return cfg.notes;
+});
+ipcMain.handle('ui-todos', (_e, t) => {
+  const items = [0, 1, 2].map((i) => ({ text: String(((t && t.items) || [])[i]?.text || '').trim().slice(0, 24), done: !!((t && t.items) || [])[i]?.done }));
+  cfg.todos = { date: today(), items }; saveCfg(); refreshUi();
+  if (items.some((x) => x.text) && !BUSY.includes(state)) { set('happy', 1200); say('好，我幫你記著！', true); }
+  return todos();
+});
+ipcMain.handle('ui-toggle', (_e, i) => { const t = toggleTodo(Number(i)); refreshUi(); return t; });
+ipcMain.on('ui-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
+ipcMain.on('ui-resize', (e, h) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w && w === scrollWin && Number.isFinite(h)) { const [cw] = w.getContentSize(); w.setContentSize(cw, Math.max(120, Math.min(600, Math.round(h)))); }
+});
 let chaseUntil = 0, leap = null, landAfter = false;
-function startChase() {
+function startChase(quiet) {
   if (['drag', 'fall', 'tribulation'].includes(state)) return;
   chaseUntil = now() + 9000; landAfter = false;
-  say(['道友留步！', '看我輕功！', '凌波微步！'][Math.floor(Math.random() * 3)]);
+  if (deliver) { pushState(); say('有你的傳音符！', true); }
+  else if (!quiet) say(['道友留步！', '看我輕功！', '凌波微步！'][Math.floor(Math.random() * 3)]);
   nextLeap();
 }
 function nextLeap() {   // 朝游標跳一大步：落點在游標旁邊，一步最遠 280
@@ -197,6 +338,7 @@ function tick() {
   const l = limits(), k = cfg.scale, t = now();
   const cur = screen.getCursorScreenPoint();
   tickN++;
+  watchShake(cur, t);
 
   if (state === 'drag') {
     if (lastCur) {
@@ -223,15 +365,31 @@ function tick() {
       const p = Math.min(1, (t - leap.t0) / leap.dur);
       pos.x = leap.x0 + (leap.x1 - leap.x0) * p;
       pos.y = leap.y0 + (leap.y1 - leap.y0) * p - Math.sin(p * Math.PI) * 70 * k;
-      pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));
+      if (!leap.after) pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));   // 從牆頂翻下來時起點在螢幕外，不要夾住
       if (p >= 1) {
         const near = Math.hypot(cur.x - (pos.x + 100 * k), cur.y - (pos.y + 124 * k)) < 120 * k;
-        if (near) { landAfter = true; gain(3); say(['抓到道友了！', '承讓承讓～', '身法如何？'][Math.floor(Math.random() * 3)]); set('hover', 900); }
+        if (leap.after) { set('happy', 1500); say(['倒掛金鉤，帥吧！', '輕功了得吧？'][Math.floor(Math.random() * 2)]); }   // 從牆上翻下來落地
+        else if (deliver && (near || t > chaseUntil)) { landAfter = true; readNote(); set('hover', 900); }
+        else if (near) { landAfter = true; gain(3); say(['抓到道友了！', '承讓承讓～', '身法如何？'][Math.floor(Math.random() * 3)]); set('hover', 900); }
         else if (t > chaseUntil) { landAfter = true; say('靈力耗盡…'); set('hover', 400); }
         else set('hover', 140);   // 踏空，借力再跳
       }
     } else if (state === 'hover') {
       if (t > until) { if (landAfter) set('land'); else nextLeap(); }
+    } else if (state === 'climb') {   // 貼著牆往上爬
+      const a = area();
+      pos.y -= 2.2 * k;
+      if (pos.y <= a.y + 40 * k - 154 * k) {
+        pos.y = a.y - 122 * k; pos.x += -dir * 40 * k;   // 到頂了：翻過來倒掛在螢幕上緣
+        set('hang', 2400);   // 這時泡泡在螢幕外，落地後再說
+      }
+    } else if (state === 'hang') {
+      if (t > until) {   // 鬆手，翻個筋斗落地
+        const x1 = Math.max(l.xmin, Math.min(l.xmax, pos.x - dir * 160 * k));
+        dir = -dir;
+        leap = { x0: pos.x, y0: pos.y, x1, y1: l.ground, t0: now(), dur: 650, after: true };
+        set('leap', 650);
+      }
     } else if (state === 'land') {   // 輕輕飄下來
       pos.y = Math.min(l.ground, pos.y + 7 * k);
       if (pos.y >= l.ground) { pos.y = l.ground; set('idle', 1500); }
@@ -256,8 +414,8 @@ function tick() {
 
     if (state === 'walk') {
       pos.x += dir * 1.6 * k;
-      if (pos.x <= l.xmin && dir < 0) dir = 1, pushState();
-      if (pos.x >= l.xmax && dir > 0) dir = -1, pushState();
+      if (pos.x <= l.xmin && dir < 0) { if (Math.random() < 0.35) startClimb(-1); else dir = 1, pushState(); }
+      else if (pos.x >= l.xmax && dir > 0) { if (Math.random() < 0.35) startClimb(1); else dir = -1, pushState(); }
     } else if (state === 'peekout') {
       const target = dir < 0 ? l.xmin - 46 * k : l.xmax + 46 * k;
       pos.x += dir * 2 * k;
@@ -297,6 +455,7 @@ function onClick() {
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
   if (['fall', 'drag', 'tribulation'].includes(state)) return;
   if (state === 'taichi') { say('別偷懶，一起動！'); return; }   // 打拳中被點：繼續打
+  if (state === 'climb' || state === 'hang') { say('別吵，練功中！'); return; }
   if (state === 'roll' || KUNGFU.includes(state)) { gain(2); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
   if (clicks.length >= 5) { clicks = []; set('dizzy', 2600); say('道心不穩啦～'); return; }
@@ -388,6 +547,8 @@ function menu() {
     },
     { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
+    { label: '寫傳音符…（定時提醒）', click: openNotes },
+    { label: scrollWin ? '收起今日三件事' : '今日三件事', click: () => openScroll(true) },
     {
       label: '起身活動提醒', submenu: [
         ...STRETCH.map((m) => ({
@@ -426,9 +587,20 @@ function create() {
     setTimeout(() => say(greeting()), 600);
     setInterval(tick, TICK);
     setInterval(checkStretch, 10000);
+    setInterval(checkNotes, 5000);
+    if (todos().items.some((x) => x.text)) openScroll();
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
-    if (demo === 'stretch') sitSince = Date.now() - cfg.stretch * 60000;   // 假裝已經坐滿時間，下一次檢查就提醒
+    if (demo === 'ui') { openNotes(); openScroll(); }
+    else if (demo === 'todo') {   // 寫兩件事、三秒後劃掉一件、七秒後劃掉另一件（應該放煙火）
+      cfg.todos = { date: today(), items: [{ text: '交立面圖給業主', done: false }, { text: '回覆結構技師', done: false }, { text: '', done: false }] };
+      openScroll();
+      setTimeout(() => { toggleTodo(0); refreshUi(); }, 3000);
+      setTimeout(() => { toggleTodo(1); refreshUi(); }, 7000);
+    }
+    else if (demo === 'note') cfg.notes.push({ id: 'demo', text: '三點要開會，記得帶模型和圖說', at: Date.now() + 4000 });
+    else if (demo === 'climb') setTimeout(() => startClimb(1), 2000);
+    else if (demo === 'stretch') sitSince = Date.now() - cfg.stretch * 60000;   // 假裝已經坐滿時間，下一次檢查就提醒
     else if (demo) setTimeout(() => (demo === 'roll' ? onRoll(1) : startChase()), 2000);
   });
   win.on('closed', () => { win = null; });

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>寫傳音符</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  html { background: #F7EDD3; min-height: 100%; }
+  body {
+    background: #F7EDD3;
+    background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.55), transparent 60%),
+                      radial-gradient(circle at 90% 90%, rgba(190,160,110,.18), transparent 55%);
+    color: #4A3A2A; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+    padding: 14px 16px 18px; font-size: 15px; user-select: none;
+  }
+  h1 { font-family: "DFKai-SB", "KaiTi", serif; font-size: 24px; margin: 0 0 10px; display: flex; align-items: center; gap: 10px; }
+  .fu { width: 22px; height: 34px; flex: none; }
+  label.t { display: block; font-weight: bold; margin: 8px 0 4px; }
+  textarea {
+    width: 100%; height: 64px; resize: none; border: 2px solid #C9B48A; border-radius: 10px;
+    background: #FFFBEF; color: #4A3A2A; font: inherit; font-size: 16px; padding: 8px 10px; outline: none;
+  }
+  textarea:focus, input[type=time]:focus { border-color: #59C9A5; }
+  .count { text-align: right; font-size: 12px; color: #8A7658; margin-top: 2px; }
+  .count.full { color: #E5484D; }
+  .whens { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button {
+    font: inherit; color: #4A3A2A; cursor: pointer; border-radius: 10px;
+    border: 2px solid #C9B48A; background: #FFF7E2; padding: 7px 4px; font-size: 15px;
+  }
+  button:hover { background: #FFF1CC; }
+  button.on { background: #59C9A5; border-color: #3E9E80; color: #fff; font-weight: bold; }
+  .custom { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+  .custom button { flex: 1; }
+  input[type=time] {
+    flex: 1; font: inherit; font-size: 16px; padding: 6px 8px; border: 2px solid #C9B48A;
+    border-radius: 10px; background: #FFFBEF; color: #4A3A2A; outline: none;
+  }
+  .hint { font-size: 13px; color: #8A7658; min-height: 18px; margin-top: 3px; }
+  .send {
+    width: 100%; margin-top: 6px; padding: 11px; font-size: 18px; font-weight: bold;
+    background: #F5B82E; border-color: #C9901A; color: #4A3A2A;
+  }
+  .send:hover { background: #F8C752; }
+  .msg { min-height: 20px; font-size: 14px; margin: 6px 0 0; text-align: center; }
+  .msg.ok { color: #2F8A6C; } .msg.err { color: #E5484D; }
+  h2 { font-family: "DFKai-SB", "KaiTi", serif; font-size: 18px; margin: 12px 0 6px; border-top: 1px dashed #C9B48A; padding-top: 10px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li {
+    display: flex; align-items: center; gap: 8px; background: #FFFBEF; border: 1px solid #E2D2AE;
+    border-left: 5px solid #F5B82E; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px;
+  }
+  li .txt { flex: 1; min-width: 0; word-break: break-all; }
+  li .when { display: block; font-size: 13px; color: #2F8A6C; font-weight: bold; }
+  li button { flex: none; padding: 5px 10px; font-size: 14px; }
+  .empty { color: #8A7658; font-size: 14px; text-align: center; padding: 8px 0; }
+</style>
+</head>
+<body>
+<h1>
+  <svg class="fu" viewBox="0 0 22 34" aria-hidden="true">
+    <rect x="1.5" y="1.5" width="19" height="31" rx="2" fill="#F5D44A" stroke="#C9901A" stroke-width="1.5"/>
+    <path d="M11 5 v6 M7 8 h8 M8 15 q3 3 6 0 M11 15 v13 M7 22 l8 2 M7 27 l8 -2" stroke="#E5484D" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>
+  寫傳音符
+</h1>
+
+<label class="t" for="txt">要提醒你什麼？</label>
+<textarea id="txt" maxlength="60" placeholder="例如：記得回業主電話"></textarea>
+<div class="count" id="count">0 / 60</div>
+
+<label class="t">什麼時候提醒？</label>
+<div class="whens" id="whens">
+  <button data-min="5">5 分鐘後</button>
+  <button data-min="15">15 分鐘後</button>
+  <button data-min="30">30 分鐘後</button>
+  <button data-min="60">1 小時後</button>
+</div>
+<div class="custom">
+  <button id="pick">指定時間</button>
+  <input type="time" id="clock">
+</div>
+<div class="hint" id="hint"></div>
+
+<button class="send" id="send">送出傳音符</button>
+<div class="msg" id="msg"></div>
+
+<h2>還沒送到的傳音符</h2>
+<ul id="list"></ul>
+
+<script>
+(function () {
+  if (typeof window.ui === 'undefined') {   // 瀏覽器預覽用的假資料
+    const now = Date.now();
+    let notes = [
+      { id: 'a', text: '記得回業主電話，問浴室磁磚顏色', at: now + 20 * 60000 },
+      { id: 'b', text: '喝水', at: now + 26 * 3600000 },
+    ];
+    window.ui = {
+      get: async () => ({ notes: notes.slice(), todos: { date: '', items: [] } }),
+      saveNotes: async (n) => (notes = n.slice()),
+      saveTodos: async (t) => t, toggle: async () => ({}), close: () => {}, resize: () => {}, onRefresh: () => {},
+    };
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const txt = $('txt'), clock = $('clock'), msg = $('msg');
+  let mode = null;   // {min:n} 或 'clock'
+  let notes = [];
+
+  const pad = (n) => String(n).padStart(2, '0');
+  function dayKey(d) { return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function fmt(ms) {
+    const d = new Date(ms), t = new Date(), tm = new Date(t.getTime() + 86400000);
+    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (dayKey(d) === dayKey(t)) return '今天 ' + hm;
+    if (dayKey(d) === dayKey(tm)) return '明天 ' + hm;
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  }
+  function clockTarget() {
+    if (!clock.value) return null;
+    const [h, m] = clock.value.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0);
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  function target() {
+    if (mode === 'clock') return clockTarget();
+    if (mode && mode.min) return Date.now() + mode.min * 60000;
+    return null;
+  }
+
+  function updateCount() {
+    const n = txt.value.length;
+    $('count').textContent = n + ' / 60';
+    $('count').classList.toggle('full', n >= 60);
+  }
+  function updateHint() {
+    const at = target();
+    $('hint').textContent = at ? '會在 ' + fmt(at) + ' 提醒你' : (mode === 'clock' ? '請選一個時間' : '');
+  }
+  function select(m) {
+    mode = m;
+    document.querySelectorAll('#whens button').forEach((b) => b.classList.toggle('on', !!(m && m.min) && +b.dataset.min === m.min));
+    $('pick').classList.toggle('on', m === 'clock');
+    updateHint();
+  }
+
+  document.querySelectorAll('#whens button').forEach((b) => b.addEventListener('click', () => select({ min: +b.dataset.min })));
+  $('pick').addEventListener('click', () => { select('clock'); if (!clock.value) clock.focus(); });
+  clock.addEventListener('input', () => select('clock'));
+  clock.addEventListener('focus', () => select('clock'));
+  txt.addEventListener('input', () => { updateCount(); msg.textContent = ''; });
+
+  function say(text, ok) { msg.textContent = text; msg.className = 'msg ' + (ok ? 'ok' : 'err'); }
+
+  function renderList() {
+    const ul = $('list'); ul.textContent = '';
+    const list = notes.slice().sort((a, b) => a.at - b.at);
+    if (!list.length) {
+      const li = document.createElement('div'); li.className = 'empty';
+      li.textContent = '目前沒有傳音符，寫一張給自己吧。'; ul.appendChild(li); return;
+    }
+    for (const n of list) {
+      const li = document.createElement('li');
+      const box = document.createElement('div'); box.className = 'txt';
+      const w = document.createElement('span'); w.className = 'when'; w.textContent = fmt(n.at);
+      const t = document.createElement('span'); t.textContent = n.text;
+      box.append(w, t);
+      const del = document.createElement('button'); del.textContent = '撕掉';
+      del.addEventListener('click', async () => {
+        notes = await window.ui.saveNotes(notes.filter((x) => x.id !== n.id)) || notes.filter((x) => x.id !== n.id);
+        renderList();
+      });
+      li.append(box, del); ul.appendChild(li);
+    }
+  }
+
+  $('send').addEventListener('click', async () => {
+    const text = txt.value.trim();
+    if (!text) { say('先寫下要提醒的事', false); txt.focus(); return; }
+    const at = target();
+    if (!at) { say(mode === 'clock' ? '請選一個時間' : '請選什麼時候提醒', false); return; }
+    const next = notes.concat([{ id: Date.now().toString(36), text: text.slice(0, 60), at }]);
+    notes = (await window.ui.saveNotes(next)) || next;
+    renderList();
+    txt.value = ''; clock.value = ''; updateCount(); select(null);
+    say('已送出，時間到我會跑去找你', true);
+  });
+
+  async function load() {
+    const d = await window.ui.get();
+    notes = (d && d.notes) || [];
+    renderList();
+  }
+  window.ui.onRefresh(load);
+  setInterval(() => { updateHint(); renderList(); }, 60000);   // 「今天/明天」跨日時更新
+  updateCount(); load();
+})();
+</script>
+</body>
+</html>
