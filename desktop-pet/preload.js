@@ -1,9 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const OUT = ['hit', 'drag-start', 'drag-end', 'click', 'menu', 'roll', 'frame'];
+const OUT = ['hit', 'drag-start', 'drag-end', 'click', 'menu', 'roll', 'frame', 'swipe'];
 
 contextBridge.exposeInMainWorld('pet', {
-  send: (ch, arg) => { if (OUT.includes(ch)) ipcRenderer.send(ch, arg); },
+  send: (ch, arg) => { if (OUT.includes(ch)) ipcRenderer.send(ch, arg); },   // click 帶部位名稱
   onState: (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
   onCursor: (fn) => ipcRenderer.on('cursor', (_e, c) => fn(c)),
   onCursorAt: (fn) => ipcRenderer.on('cursor-at', (_e, c) => fn(c)),

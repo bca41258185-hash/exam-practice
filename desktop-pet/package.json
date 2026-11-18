@@ -29,6 +29,13 @@
       "note.html",
       "scroll.html",
       "records.html",
+      "iching.js",
+      "lore.js",
+      "game-preload.js",
+      "cups.html",
+      "duel.html",
+      "omen.html",
+      "wish.html",
       "assets/**"
     ],
     "directories": {

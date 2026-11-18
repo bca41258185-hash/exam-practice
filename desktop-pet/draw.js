@@ -222,7 +222,7 @@
   }
 
   function drawGearBack(ctx, gear, robeD) {   // 畫在身體後面的配件
-    if (gear !== 'sword') return;
+    if (gear !== 'sword') return;   // 比劍時 gear 已換成 blade，背上就不畫
     ctx.save(); ctx.translate(-30, -58); ctx.rotate(-0.7);   // 背劍：劍柄從左肩後露出來
     ctx.lineWidth = 2.4; ctx.strokeStyle = C.line;
     ctx.fillStyle = robeD; ctx.beginPath(); ctx.roundRect(-3, -20, 6, 16, 2); ctx.fill(); ctx.stroke();
@@ -232,7 +232,27 @@
     ctx.restore();
   }
 
-  function drawGearFront(ctx, gear, t) {   // 畫在身體前面的配件
+  function drawGearFront(ctx, gear, t, st) {   // 畫在身體前面的配件
+    if (gear === 'blade') {   // 比劍：拿摺扇的地方改拿一把劍，被揮到時舉劍格擋
+      const a = (st < 0.15 ? -1.5 : -1.1) + Math.sin(t * 3) * 0.08;
+      ctx.save(); ctx.translate(-28, -16); ctx.rotate(a);
+      ctx.lineWidth = 2; ctx.strokeStyle = C.line; ctx.fillStyle = C.blade;
+      ctx.beginPath(); ctx.moveTo(4, -3); ctx.lineTo(54, -3); ctx.lineTo(62, 0); ctx.lineTo(54, 3); ctx.lineTo(4, 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.gold; ctx.fillRect(0, -8, 5, 16); ctx.strokeRect(0, -8, 5, 16);
+      ctx.fillStyle = '#7A5A3A'; ctx.fillRect(-10, -2.5, 10, 5); ctx.strokeRect(-10, -2.5, 10, 5);
+      ctx.restore();
+      return;
+    }
+    if (gear === 'talisman') {   // 比法術：手上捏著一張黃符，微微發光
+      ctx.save(); ctx.translate(-30, -20); ctx.rotate(-0.3 + Math.sin(t * 6) * 0.08);
+      ctx.shadowColor = 'rgba(245,184,46,0.9)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#F7D154'; ctx.strokeStyle = C.line; ctx.lineWidth = 1.8;
+      ctx.fillRect(-7, -14, 14, 28); ctx.strokeRect(-7, -14, 14, 28);
+      ctx.shadowBlur = 0; ctx.strokeStyle = C.mark; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-3, -10); ctx.lineTo(3, -5); ctx.lineTo(-3, 0); ctx.lineTo(3, 5); ctx.lineTo(-3, 10); ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.lineWidth = 2.4; ctx.strokeStyle = C.line;
     if (gear === 'gourd') {   // 酒葫蘆掛在腰間
       const sw = Math.sin(t * 3) * 0.12;
@@ -263,13 +283,13 @@
     const fit = o.outfit || {};
     const hat = fit.hat || (o.helmet ? 'douli' : 'none');
     const [robe, robeD] = ROBES[fit.robe] || ROBES.qing;
-    const gear = fit.gear || 'none';
+    const gear = o.state === 'sword' ? 'blade' : o.state === 'spell' ? 'talisman' : (fit.gear || 'none');   // 鬥法時手上的東西換成劍或符
     const sp = SPECIES[fit.species] || SPECIES.cat;
     const state = o.state, t = o.t, st = o.st, dir = o.dir < 0 ? -1 : 1;
     const look = o.look || { x: 0, y: 0 };
-    const moving = state === 'walk' || state === 'chase' || state === 'climb';
+    const moving = state === 'walk' || state === 'chase' || state === 'climb' || !!(o.outfit && o.outfit.spar && o.outfit.spar.running);
     const air = state === 'drag' || state === 'fall';
-    const fly = state === 'roll';            // 御劍飛行
+    const fly = state === 'roll' || !!(o.outfit && o.outfit.spar && o.outfit.spar.flying);   // 御劍飛行（鬥法時在空中也是）
     const med = state === 'sleep';           // 打坐修煉
     const trib = state === 'tribulation';    // 渡劫
     const zap = (trib && st < 2.3 && (st * 8 % 2) < 1.1) || (state === 'struck' && (st * 10 % 2) < 1.2);
@@ -281,6 +301,8 @@
     const strike = state === 'strike' ? (fit.move || 'palm') : '';   // 出招
     const vanish = state === 'vanish', appear = state === 'appear';  // 縮地成寸
     const warn = state === 'warn', struck = state === 'struck';      // 天雷預告、被劈
+    const laugh = state === 'laugh', belly = state === 'belly', yawn = state === 'yawn';
+    const spell = state === 'spell', sword = state === 'sword', divine = state === 'divine';
     const rl = fit.realm || 0, onGround = !air && !flip && !float && !climb && !hang && !fly && !vanish && !appear;
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
@@ -296,6 +318,12 @@
     if (state === 'peek') rot = -0.13;
     if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
     if (float) { lift = 6 + Math.sin(t * 6) * 2; }
+    if (laugh) { rot = Math.sin(t * 22) * 0.07; sy = 1 + Math.sin(t * 22) * 0.04; lift = Math.abs(Math.sin(t * 11)) * 3; }
+    if (belly) rot = -Math.PI / 2 + Math.sin(t * 5) * 0.18;   // 翻身露肚子，左右扭
+    if (yawn) { sy = 1 + Math.sin(Math.min(st, 1.6) / 1.6 * Math.PI) * 0.08; }
+    if (spell) { rot = Math.sin(st * 30) * 0.03; }
+    if (sword) { rot = st < 0.15 ? -0.12 : 0; }
+    if (divine) { lift = Math.abs(Math.sin(t * 10)) * 4; rot = Math.sin(t * 20) * 0.05; }
     if (strike === 'palm') { rot = 0.12; sx = 1.06; }
     if (strike === 'circle') rot = Math.sin(st * 4) * 0.25;
     if (strike === 'flick') sy = 1 + Math.sin(st * 20) * 0.03;
@@ -435,11 +463,11 @@
     const blink = (t % 4.2) < 0.14;
     ctx.fillStyle = C.line; ctx.lineWidth = 2.6;
     const eye = (x) => {
-      if (med || taichi || drink || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
+      if (yawn || (med || taichi || drink) || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey); ctx.quadraticCurveTo(x, ey + (med ? 4 : 0), x + 5, ey); ctx.stroke();
       } else if (flip) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey - 3); ctx.lineTo(x + 1, ey); ctx.lineTo(x - 5, ey + 3); ctx.stroke();
-      } else if (state === 'happy' || state === 'eat') {
+      } else if (state === 'happy' || state === 'eat' || laugh || belly) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey + 2); ctx.lineTo(x, ey - 3); ctx.lineTo(x + 5, ey + 2); ctx.stroke();
       } else if (state === 'dizzy') {
         ctx.beginPath();
@@ -473,7 +501,12 @@
     // 嘴
     ctx.lineWidth = 2.2; ctx.strokeStyle = C.line;
     const chew = state === 'eat' ? Math.abs(Math.sin(st * 10)) : 0;
-    if (state === 'eat' || air || state === 'startle') {
+    if (yawn) {
+      const o = Math.sin(Math.min(st, 1.6) / 1.6 * Math.PI);
+      ellipse(ctx, 6, -25, 4 + o * 3, 2 + o * 7, '#C8553D', C.line);
+    } else if (laugh || belly) {
+      ctx.fillStyle = '#C8553D'; ctx.beginPath(); ctx.moveTo(-1, -29); ctx.quadraticCurveTo(6, -17, 13, -29); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (state === 'eat' || air || state === 'startle') {
       ellipse(ctx, 6, -26, 4, state === 'eat' ? 1.5 + chew * 4 : 4.5, '#C8553D', C.line);
     } else if (med) {
       ctx.beginPath(); ctx.moveTo(2, -28); ctx.lineTo(10, -28); ctx.stroke();
@@ -502,7 +535,7 @@
     if (state === 'eat') pill(ctx, 36, -20 - chew * 2, Math.max(0.3, 1 - st / 3.2), t);
 
     // 配件與頭飾
-    drawGearFront(ctx, gear, t);
+    drawGearFront(ctx, gear, t, st);
     drawHat(ctx, hat, robeD, t);
     ctx.restore();
 
@@ -517,6 +550,68 @@
       drawPet(ctx, { state: 'happy', dir, t, st: p * 1.2, outfit: { species: fit.species, hat: 'none', robe: fit.robe, gear: 'none', realm: 0 }, look: { x: 0, y: 0 }, mini: true });
       ctx.restore();
     }
+    if (divine) {   // 起卦：三枚銅錢在頭上翻
+      for (let i = 0; i < 3; i++) {
+        const a = t * 9 + i * 2.1, y = top - 18 - Math.abs(Math.sin(t * 6 + i)) * 22;
+        ctx.save(); ctx.translate(76 + i * 24, y); ctx.scale(Math.cos(a), 1);
+        ellipse(ctx, 0, 0, 9, 9, C.gold, C.line); ctx.fillStyle = C.line; ctx.fillRect(-2.5, -2.5, 5, 5);
+        ctx.restore();
+      }
+    }
+    if (fit.hex && (state === 'hexagram' || state === 'idle' || state === 'happy')) {   // 卦象：六條爻，由下往上
+      const bx = 100 + dir * 66, by = 132;
+      ctx.save(); ctx.fillStyle = 'rgba(251,243,220,0.92)'; ctx.strokeStyle = C.line; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(bx - 20, by - 66, 40, 72, 6); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.line;
+      fit.hex.forEach((yang, i) => {
+        const y = by - 4 - i * 10;
+        if (yang) ctx.fillRect(bx - 14, y - 3, 28, 5);
+        else { ctx.fillRect(bx - 14, y - 3, 11, 5); ctx.fillRect(bx + 3, y - 3, 11, 5); }
+      });
+      ctx.restore();
+    }
+    if (fit.lantern && onGround && !o.mini) {   // 宵禁燈籠：一根竹竿挑著紅燈籠
+      const sw = Math.sin(t * 2) * 0.12, lx = 100 + dir * 46;
+      ctx.save(); ctx.translate(lx, 150 - lift); ctx.rotate(sw * dir);
+      ctx.strokeStyle = '#7A5A3A'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(0, -34); ctx.lineTo(dir * 14, -38); ctx.stroke();
+      ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(dir * 14, -38); ctx.lineTo(dir * 14, -30); ctx.stroke();
+      const g = ctx.createRadialGradient(dir * 14, -20, 2, dir * 14, -20, 22);
+      g.addColorStop(0, 'rgba(255,200,120,0.55)'); g.addColorStop(1, 'rgba(255,200,120,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(dir * 14, -20, 22, 0, Math.PI * 2); ctx.fill();
+      ellipse(ctx, dir * 14, -20, 8, 10, '#E5484D', C.line);
+      ctx.fillStyle = C.gold; ctx.fillRect(dir * 14 - 5, -31, 10, 3); ctx.fillRect(dir * 14 - 5, -11, 10, 3);
+      ctx.restore();
+    }
+    if (fit.demon && !o.mini) {   // 心魔：旁邊一隻黑影版的牠，紅眼睛，頭上紫火代表還要打幾下
+      const d = fit.demon, wob = Math.sin(t * 3) * 4, cx = 100 - dir * 60, cy = 150 + wob, sc = 0.62;
+      ctx.save(); ctx.globalAlpha = 0.75;
+      ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-100, -186);
+      ctx.filter = 'brightness(0.18) saturate(0)';
+      drawPet(ctx, { state: 'idle', dir: -dir, t, st: 1, outfit: { species: fit.species, hat: 'none', robe: 'mo', gear: 'none', realm: 0 }, look: { x: 0, y: 0 }, mini: true });
+      ctx.restore();
+      ctx.save(); ctx.fillStyle = '#FF3B3B'; ctx.shadowColor = '#FF3B3B'; ctx.shadowBlur = 6;
+      for (const ex of [-8, 20]) { ctx.beginPath(); ctx.arc(cx + ex * -dir * sc, cy - 37 * sc, 2.4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      for (let i = 0; i < d.hp; i++) spark(ctx, cx - 10 + i * 10, cy - 66 * sc - 8 + Math.sin(t * 8 + i) * 2, 4.5, 0.95, '#8E6BD9');
+    }
+    if (spell) {   // 比法術：你的黃符飛過來，牠用一團青色氣勁擋回去
+      const p = Math.min(1, st / 0.35);
+      ctx.save(); ctx.translate(100 + dir * (90 - p * 50), 120 - p * 10); ctx.rotate(p * 6);
+      ctx.fillStyle = '#F7D154'; ctx.strokeStyle = C.line; ctx.lineWidth = 1.5; ctx.fillRect(-5, -9, 10, 18); ctx.strokeRect(-5, -9, 10, 18);
+      ctx.restore();
+      if (st < 0.25) for (let i = 0; i < 6; i++) spark(ctx, 100 + dir * 40 + Math.cos(i) * st * 60, 120 + Math.sin(i * 2) * st * 60, 5, 1 - st * 4, i % 2 ? C.gold : '#E5484D');
+      const g = ctx.createRadialGradient(100 + dir * 30, 124, 2, 100 + dir * 30, 124, 16);
+      g.addColorStop(0, 'rgba(89,201,165,0.95)'); g.addColorStop(1, 'rgba(89,201,165,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(100 + dir * 30, 124, 16 + Math.sin(t * 20) * 2, 0, Math.PI * 2); ctx.fill();
+    }
+    if (sword) {   // 比劍：牠舉劍格擋，每一下都有火花和一道劍光
+      if (st < 0.2) {
+        for (let i = 0; i < 7; i++) spark(ctx, 100 + dir * 62 + Math.cos(i * 0.9) * st * 90, 112 + Math.sin(i * 0.9) * st * 90, 5, 1 - st * 5, i % 2 ? '#FFFFFF' : C.gold);
+        ctx.save(); ctx.globalAlpha = 1 - st * 5; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(100 + dir * 40, 120, 46, -1.2, 0.4); ctx.stroke(); ctx.restore();
+      }
+    }
+    if (laugh) { for (let i = 0; i < 3; i++) { const p = (t * 1.5 + i / 3) % 1; ctx.fillStyle = C.line; ctx.font = 'bold 13px sans-serif'; ctx.globalAlpha = 1 - p; ctx.fillText('哈', 100 + dir * (30 + i * 12), top + 10 - p * 24); ctx.globalAlpha = 1; } }
     if (strike === 'palm') {   // 降龍十八掌：一道金色的龍形氣勁往前衝
       for (let i = 0; i < 7; i++) {
         const p = (st * 1.6 + i * 0.12) % 1;
