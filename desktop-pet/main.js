@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const POEMS = require('./poems');
 
 const BASE = 200;           // 視窗邏輯邊長（畫布座標）
 const TICK = 33;            // 毫秒
@@ -42,7 +43,27 @@ function limits() {
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
 function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, helmet: cfg.helmet }); }
-function say(text, force) { if (cfg.talk || force) send('say', text); }
+function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
+
+// 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
+let poemTimer = null, lastPoem = -1;
+function stopPoem() { if (poemTimer) { clearTimeout(poemTimer); poemTimer = null; } }
+function recite(force) {
+  if (!cfg.talk && !force) return;
+  stopPoem();
+  let i = Math.floor(Math.random() * POEMS.length);
+  if (i === lastPoem) i = (i + 1) % POEMS.length;   // 不連續唸同一首
+  lastPoem = i;
+  const p = POEMS[i], m = p.by.match(/^(.*?)(《.*》)$/);
+  const tail = p.by.length <= 10 || !m ? ['——' + p.by] : ['——' + m[1], m[2]];   // 出處太長就分兩次說
+  const parts = [...p.lines, ...tail];
+  let k = 0;
+  (function next() {
+    send('say', parts[k]);
+    k += 1;
+    poemTimer = k < parts.length ? setTimeout(next, 2600) : null;
+  })();
+}
 function set(s, ms) { state = s; until = now() + (ms || 0); phase = 0; pushState(); }
 function place() {
   if (!win || win.isDestroyed()) return;
@@ -88,7 +109,8 @@ function decide() {
   if (r < 0.52) return set('sleep', rnd(15000, 40000));
   if (r < 0.60) return startPeek();
   if (r < 0.68 && near) return startChase();
-  if (r < 0.75) { say(CHAT[Math.floor(Math.random() * CHAT.length)]); }
+  if (r < 0.71) { say(CHAT[Math.floor(Math.random() * CHAT.length)]); }
+  else if (r < 0.75) recite();
   if (pos.x < l.xmin || pos.x > l.xmax) { dir = pos.x < l.xmin ? 1 : -1; return set('walk', 1500); }
   set('idle', rnd(2000, 6000));
 }
@@ -241,6 +263,7 @@ function menu() {
     { label: '御劍飛行', click: () => onRoll(dir) },
     { label: '來追我', click: () => { lastTouch = now(); startChase(); } },
     { label: '躲貓貓', click: () => { lastTouch = now(); startPeek(); } },
+    { label: '吟詩一首', click: () => recite(true) },
     { type: 'separator' },
     {
       label: '大小', submenu: [[0.75, '小'], [1, '中'], [1.5, '大']].map(([s, label]) => ({

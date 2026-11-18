@@ -16,7 +16,7 @@
   "build": {
     "appId": "local.deskpet.app",
     "productName": "DeskPet",
-    "files": ["main.js", "preload.js", "pet.html", "pet.js", "draw.js", "assets/**"],
+    "files": ["main.js", "poems.js", "preload.js", "pet.html", "pet.js", "draw.js", "assets/**"],
     "directories": { "buildResources": "build", "output": "dist" },
     "win": { "target": ["portable"] },
     "portable": { "artifactName": "DeskPet-${version}-win.exe" },
