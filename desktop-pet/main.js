@@ -1,5 +1,5 @@
 // 桌面寵物主程序：視窗、位置物理、行為狀態機、選單。
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const POEMS = require('./poems');
@@ -130,7 +130,25 @@ function startPeek() {
   dir = pos.x - l.xmin < l.xmax - pos.x ? -1 : 1;
   set('peekout', 15000);
 }
-function startChase() { set('chase', 8000); say('道友留步！'); }
+const KUNGFU = ['leap', 'hover', 'land'];   // 來追我的輕功動作（都在空中，自己處理位置）
+let chaseUntil = 0, leap = null, landAfter = false;
+function startChase() {
+  if (['drag', 'fall', 'tribulation'].includes(state)) return;
+  chaseUntil = now() + 9000; landAfter = false;
+  say(['道友留步！', '看我輕功！', '凌波微步！'][Math.floor(Math.random() * 3)]);
+  nextLeap();
+}
+function nextLeap() {   // 朝游標跳一大步：落點在游標旁邊，一步最遠 280
+  const k = cfg.scale, l = limits(), cur = screen.getCursorScreenPoint();
+  const cx = pos.x + 100 * k, d = cur.x < cx ? -1 : 1;
+  if (d !== dir) dir = d;
+  let tx = cur.x - dir * 80 * k - 100 * k, ty = cur.y - 124 * k;
+  const dx = tx - pos.x, dy = ty - pos.y, dist = Math.hypot(dx, dy), maxStep = 280 * k;
+  if (dist > maxStep) { tx = pos.x + dx / dist * maxStep; ty = pos.y + dy / dist * maxStep; }
+  tx = Math.max(l.xmin, Math.min(l.xmax, tx)); ty = Math.max(l.ymin, Math.min(l.ground, ty));
+  leap = { x0: pos.x, y0: pos.y, x1: tx, y1: ty, t0: now(), dur: 430 };
+  set('leap', 430);
+}
 function feed() {
   lastTouch = now();
   if (['drag', 'fall', 'tribulation'].includes(state)) return;
@@ -165,6 +183,37 @@ function tick() {
       else if (maxSpeed > 38 || bounces >= 3) { set('dizzy', 2600); say('走火入魔了…'); }
       else set('idle', rnd(800, 2000));
     }
+  } else if (KUNGFU.includes(state)) {
+    if (state === 'leap' && leap) {   // 拋物線往前跳，空中翻一圈（翻的動作在 draw.js）
+      const p = Math.min(1, (t - leap.t0) / leap.dur);
+      pos.x = leap.x0 + (leap.x1 - leap.x0) * p;
+      pos.y = leap.y0 + (leap.y1 - leap.y0) * p - Math.sin(p * Math.PI) * 70 * k;
+      pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));
+      if (p >= 1) {
+        const near = Math.hypot(cur.x - (pos.x + 100 * k), cur.y - (pos.y + 124 * k)) < 120 * k;
+        if (near) { landAfter = true; gain(3); say(['抓到道友了！', '承讓承讓～', '身法如何？'][Math.floor(Math.random() * 3)]); set('hover', 900); }
+        else if (t > chaseUntil) { landAfter = true; say('靈力耗盡…'); set('hover', 400); }
+        else set('hover', 140);   // 踏空，借力再跳
+      }
+    } else if (state === 'hover') {
+      if (t > until) { if (landAfter) set('land'); else nextLeap(); }
+    } else if (state === 'land') {   // 輕輕飄下來
+      pos.y = Math.min(l.ground, pos.y + 7 * k);
+      if (pos.y >= l.ground) { pos.y = l.ground; set('idle', 1500); }
+    }
+  } else if (state === 'roll') {
+    // 御劍飛行：飛在游標旁邊追著它跑（面向游標，不擋住游標）；時間到了慢慢降落
+    const cx = pos.x + 100 * k, dx = cur.x - cx;
+    if (Math.abs(dx) > 40 * k && (dx < 0 ? -1 : 1) !== dir) { dir = dx < 0 ? -1 : 1; pushState(); }
+    let tx = cur.x - dir * 90 * k - 100 * k, ty = cur.y - 124 * k;
+    if (t > until) { tx = pos.x; ty = l.ground; }   // 靈力用完：原地降落
+    const ddx = tx - pos.x, ddy = ty - pos.y, dist = Math.hypot(ddx, ddy), max = 30 * k;
+    const step = Math.min(max, dist * 0.2);
+    if (dist > 0.5) { pos.x += ddx / dist * step; pos.y += ddy / dist * step; }
+    pos.x = Math.max(l.xmin, Math.min(l.xmax, pos.x));
+    pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));
+    if (t > until && pos.y >= l.ground - 1) { pos.y = l.ground; set('idle', 1500); say('收劍！'); }
+    if (tickN % 30 === 0) gain(0.1);
   } else {
     // 地面上的狀態：螢幕配置改變時落回地面
     if (pos.y < l.ground - 2) { vel = { x: 0, y: 0 }; maxSpeed = 0; bounces = 0; set('fall'); }
@@ -174,19 +223,6 @@ function tick() {
       pos.x += dir * 1.6 * k;
       if (pos.x <= l.xmin && dir < 0) dir = 1, pushState();
       if (pos.x >= l.xmax && dir > 0) dir = -1, pushState();
-    } else if (state === 'roll') {
-      pos.x += dir * 9 * k;
-      if (pos.x <= l.xmin) { pos.x = l.xmin; dir = 1; pushState(); }
-      if (pos.x >= l.xmax) { pos.x = l.xmax; dir = -1; pushState(); }
-    } else if (state === 'chase') {
-      const dx = cur.x - (pos.x + W() / 2);
-      const d = dx < 0 ? -1 : 1;
-      if (d !== dir) { dir = d; pushState(); }
-      if (Math.abs(dx) < 34 * k) { set('happy', 1500); say('抓到道友了！'); }
-      else {
-        pos.x = Math.max(l.xmin, Math.min(l.xmax, pos.x + dir * 4.2 * k));
-        if (t > until) { set('idle', 2500); say('靈力耗盡…'); }
-      }
     } else if (state === 'peekout') {
       const target = dir < 0 ? l.xmin - 46 * k : l.xmax + 46 * k;
       pos.x += dir * 2 * k;
@@ -201,7 +237,7 @@ function tick() {
       pending = false; set('tribulation', 3300); say('天劫將至！', true);
     }
 
-    if (t > until && state !== 'chase') {
+    if (t > until) {
       if (state === 'eat') { set('happy', 1500); say('修為 +30'); gain(30); }
       else if (state === 'tribulation') { saveCfg(); set('happy', 1800); say(`突破！${REALMS[realmOf(cfg.xp)]}期`, true); }
       else if (state === 'peek') { set('walk', 2500); }
@@ -225,6 +261,7 @@ function onClick() {
   lastTouch = t;
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
   if (['fall', 'drag', 'tribulation'].includes(state)) return;
+  if (state === 'roll' || KUNGFU.includes(state)) { gain(2); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
   if (clicks.length >= 5) { clicks = []; set('dizzy', 2600); say('道心不穩啦～'); return; }
   gain(2);
@@ -248,11 +285,10 @@ function onDragEnd() {
   set('fall');
 }
 function onRoll(d) {
-  if (['drag', 'fall', 'dizzy', 'tribulation', 'eat'].includes(state)) return;
+  if (['drag', 'fall', 'dizzy', 'tribulation', 'eat', ...KUNGFU].includes(state)) return;
   lastTouch = now();
-  dir = d > 0 ? 1 : -1;
-  if (state !== 'roll') say('御劍！');
-  set('roll', 1600);
+  if (state !== 'roll') say('御劍追你！');
+  set('roll', 10000);   // 追著游標飛十秒；再滾一次滾輪就再延長
 }
 
 function setScale(s) {
@@ -262,6 +298,25 @@ function setScale(s) {
   pos.x = cx - W() / 2;
   if (onGround) pos.y = limits().ground;
   place();
+}
+
+// 用安裝程式裝的才有解除安裝程式（免安裝版、開發時沒有）
+function uninstaller() {
+  if (process.platform !== 'win32' || !app.isPackaged) return '';
+  const dir = path.dirname(process.execPath);
+  const exe = fs.existsSync(dir) ? fs.readdirSync(dir).find((f) => /^Uninstall .*\.exe$/i.test(f)) : '';
+  return exe ? path.join(dir, exe) : '';
+}
+async function uninstall() {
+  const exe = uninstaller();
+  if (!exe) return;
+  const r = await dialog.showMessageBox({
+    type: 'question', buttons: ['解除安裝', '取消'], defaultId: 1, cancelId: 1, title: '解除安裝桌面靈寵',
+    message: '要解除安裝桌面靈寵嗎？', detail: '修為和設定會留著，之後重新安裝可以接著修煉。',
+  });
+  if (r.response !== 0) return;
+  shell.openPath(exe);
+  setTimeout(() => app.quit(), 500);
 }
 
 function menu() {
@@ -299,6 +354,7 @@ function menu() {
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
     { label: '開機自動啟動', type: 'checkbox', checked: login, visible: process.platform !== 'linux', click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },
     { type: 'separator' },
+    { label: '解除安裝…', visible: !!uninstaller(), click: uninstall },
     { label: '結束', click: () => app.quit() },
   ]);
 }
@@ -322,6 +378,9 @@ function create() {
     set('idle', 2500);
     setTimeout(() => say(greeting()), 600);
     setInterval(tick, TICK);
+    // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
+    const demo = process.env.PET_DEMO;
+    if (demo) setTimeout(() => (demo === 'roll' ? onRoll(1) : startChase()), 2000);
   });
   win.on('closed', () => { win = null; });
 

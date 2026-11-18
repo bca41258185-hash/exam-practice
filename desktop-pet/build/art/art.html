@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- 封面、圖示、安裝程式側邊圖：用角色本身的繪圖程式畫，改了角色就重畫一次（說明見 make.js） -->
+<body style="margin:0;background:transparent;overflow:hidden">
+<canvas id="icon" width="512" height="512" style="position:absolute;left:1210px;top:0"></canvas>
+<canvas id="side" width="164" height="314" style="position:absolute;left:1210px;top:520px"></canvas>
+<canvas id="cover" width="1200" height="630" style="position:absolute;left:0;top:0"></canvas>
+<script src="../../draw.js"></script>
+<script>
+const KAI = '"DFKai-SB","BiauKai","KaiTi","STKaiti","Microsoft JhengHei",serif';
+
+// 夜色水墨：漸層天空、月亮、遠山、雲氣、星點
+function sky(ctx, w, h, moon) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#102436'); g.addColorStop(0.55, '#1B4552'); g.addColorStop(1, '#2C6A66');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  if (moon) {
+    const [mx, my, mr] = moon;
+    const glow = ctx.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 2.6);
+    glow.addColorStop(0, 'rgba(246,235,200,0.35)'); glow.addColorStop(1, 'rgba(246,235,200,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(mx, my, mr * 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#F6EBC8'; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(214,196,150,0.35)';
+    for (const [dx, dy, r] of [[-0.3, -0.2, 0.18], [0.25, 0.15, 0.12], [-0.05, 0.35, 0.09]]) {
+      ctx.beginPath(); ctx.arc(mx + dx * mr, my + dy * mr, r * mr, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  let seed = 7;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < w * h / 4000; i++) {
+    ctx.globalAlpha = 0.3 + rnd() * 0.6; ctx.fillStyle = '#FFF6D6';
+    ctx.beginPath(); ctx.arc(rnd() * w, rnd() * h * 0.55, 0.6 + rnd() * 1.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+function mountains(ctx, w, h, base, layers) {
+  layers.forEach(([color, amp, y, freq, ph], i) => {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 4) {
+      const v = Math.sin(x * freq + ph) * 0.6 + Math.sin(x * freq * 2.3 + ph * 1.7) * 0.3 + Math.sin(x * freq * 5.1 + ph) * 0.1;
+      ctx.lineTo(x, base * y - Math.max(0, v) * amp - amp * 0.2);
+    }
+    ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
+  });
+}
+function cloud(ctx, x, y, s, a) {   // 祥雲：幾個圓疊起來加一道捲紋
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.globalAlpha = a;
+  ctx.fillStyle = '#F3F7F2'; ctx.strokeStyle = '#9CC9BE'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (const [cx, cy, r] of [[-38, 6, 20], [-12, -6, 26], [18, -2, 24], [42, 8, 18]]) { ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, Math.PI * 2); }
+  ctx.fill();
+  ctx.fillRect(-56, 6, 112, 18);
+  ctx.beginPath(); ctx.arc(-12, 0, 10, Math.PI * 0.2, Math.PI * 1.6); ctx.stroke();
+  ctx.beginPath(); ctx.arc(20, 4, 8, Math.PI * 1.2, Math.PI * 2.6); ctx.stroke();
+  ctx.restore();
+}
+function pet(ctx, x, y, s, outfit, dir, state) {   // (x, y) 是腳底中心
+  ctx.save(); ctx.translate(x - 100 * s, y - 188 * s); ctx.scale(s, s);
+  drawPet(ctx, { state: state || 'idle', dir: dir || 1, t: 1.15, st: 0.5, outfit, look: { x: 0, y: 0 } });
+  ctx.restore();
+}
+function glowText(ctx, text, x, y, size, color, align) {
+  ctx.font = `bold ${size}px ${KAI}`; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(245,184,46,0.55)'; ctx.shadowBlur = size * 0.35;
+  ctx.fillStyle = color; ctx.fillText(text, x, y);
+  ctx.shadowBlur = 0;
+}
+
+// ---- 圖示 512x512：圓角方塊，月下祥雲上的靈貓戴斗笠
+(() => {
+  const c = document.getElementById('icon').getContext('2d');
+  c.save();
+  const r = 110; c.beginPath(); c.roundRect(8, 8, 496, 496, r); c.clip();
+  sky(c, 512, 512, [380, 140, 70]);
+  mountains(c, 512, 512, 512, [['rgba(62,122,114,0.55)', 70, 0.78, 0.02, 1], ['rgba(36,82,84,0.9)', 50, 0.9, 0.03, 3]]);
+  cloud(c, 256, 430, 3.2, 1);
+  pet(c, 256, 432, 2.25, { species: 'cat', hat: 'douli', robe: 'qing', gear: 'none' });
+  c.restore();
+  c.lineWidth = 10; c.strokeStyle = '#E9CB7C'; c.beginPath(); c.roundRect(13, 13, 486, 486, r - 5); c.stroke();
+})();
+
+// ---- 安裝程式側邊圖 164x314：直書「桌面靈寵」，狐仙坐在雲上
+(() => {
+  const c = document.getElementById('side').getContext('2d');
+  sky(c, 164, 314, [118, 54, 24]);
+  mountains(c, 164, 314, 314, [['rgba(62,122,114,0.6)', 30, 0.8, 0.05, 2], ['rgba(36,82,84,0.95)', 22, 0.9, 0.07, 4]]);
+  ['桌', '面', '靈', '寵'].forEach((ch, i) => glowText(c, ch, 42, 40 + i * 44, 36, '#F5D88A'));
+  c.fillStyle = '#E5484D'; c.beginPath(); c.roundRect(32, 214, 20, 20, 3); c.fill();   // 小紅印
+  c.font = `bold 13px ${KAI}`; c.fillStyle = '#FFF6E0'; c.textAlign = 'center'; c.fillText('仙', 42, 225);
+  cloud(c, 108, 288, 1.05, 1);
+  pet(c, 106, 290, 0.78, { species: 'fox', hat: 'none', robe: 'fei', gear: 'fan' }, -1);
+})();
+
+// ---- 封面 1200x630：五隻角色站在雲上
+(() => {
+  const c = document.getElementById('cover').getContext('2d');
+  sky(c, 1200, 630, [1010, 120, 70]);
+  mountains(c, 1200, 630, 630, [['rgba(62,122,114,0.5)', 110, 0.72, 0.008, 1], ['rgba(46,100,98,0.75)', 80, 0.84, 0.012, 2.5], ['rgba(30,70,74,0.95)', 50, 0.95, 0.02, 4]]);
+  glowText(c, '桌面靈寵', 600, 120, 96, '#F5D88A');
+  c.font = `28px ${KAI}`; c.fillStyle = '#E6F2EE'; c.textAlign = 'center'; c.fillText('一隻陪你在桌面上修煉的小靈獸', 600, 205);
+  const cast = [
+    { species: 'rabbit', hat: 'wreath', robe: 'yuebai', gear: 'gourd' },
+    { species: 'fox', hat: 'mask', robe: 'fei', gear: 'fan' },
+    { species: 'cat', hat: 'douli', robe: 'qing', gear: 'sword' },
+    { species: 'panda', hat: 'jin', robe: 'mo', gear: 'none' },
+    { species: 'dragon', hat: 'guan', robe: 'jin', gear: 'none' },
+  ];
+  cast.forEach((o, i) => {
+    const x = 160 + i * 220, y = 520 - (i === 2 ? 18 : 0);
+    cloud(c, x, y + 2, 1.7, 1);
+    pet(c, x, y, 1.25, o, i < 2 ? 1 : -1, i === 2 ? 'happy' : 'idle');
+  });
+  c.font = `22px ${KAI}`; c.fillStyle = 'rgba(230,242,238,0.85)';
+  c.fillText('靈貓・狐仙・玉兔・熊貓・小青龍　｜　修為・境界・吟詩・御劍', 600, 600);
+})();
+</script>

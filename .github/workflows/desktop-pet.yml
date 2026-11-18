@@ -19,7 +19,9 @@ jobs:
           - os: windows-latest
             script: dist:win
             name: DeskPet-Windows
-            glob: desktop-pet/dist/*.exe
+            glob: |
+              desktop-pet/dist/DeskPet-Setup-*.exe
+              desktop-pet/dist/DeskPet-*-win.exe
           - os: macos-latest
             script: dist:mac
             name: DeskPet-macOS

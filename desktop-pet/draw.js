@@ -273,6 +273,8 @@
     const med = state === 'sleep';           // 打坐修煉
     const trib = state === 'tribulation';    // 渡劫
     const zap = trib && st < 2.3 && (st * 8 % 2) < 1.1;
+    const flip = state === 'leap';                          // 輕功：空中翻筋斗
+    const float = state === 'hover' || state === 'land';    // 踏空、飄落
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
     if (state === 'idle' || state === 'peek' || state === 'eat') sy = 1 + 0.02 * Math.sin(t * 2.4);
@@ -285,12 +287,19 @@
     if (state === 'startle') lift = Math.max(0, Math.sin(Math.min(st, 0.5) * Math.PI * 2)) * 14;
     if (state === 'dizzy') rot = Math.sin(t * 6) * 0.16;
     if (state === 'peek') rot = -0.13;
+    if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
+    if (float) { lift = 6 + Math.sin(t * 6) * 2; }
 
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     // 影子
-    if (!air) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
+    if (!air && !flip && !float) ellipse(ctx, 100, 188, Math.max(14, 34 - lift * 0.6), 4, 'rgba(0,0,0,0.13)');
+    if (float) {   // 腳下一朵小雲，踏著借力
+      ctx.save(); ctx.globalAlpha = 0.9; ctx.lineWidth = 2;
+      ellipse(ctx, 86, 186, 14, 6, '#F3F7F2', C.qi); ellipse(ctx, 114, 186, 14, 6, '#F3F7F2', C.qi); ellipse(ctx, 100, 183, 16, 8, '#F3F7F2', C.qi);
+      ctx.restore();
+    }
     if (med) {
       for (let i = 0; i < 2; i++) {
         const p = (t * 0.4 + i / 2) % 1;
@@ -329,7 +338,7 @@
 
     // 腳
     const ph = moving ? Math.sin(t * (state === 'chase' ? 14 : 9)) : 0;
-    const dangle = air ? 5 + Math.sin(t * 12) * 2 : 0;
+    const dangle = air ? 5 + Math.sin(t * 12) * 2 : flip ? -4 : 0;
     if (!med) {
       const foot = sp.patches || sp.body;   // 熊貓的腳是黑的
       ellipse(ctx, -15 + ph * 7, -1 + dangle - Math.max(0, ph) * 3, 9, 5, foot, C.line);
@@ -373,6 +382,8 @@
     const eye = (x) => {
       if (med || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey); ctx.quadraticCurveTo(x, ey + (med ? 4 : 0), x + 5, ey); ctx.stroke();
+      } else if (flip) {
+        ctx.beginPath(); ctx.moveTo(x - 5, ey - 3); ctx.lineTo(x + 1, ey); ctx.lineTo(x - 5, ey + 3); ctx.stroke();
       } else if (state === 'happy' || state === 'eat') {
         ctx.beginPath(); ctx.moveTo(x - 5, ey + 2); ctx.lineTo(x, ey - 3); ctx.lineTo(x + 5, ey + 2); ctx.stroke();
       } else if (state === 'dizzy') {
@@ -427,6 +438,14 @@
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const top = 186 - lift - (TALL_HATS.includes(hat) || sp.ears === 'rabbit' ? 92 : 76) * sy;
+    if (flip) {
+      ctx.lineWidth = 3; ctx.strokeStyle = C.qi;
+      for (let i = 0; i < 3; i++) {
+        ctx.globalAlpha = 0.6 - i * 0.18;
+        ctx.beginPath(); ctx.arc(100, 154 - lift, 44 + i * 7, Math.PI * (dir > 0 ? 0.6 : -0.4) , Math.PI * (dir > 0 ? 1.4 : 0.4)); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
     if (state === 'happy') {
       for (let i = 0; i < 4; i++) {
         const p = (st * 0.8 + i * 0.25) % 1;
