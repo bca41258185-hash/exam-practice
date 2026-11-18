@@ -28,7 +28,17 @@ import ai_tasks  # noqa: E402
 import panel  # noqa: E402
 import pet_core as core  # noqa: E402
 
-W, H = 150, 168
+W, H = 150, 168   # 標準大小；實際大小再乘上設定的百分比
+
+
+def _scale_font(font: str, k: float) -> str:
+    """把 Tk 字型描述裡的字級乘上 k（例如 '{Noto Sans} 9 bold'）。"""
+    parts = font.rsplit(" ", 2) if font.endswith((" bold", " normal")) else font.rsplit(" ", 1) + [""]
+    try:
+        size = int(parts[1])
+    except (ValueError, IndexError):
+        return font
+    return f"{parts[0]} {max(6, round(size * k))} {parts[2]}".strip()
 KEY = "#ff00fe"  # Windows 上用來挖空背景的顏色
 FONT = {"win32": "Microsoft JhengHei UI", "darwin": "PingFang TC"}.get(sys.platform, "TkDefaultFont")
 # 史萊姆的膚色（身體、輪廓）隨狀態改變
@@ -80,9 +90,13 @@ class Pet:
             except tk.TclError:
                 pass
         root.config(bg=bg)
-        self.canvas = tk.Canvas(root, width=W, height=H, bg=bg, highlightthickness=0)
+        self.size = core.load_config().get("pet_size", 100)
+        if self.size not in panel.PET_SIZES:
+            self.size = 100
+        self.visible = True
+        self.canvas = tk.Canvas(root, width=self.w, height=self.h, bg=bg, highlightthickness=0)
         self.canvas.pack()
-        root.geometry(f"{W}x{H}+{root.winfo_screenwidth() - W - 60}+{root.winfo_screenheight() - H - 90}")
+        root.geometry(f"{self.w}x{self.h}+{root.winfo_screenwidth() - self.w - 60}+{root.winfo_screenheight() - self.h - 90}")
 
         self.frame = 0
         self.tasks: list[dict] = []
@@ -104,6 +118,7 @@ class Pet:
         self.bubble_job = None
         self.popup: tk.Toplevel | None = None
         self.walk_var = tk.BooleanVar(value=bool(self.cfg.get("walk", True)))
+        self.size_var = tk.IntVar(value=self.size)
 
         self._build_menu()
         c = self.canvas
@@ -111,10 +126,14 @@ class Pet:
         c.bind("<B1-Motion>", self._drag)
         c.bind("<ButtonRelease-1>", self._release)
         c.bind("<Double-Button-1>", lambda e: self.open_panel())
+        c.bind("<Control-MouseWheel>", lambda e: self.step_size(1 if e.delta > 0 else -1))   # Ctrl＋滾輪調大小
+        c.bind("<Control-Button-4>", lambda e: self.step_size(1))    # Linux 的滾輪
+        c.bind("<Control-Button-5>", lambda e: self.step_size(-1))
         for seq in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
             c.bind(seq, self._menu_popup)
 
         if start_server:
+            panel.PET_ATTACHED = True
             panel.start_in_background()
             threading.Thread(target=self._poll_loop, daemon=True).start()
         self._tick()
@@ -170,6 +189,58 @@ class Pet:
         return "happy" if time.time() < self.happy_until else mood_of(self.counts)
 
     # ------------------------------------------------------------ 外觀
+    @property
+    def w(self) -> int:
+        return round(W * self.size / 100)
+
+    @property
+    def h(self) -> int:
+        return round(H * self.size / 100)
+
+    def resize(self, size: int, save: bool = True) -> None:
+        """改變史萊姆大小，腳底中心位置不動。"""
+        if size not in panel.PET_SIZES or size == self.size:
+            return
+        x, y, ow, oh = self.root.winfo_x(), self.root.winfo_y(), self.w, self.h
+        self.size = size
+        self.size_var.set(size)
+        self.target = self.home = None
+        nx = max(0, min(x + ow // 2 - self.w // 2, self.root.winfo_screenwidth() - self.w))
+        ny = max(0, min(y + oh - self.h, self.root.winfo_screenheight() - self.h))
+        self.canvas.config(width=self.w, height=self.h)
+        self.root.geometry(f"{self.w}x{self.h}+{nx}+{ny}")
+        self._place(self.bubble)
+        self._place(self.popup)
+        if save:
+            core.set_config(pet_size=size)
+
+    def step_size(self, delta: int) -> None:
+        i = panel.PET_SIZES.index(self.size) + delta
+        if 0 <= i < len(panel.PET_SIZES):
+            self.resize(panel.PET_SIZES[i])
+
+    def set_visible(self, on: bool) -> None:
+        """副螢幕上的開關：關掉時整隻收起來，也不會跑來找你。"""
+        if on == self.visible:
+            return
+        self.visible = on
+        self.target = self.home = None
+        if on:
+            self.root.deiconify()
+            self.root.attributes("-topmost", True)
+        else:
+            self._hide_bubble()
+            if self.popup:
+                self.toggle_popup()
+            self.root.withdraw()
+
+    def _sync_config(self) -> None:
+        """面板改的開關與大小，寵物這邊跟上。"""
+        cfg = core.load_config()
+        size = cfg.get("pet_size", 100)
+        self.resize(size if size in panel.PET_SIZES else 100, save=False)
+        self.set_visible(cfg.get("pet_visible", True))
+
     def _draw(self) -> None:
         """畫史萊姆。身體會隨狀態變形：睡覺時攤平、工作時一下一下彈、等你時左右搖、出錯時發抖、完成時跳起來。"""
         c, mood, t = self.canvas, self.mood, time.time()
@@ -263,10 +334,19 @@ class Pet:
             c.create_rectangle(14, H - 12, W - 14, H - 3, fill="#2d323c", outline="white")
             if done:
                 c.create_rectangle(15, H - 11, 15 + (W - 30) * done / total, H - 4, fill=COLORS[top_task["state"]], outline="")
+        k = self.size / 100
+        if k != 1:   # 以原尺寸畫好再整體縮放；文字大小另外跟著調
+            c.scale("all", 0, 0, k, k)
+            for item in c.find_all():
+                if c.type(item) == "text":
+                    font = c.itemcget(item, "font")
+                    c.itemconfigure(item, font=_scale_font(font, k))
 
     # ------------------------------------------------------------ 有事時跑到滑鼠旁邊
     def run_to_pointer(self, then=None) -> None:
         """跳到滑鼠游標旁邊（不蓋住游標）。then 是抵達後要做的事，例如說出是哪一件。"""
+        if not self.visible:   # 被關掉了：不出來，也不說話
+            return None
         if self.dragging or self.modal:
             return then() if then else None
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
@@ -275,8 +355,8 @@ class Pet:
             return then() if then else None
         if self.target is None and self.home is None:
             self.home = (self.root.winfo_x(), self.root.winfo_y())   # 記住原本待的地方，之後回去
-        x = px + 28 if px + 28 + W <= sw else px - W - 28
-        self.target = (max(0, min(x, sw - W)), max(0, min(py - H // 2, sh - H)))
+        x = px + 28 if px + 28 + self.w <= sw else px - self.w - 28
+        self.target = (max(0, min(x, sw - self.w)), max(0, min(py - self.h // 2, sh - self.h)))
         self.arrived = then
 
     def go_home(self) -> None:
@@ -306,6 +386,14 @@ class Pet:
 
     def _tick(self) -> None:
         self.frame += 1
+        if self.frame % 8 == 0:
+            try:
+                self._sync_config()
+            except Exception:
+                pass
+        if not self.visible:
+            self.root.after(60, self._tick)
+            return
         self._step()
         if self.target is None and self.frame % 2 == 0:
             self._walk()
@@ -321,7 +409,7 @@ class Pet:
                 self.walk_dx = random.choice((-2, 2))
             return
         x = self.root.winfo_x() + self.walk_dx
-        if random.random() < 0.03 or not 0 <= x <= self.root.winfo_screenwidth() - W:
+        if random.random() < 0.03 or not 0 <= x <= self.root.winfo_screenwidth() - self.w:
             self.walk_dx = 0
             return
         self.root.geometry(f"+{x}+{self.root.winfo_y()}")
@@ -330,6 +418,8 @@ class Pet:
     # ------------------------------------------------------------ 泡泡與任務清單
     def say(self, text: str, seconds: float = 6) -> None:
         self._hide_bubble()
+        if not self.visible:
+            return
         if self.popup:
             return
         b = self.bubble = tk.Toplevel(self.root)
@@ -346,15 +436,15 @@ class Pet:
             return
         win.update_idletasks()
         bw, bh = win.winfo_reqwidth(), win.winfo_reqheight()
-        x = max(4, min(self.root.winfo_x() + W // 2 - bw // 2, self.root.winfo_screenwidth() - bw - 4))
+        x = max(4, min(self.root.winfo_x() + self.w // 2 - bw // 2, self.root.winfo_screenwidth() - bw - 4))
         sw, sh, px, py = self.root.winfo_screenwidth(), self.root.winfo_screenheight(), self.root.winfo_x(), self.root.winfo_y()
         y = py - bh - 4
         if y < 0:  # 上面放不下 → 放下面；上下都放不下 → 放到旁邊，不可以蓋住史萊姆（不然就點不到牠來收起清單）
-            if py + H + 4 + bh <= sh:
-                y = py + H + 4
+            if py + self.h + 4 + bh <= sh:
+                y = py + self.h + 4
             else:
                 y = max(0, min(py, sh - bh - 4))
-                x = px - bw - 6 if px - bw - 6 >= 0 else min(px + W + 6, max(0, sw - bw))
+                x = px - bw - 6 if px - bw - 6 >= 0 else min(px + self.w + 6, max(0, sw - bw))
         win.geometry(f"+{x}+{y}")
 
     def _hide_bubble(self) -> None:
@@ -369,6 +459,8 @@ class Pet:
         if self.popup:
             self.popup.destroy()
             self.popup = None
+            return
+        if not self.visible:
             return
         self._hide_bubble()
         p = self.popup = tk.Toplevel(self.root)
@@ -457,6 +549,11 @@ class Pet:
         m.add_command(label="管理追蹤的 GitHub 專案…", command=self.manage_repos)
         m.add_command(label="設定 GitHub 權杖…（不公開的專案才需要）", command=self.set_token)
         m.add_separator()
+        sizes = tk.Menu(m, tearoff=0, font=(FONT, 10))
+        for size, name in zip(panel.PET_SIZES, ("很小", "小", "標準", "大", "很大")):
+            sizes.add_radiobutton(label=name, value=size, variable=self.size_var, command=lambda v=size: self.resize(v))
+        m.add_cascade(label="史萊姆大小（也可 Ctrl＋滾輪）", menu=sizes)
+        m.add_command(label="收起史萊姆（副螢幕上可再打開）", command=lambda: (core.set_config(pet_visible=False), self.set_visible(False)))
         m.add_checkbutton(label="到處走走", variable=self.walk_var,
                           command=lambda: core.set_config(walk=self.walk_var.get()))
         m.add_command(label="結束檔案管家（面板也會停止）", command=self.root.destroy)

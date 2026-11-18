@@ -38,6 +38,8 @@ NO_LAUNCH = {".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".scr", ".co
              ".sh", ".py", ".pyw", ".jar", ".app", ".dmg", ".pkg", ".deb", ".rpm", ".appimage", ".hta"}
 MAX_PER_PROJECT = 50_000
 MAX_LIMIT = 2000   # 一次最多顯示幾張卡片
+PET_ATTACHED = False   # 桌面史萊姆有在跑（pet.pyw 啟動時設成 True）；單獨開面板時就不顯示開關
+PET_SIZES = (60, 80, 100, 130, 160)   # 桌面史萊姆的大小（%）
 OLD_DIRS = {"old", "舊版", "舊檔", "舊", "備份", "backup", "bak", "archive", "歷史", "歷史版本", "history", "_old"}
 
 
@@ -636,6 +638,28 @@ def _guess_project(repo: str, candidates: list[str]) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def pet_state() -> dict:
+    cfg = core.load_config()
+    size = cfg.get("pet_size", 100)
+    return {"attached": PET_ATTACHED, "visible": cfg.get("pet_visible", True),
+            "size": size if size in PET_SIZES else 100, "sizes": list(PET_SIZES)}
+
+
+def set_pet(body: dict) -> dict:
+    changes = {}
+    if "visible" in body:
+        if not isinstance(body["visible"], bool):
+            raise ValueError("格式不對")
+        changes["pet_visible"] = body["visible"]
+    if "size" in body:
+        if body["size"] not in PET_SIZES or isinstance(body["size"], bool):
+            raise ValueError("格式不對")
+        changes["pet_size"] = body["size"]
+    if changes:
+        core.set_config(**changes)
+    return pet_state()
+
+
 def conversations(active: list[str] | None = None) -> dict:
     """把 AI 助手的對話依專案分欄。active 是「最近有在動」的專案：就算沒有對話也給它一欄，
     這樣同時在跑的五六個專案都在畫面上，一眼看得出哪個有事、哪個沒事。
@@ -878,6 +902,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path == "/api/ping":
                 self._send(200, {"ok": True})
+            elif url.path == "/api/pet":
+                self._send(200, pet_state())
             elif url.path == "/api/projects":
                 shown = set(projects())
                 hidden = [{"path": p, "name": os.path.basename(p)} for p in projects(include_hidden=True) if p not in shown]
@@ -934,6 +960,8 @@ class Handler(BaseHTTPRequestHandler):
                 except FileNotFoundError:   # 檔案被移走了：讓下一次查詢重新掃描，清單才不會留著它
                     self.index.data = {k: (0, rows) for k, (_, rows) in self.index.data.items()}
                     raise
+            elif path == "/api/pet":
+                self._send(200, set_pet(body))
             elif path == "/api/shelve":
                 if not isinstance(body.get("thread"), str):
                     raise ValueError("格式不對")

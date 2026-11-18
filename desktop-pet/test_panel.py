@@ -755,6 +755,14 @@ class ServerTest(Base):
         self.assertEqual(self.call("/api/shelve", {"thread": "any", "on": True})[1], {"ok": True})
         self.assertIn("any", core.load_config()["shelved"], "收起來的紀錄有存下來")
         self.assertEqual(self.call("/api/shelve", {"thread": 3, "on": True})[0], 400)
+        # 桌面史萊姆的開關與大小
+        self.assertEqual(self.call("/api/pet")[1]["visible"], True)
+        self.assertEqual(self.call("/api/pet", {"visible": False})[1]["visible"], False)
+        self.assertIs(core.load_config()["pet_visible"], False)
+        self.assertEqual(self.call("/api/pet", {"size": 130})[1]["size"], 130)
+        for bad in ({"size": 77}, {"size": True}, {"size": "130"}, {"visible": "no"}):
+            self.assertEqual(self.call("/api/pet", bad)[0], 400, bad)
+        self.assertEqual(self.call("/api/pet")[1]["size"], 130, "錯的值不會蓋掉原本的設定")
         self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
         for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
             self.assertEqual(self.call("/api/open", bad)[0], 400, bad)

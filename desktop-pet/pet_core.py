@@ -66,7 +66,7 @@ config_problem = ""                 # 設定檔壞掉時，給畫面顯示的一
 _TYPES = {"project_roots": list, "projects": list, "hidden_projects": list, "pinned": list,
           "github_repos": list, "ai_branch_prefixes": list, "merged": dict, "opened": dict,
           "github_token": str, "walk": bool, "repo_links": dict, "sent": dict, "claude_path": str,
-          "shelved": dict, "kept": dict}
+          "shelved": dict, "kept": dict, "pet_visible": bool, "pet_size": int}
 
 
 def _stamp(path: Path):

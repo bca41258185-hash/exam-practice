@@ -24,6 +24,16 @@
   .app.many { grid-template-columns: 22rem minmax(0, 1fr); }
   .aibtn { flex: none; display: flex; align-items: center; gap: .4rem; height: 3.3rem; padding: 0 1rem 0 .5rem; border-radius: .8rem; background: var(--card); font-weight: 700; font-size: 1rem; white-space: nowrap; }
   .aibtn:active { background: var(--card-hi); }
+  .petctl { flex: none; display: none; align-items: stretch; height: 3.3rem; border-radius: .8rem; background: var(--card); overflow: hidden; }
+  .petctl.on { display: flex; }
+  .petctl button { display: flex; align-items: center; justify-content: center; min-width: 3.3rem; padding: 0 .7rem; font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .petctl button:active { background: var(--card-hi); }
+  .petctl button + button { border-left: 1px solid var(--line); }
+  .petctl .sz { font-size: 1.5rem; min-width: 3.3rem; padding: 0; color: var(--dim); }
+  .petctl .sz:disabled { opacity: .3; }
+  .petctl .pw { gap: .35rem; } .petctl .pw i { width: .8rem; height: .8rem; border-radius: 50%; background: var(--dim); }
+  .petctl.shown .pw i { background: var(--done); box-shadow: 0 0 .5rem var(--done); }
+  .petctl:not(.shown) .pw { color: var(--dim); } .petctl:not(.shown) .sz { display: none; }
   .aibtn #mascot { margin: 0; } .aibtn b { color: var(--waiting); font-size: 1.15rem; margin-right: .15rem; }
   .f .x { margin-left: .2rem; opacity: .7; }
   .hint { font-weight: 700; color: var(--accent); }
@@ -311,7 +321,8 @@
 
   <section class="col">
     <div class="fhead" id="fhead"><h2 id="ftitle">全部專案</h2><span id="fexp"></span><span id="fchip"></span><span id="busy">更新中…</span>
-      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button></div>
+      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button>
+      <span class="petctl" id="petctl"><button class="pw" data-act="pet-toggle" aria-label="桌面史萊姆開關"><i></i><span id="pet-label">桌面 開</span></button><button class="sz" data-act="pet-size" data-step="-1" aria-label="史萊姆縮小">−</button><button class="sz" data-act="pet-size" data-step="1" aria-label="史萊姆放大">＋</button></span></div>
     <div class="bar" id="bar">
       <div class="filters" id="filters"></div>
       <input id="q" placeholder="輸入檔名或資料夾名稱" autocomplete="off" spellcheck="false" enterkeyhint="search">
@@ -421,7 +432,19 @@ function renderProjects() {
     ((state.missing || []).length ? `<div class="label" style="color:var(--failed);letter-spacing:0;line-height:1.5">目前讀不到（可能沒連上）：<br>${state.missing.map(m => esc(base(m))).join("、")}</div>` : "");
 }
 let pendingTimer = 0;
+// 桌面史萊姆的開關與大小（只有從 pet.pyw 啟動、桌面上真的有史萊姆時才顯示）
+function renderPet(p) {
+  state.pet = p;
+  const box = $("petctl"), i = p.sizes.indexOf(p.size);
+  box.classList.toggle("on", !!p.attached); box.classList.toggle("shown", !!p.visible);
+  $("pet-label").textContent = p.visible ? "桌面 開" : "桌面 關";
+  box.querySelector('[data-step="-1"]').disabled = i <= 0;
+  box.querySelector('[data-step="1"]').disabled = i >= p.sizes.length - 1;
+}
+async function loadPet() { try { renderPet(await api("/api/pet")); } catch (e) {} }
+
 async function loadProjects() {
+  loadPet();
   const d = await api("/api/projects");
   state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing; state.notice = d.notice;
   clearTimeout(pendingTimer);
@@ -940,6 +963,8 @@ document.addEventListener("click", async ev => {
     else if ("projFiles" in d) { Object.assign(state, {project: d.projFiles, kind: "", since: "", sub: "", q: "", last: null, files: []}); resetList(); setMode(false); }
     else if ("link" in d) { await api("/api/link_repo", {repo: d.link, project: d.project}); closeSheet(); toast("已指定，這個 GitHub 專案的對話會顯示在那一欄"); loadTalk(); }
     else if (d.act === "talk") setMode(true);
+    else if (d.act === "pet-toggle" && state.pet) { renderPet(await api("/api/pet", {visible: !state.pet.visible})); toast(state.pet.visible ? "桌面史萊姆出來了" : "桌面史萊姆收起來了，再按一次叫牠出來"); }
+    else if (d.act === "pet-size" && state.pet) { const i = state.pet.sizes.indexOf(state.pet.size) + Number(d.step); if (state.pet.sizes[i]) renderPet(await api("/api/pet", {size: state.pet.sizes[i]})); }
     else if (d.act === "files") setMode(false);
     else if (d.act === "link") linkSheet();
     else if (d.act === "unclip") el.classList.remove("clip");
