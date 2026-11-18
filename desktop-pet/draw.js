@@ -277,6 +277,7 @@
     const float = state === 'hover' || state === 'land';    // 踏空、飄落
     const taichi = state === 'taichi';                      // 打太極
     const climb = state === 'climb', hang = state === 'hang';   // 壁虎遊牆功、倒掛
+    const drink = state === 'drink', gaze = state === 'gaze';   // 喝水、看遠方
     let lift = 0, sx = 1, sy = 1, rot = 0;
 
     if (state === 'idle' || state === 'peek' || state === 'eat') sy = 1 + 0.02 * Math.sin(t * 2.4);
@@ -291,6 +292,8 @@
     if (state === 'peek') rot = -0.13;
     if (flip) { const p = Math.min(1, st / 0.43); rot = p * Math.PI * 2; sx = 0.94; sy = 1.04; }
     if (float) { lift = 6 + Math.sin(t * 6) * 2; }
+    if (drink) rot = -0.18 - Math.max(0, Math.sin(st * 2.2)) * 0.12;   // 仰頭喝
+    if (gaze) { rot = -0.08; lift = 2 + Math.sin(t * 1.5) * 1.5; }
     if (climb) rot = -Math.PI / 2;                   // 腳貼著牆（左右牆都一樣，因為已經先左右翻轉）
     if (hang) rot = Math.PI + Math.sin(t * 3) * 0.08;   // 倒掛，輕輕晃
     if (state === 'spin') rot = st * Math.PI * 4;   // 被劍氣吹得原地轉圈
@@ -392,12 +395,13 @@
     ctx.beginPath(); ctx.moveTo(6, -55); ctx.quadraticCurveTo(9.5, -50, 6, -46); ctx.quadraticCurveTo(2.5, -50, 6, -55); ctx.fill();
 
     // 臉
-    const lx = Math.max(-3, Math.min(3, look.x * dir / 60)), ly = Math.max(-2.5, Math.min(2.5, look.y / 60));
+    let lx = Math.max(-3, Math.min(3, look.x * dir / 60)), ly = Math.max(-2.5, Math.min(2.5, look.y / 60));
+    if (gaze) { lx = 3; ly = -2.5; }
     const ex1 = -8, ex2 = 20, ey = -37;
     const blink = (t % 4.2) < 0.14;
     ctx.fillStyle = C.line; ctx.lineWidth = 2.6;
     const eye = (x) => {
-      if (med || taichi || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
+      if (med || taichi || drink || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey); ctx.quadraticCurveTo(x, ey + (med ? 4 : 0), x + 5, ey); ctx.stroke();
       } else if (flip) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey - 3); ctx.lineTo(x + 1, ey); ctx.lineTo(x - 5, ey + 3); ctx.stroke();
@@ -443,6 +447,14 @@
       ctx.beginPath(); ctx.moveTo(0, -29); ctx.quadraticCurveTo(3, -25, 6, -29); ctx.quadraticCurveTo(9, -25, 12, -29); ctx.stroke();
     }
 
+    if (drink) {
+      ctx.save(); ctx.translate(18, -25); ctx.rotate(-1.9 + Math.sin(st * 2.2) * 0.12);   // 壺口對著嘴
+      ctx.lineWidth = 2.4; ctx.strokeStyle = C.line;
+      ellipse(ctx, 0, 12, 8, 8, '#E9A23B', C.line);
+      ellipse(ctx, 0, 1, 5, 5, '#E9A23B', C.line);
+      ctx.strokeStyle = C.mark; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-4, 5); ctx.lineTo(4, 5); ctx.stroke();
+      ctx.restore();
+    }
     // 叼著傳音符（黃符紅字）
     if (fit.carry) {
       ctx.save(); ctx.translate(8, -18); ctx.rotate(0.25 + Math.sin(t * 8) * 0.06);
@@ -464,6 +476,14 @@
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const top = 186 - lift - (TALL_HATS.includes(hat) || sp.ears === 'rabbit' ? 92 : 76) * sy;
+    if (gaze) {
+      const ox = dir > 0 ? 1 : -1;
+      ctx.save(); ctx.globalAlpha = 0.75; ctx.strokeStyle = C.qi; ctx.lineWidth = 2; ctx.setLineDash([4, 6]); ctx.lineDashOffset = -t * 20;
+      ctx.beginPath(); ctx.moveTo(100 + ox * 20, 130 - lift); ctx.lineTo(100 + ox * 78, 54); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = 'rgba(89,201,165,0.35)'; ctx.strokeStyle = C.qi;
+      ctx.beginPath(); ctx.moveTo(100 + ox * 58, 60); ctx.lineTo(100 + ox * 72, 40); ctx.lineTo(100 + ox * 80, 50); ctx.lineTo(100 + ox * 88, 36); ctx.lineTo(100 + ox * 98, 60); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
     if (state === 'fireworks') {   // 三件事都完成：放煙火
       const cols = [C.gold, C.mark, C.qi, '#8E6BD9'];
       for (let b = 0; b < 3; b++) {

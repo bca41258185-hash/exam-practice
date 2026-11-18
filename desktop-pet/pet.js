@@ -23,11 +23,13 @@ let cursorAt = null;   // 游標在視窗裡的位置（主程序每格送來）
 pet.onCursorAt((c) => { cursorAt = c; });
 pet.onSay((text) => { bubble = { text, start: performance.now() }; });
 
-let last = 0;
+let due = 0;   // 下一格該畫的時間
 function frame(now) {
   requestAnimationFrame(frame);
-  if (now - last < 30) return;
-  last = now;
+  // 每秒 90 格：用時間累計決定這一格要不要畫，144 Hz 螢幕上會隔一格、隔兩格交錯，平均剛好 90；螢幕更慢時就照螢幕
+  if (now < due - 1) return;
+  due += 1000 / 90;
+  if (now - due > 1000 / 90) due = now;   // 落後太多（例如視窗剛被叫醒）就從現在重新算，不要一口氣補畫
   const k = cv.width / 200;
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.clearRect(0, 0, 200, 200);
@@ -37,6 +39,7 @@ function frame(now) {
     t: now / 1000, st: (now - stStart) / 1000,
     bubble: bubble && { text: bubble.text, age: (now - bubble.start) / 1000 },
   });
+  pet.send('frame');   // 請主程序把視窗移到這一格的位置
   // 滑鼠不動、角色自己走到游標底下（或走開）時不會有 mousemove，所以每格用游標位置再判斷一次
   if (!down && cursorAt) {
     const h = opaqueXY(cursorAt.x, cursorAt.y);

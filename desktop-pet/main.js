@@ -3,13 +3,14 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, sh
 const fs = require('fs');
 const path = require('path');
 const POEMS = require('./poems');
+const Q = require('./quotes');
 
 const BASE = 200;           // 視窗邏輯邊長（畫布座標）
 const TICK = 33;            // 毫秒
 const FORWARD = process.platform !== 'linux'; // 點擊穿透的滑鼠轉送只有 Windows / macOS 支援
 
 let win, tray;
-let cfg = { scale: 1, top: true, stretch: 50, notes: [], todos: { date: '', items: [] }, scrollPos: null, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
+let cfg = { scale: 1, top: true, stretch: 50, water: true, eyes: true, lastMorning: '', notes: [], todos: { date: '', items: [] }, scrollPos: null, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
 
 // 裝扮的選項：[設定值, 選單上的名字]
 const SPECIES = [['cat', '靈貓'], ['fox', '狐仙'], ['rabbit', '玉兔'], ['panda', '熊貓'], ['dragon', '小青龍']];
@@ -63,6 +64,11 @@ function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text)
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
 let poemTimer = null, lastPoem = -1;
 function stopPoem() { if (poemTimer) { clearTimeout(poemTimer); poemTimer = null; } }
+function encourage(force) {   // 一句勵志詩詞（附作者），或一句仙俠打氣話
+  if (!cfg.talk && !force) return;
+  if (Math.random() < 0.6) sayLines(Q.verseLines(Q.pick(Q.VERSE)));
+  else say(Q.pick(Q.CHEER), force);
+}
 function recite(force) {
   if (!cfg.talk && !force) return;
   stopPoem();
@@ -95,31 +101,87 @@ function startTaichi(mins) {
   sayLines([mins ? `坐了 ${mins} 分鐘了！` : '來打一套太極！', '起來跟我動一動～', '吸氣……', '吐氣……', '轉轉脖子、伸伸腰', '看看遠方，讓眼睛歇歇'], 2500);
   return true;
 }
+let waterAcc = 0, eyeAcc = 0, lastHealth = 0;   // 累積的使用秒數；上次提醒的時間（免得兩個提醒擠在一起）
+function healthFree() { return !BUSY.includes(state) && !['taichi', 'drink', 'gaze', 'fireworks', 'spin'].includes(state) && !deliver && Date.now() - lastHealth > 90000; }
+function startDrink() {
+  lastHealth = Date.now(); lastTouch = now();
+  set('drink', 4200);
+  const w = Q.pick(Q.WATER);
+  sayLines(['道友也喝口水吧', ...Q.verseLines(w)], 2600);
+}
+function startGaze() {
+  lastHealth = Date.now(); lastTouch = now();
+  set('gaze', 20000);   // 陪你看遠方 20 秒
+  const f = Q.pick(Q.FAR);
+  sayLines(['看看 6 公尺外', '遠眺 20 秒～', ...Q.verseLines(f)], 3200);
+  setTimeout(() => { if (state === 'gaze') { set('happy', 1400); say('眼睛舒服多了吧', true); } }, 20000);
+}
+function checkHealth(idle) {
+  if (idle >= 60) return;   // 你不在電腦前：不累積
+  waterAcc += 10; eyeAcc += 10;
+  if (cfg.eyes && eyeAcc >= 20 * 60 && healthFree()) { eyeAcc = 0; startGaze(); return; }
+  if (cfg.water && waterAcc >= 60 * 60 && healthFree()) { waterAcc = 0; startDrink(); }
+}
+
+// ---- 早安問三件事：每天第一次用電腦時
+function morningDue() { return cfg.lastMorning !== today(); }
+function morning() {
+  cfg.lastMorning = today(); saveCfg();
+  set('happy', 1600);
+  const has = todos().items.some((x) => x.text);
+  const h = new Date().getHours(), early = h >= 5 && h < 11;   // 早上才說「早」和朝陽；晚上第一次開機改用打氣話
+  const hello = early ? '道友早！' : '道友好！', line = early ? Q.pick(Q.MORNING) : Q.pick(Q.CHEER);
+  if (has) { sayLines([hello, line, '今天的三件事，記得喔'], 2600); openScroll(); return; }
+  sayLines([hello, line, '今天最重要的三件事', '是什麼？寫給我吧'], 2600);
+  openScroll();
+}
+
 function checkStretch() {
   let idle = 0;
   try { idle = powerMonitor.getSystemIdleTime(); } catch { return; }
+  if (morningDue() && idle < 60 && !BUSY.includes(state)) { morning(); return; }   // 電腦整晚沒關，隔天回來也算
+  checkHealth(idle);
   if (idle >= BREAK_SEC) {   // 你離開座位了：重新計時；如果是被提醒之後才去休息，回來時誇你
     if (reminded) praise = true;
     sitSince = Date.now(); reminded = false;
     return;
   }
   if (praise && idle < 5 && !['drag', 'fall', 'tribulation'].includes(state)) {
-    praise = false; gain(10); set('happy', 1600); say('休息得好！修為 +10', true);
+    praise = false; gain(10); set('happy', 1600); sayLines(['休息得好！修為 +10', Q.pick(Q.CHEER)]);
     return;
   }
   if (!cfg.stretch) return;
   const mins = sittingMinutes();
   if (mins >= cfg.stretch && Date.now() - lastRemind > 10 * 60000) {   // 沒起來的話，十分鐘後再提醒一次
-    if (startTaichi(mins)) { lastRemind = Date.now(); reminded = true; }
+    if (healthFree() && startTaichi(mins)) { lastRemind = Date.now(); lastHealth = Date.now(); reminded = true; }
   }
 }
 function set(s, ms) { state = s; until = now() + (ms || 0); phase = 0; pushState(); }
-function place() {
+let lastBounds = '';
+function place(p) {
   if (!win || win.isDestroyed()) return;
-  const w = W();
+  const w = W(), q = p || pos, x = Math.round(q.x), y = Math.round(q.y);
+  const key = `${x},${y},${w}`;
+  if (key === lastBounds) return;
+  lastBounds = key;
   // 每次都帶寬高，避免 Windows 縮放比例下透明視窗尺寸漂移
-  win.setBounds({ x: Math.round(pos.x), y: Math.round(pos.y), width: w, height: w });
+  win.setBounds({ x, y, width: w, height: w });
 }
+
+// 90 Hz：行為邏輯照舊每 33 毫秒算一次位置（速度、時間都不變），
+// 畫面端每畫一格（最多每秒 90 格）就來要一次，視窗位置在上一次和這一次之間平滑補間。
+let prevPos = { x: 0, y: 0 }, tickAt = 0, lastFrameMsg = 0;
+function smoothPlace() {
+  lastFrameMsg = Date.now();
+  if (state === 'drag' && grab) {   // 拖曳時直接跟著游標，不補間才不會覺得拖不動
+    const c = screen.getCursorScreenPoint();
+    pos.x = c.x - grab.x; pos.y = c.y - grab.y;
+    return place();
+  }
+  const a = Math.min(1, (Date.now() - tickAt) / TICK);
+  place({ x: prevPos.x + (pos.x - prevPos.x) * a, y: prevPos.y + (pos.y - prevPos.y) * a });
+}
+ipcMain.on('frame', smoothPlace);
 
 const GREET = [[5, '道友早安'], [11, '該用午膳了'], [14, '午後宜打坐'], [18, '道友晚安好'], [23, '夜深了，歇息吧']];
 function greeting() {
@@ -149,6 +211,7 @@ function gain(n) {
 
 // ---- 行為 ----
 function decide() {
+  if (poemTimer) return set('idle', 1500);   // 話還沒說完（吟詩、提醒、早安）：先站著說完，不跑去追人
   const l = limits(), c = screen.getCursorScreenPoint();
   const idleFor = now() - lastTouch;
   const near = Math.abs(c.x - (pos.x + W() / 2)) < 500 * cfg.scale;
@@ -158,7 +221,8 @@ function decide() {
   if (r < 0.52) return set('sleep', rnd(15000, 40000));
   if (r < 0.60) return startPeek();
   if (r < 0.68 && near) return startChase();
-  if (r < 0.71) { say(CHAT[Math.floor(Math.random() * CHAT.length)]); }
+  if (r < 0.69) { say(Math.random() < 0.5 ? CHAT[Math.floor(Math.random() * CHAT.length)] : Q.pick(Q.CHEER)); }
+  else if (r < 0.72) encourage();
   else if (r < 0.75) recite();
   if (pos.x < l.xmin || pos.x > l.xmax) { dir = pos.x < l.xmin ? 1 : -1; return set('walk', 1500); }
   set('idle', rnd(2000, 6000));
@@ -248,8 +312,8 @@ function toggleTodo(i) {
   cfg.todos = t; saveCfg();
   if (t.items[i].done && !BUSY.includes(state)) {
     const left = t.items.filter((x) => x.text && !x.done).length;
-    if (left === 0) { gain(30); set('fireworks', 3600); say('三件都完成了！修為 +30', true); }
-    else { gain(10); set('happy', 1500); say(`劃掉一件！還剩 ${left} 件`, true); }
+    if (left === 0) { gain(30); set('fireworks', 3600); sayLines(['三件都完成了！', '修為 +30', ...Q.verseLines(Q.pick(Q.VERSE))]); }
+    else { gain(10); set('happy', 1500); sayLines([Q.pick(Q.DONE), `還剩 ${left} 件，加油`]); }
   }
   return t;
 }
@@ -338,6 +402,7 @@ function tick() {
   const l = limits(), k = cfg.scale, t = now();
   const cur = screen.getCursorScreenPoint();
   tickN++;
+  prevPos = { x: pos.x, y: pos.y };
   watchShake(cur, t);
 
   if (state === 'drag') {
@@ -432,12 +497,13 @@ function tick() {
 
     if (t > until) {
       if (state === 'eat') { set('happy', 1500); say('修為 +30'); gain(30); }
-      else if (state === 'tribulation') { saveCfg(); set('happy', 1800); say(`突破！${REALMS[realmOf(cfg.xp)]}期`, true); }
+      else if (state === 'tribulation') { saveCfg(); set('happy', 1800); sayLines([`突破！${REALMS[realmOf(cfg.xp)]}期`, ...Q.verseLines(Q.pick(Q.VERSE))]); }
       else if (state === 'peek') { set('walk', 2500); }
       else decide();
     }
   }
-  place();
+  tickAt = Date.now();
+  if (Date.now() - lastFrameMsg > 200) place();   // 畫面端沒在要（例如被系統暫停）時，照舊每次移動
 
   // 游標在視窗裡的位置（畫面座標）：角色自己走到靜止的游標底下時，畫面端靠這個判斷要不要接住滑鼠
   send('cursor-at', { x: cur.x - Math.round(pos.x), y: cur.y - Math.round(pos.y) });
@@ -454,7 +520,8 @@ function onClick() {
   lastTouch = t;
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
   if (['fall', 'drag', 'tribulation'].includes(state)) return;
-  if (state === 'taichi') { say('別偷懶，一起動！'); return; }   // 打拳中被點：繼續打
+  if (state === 'taichi') { say('別偷懶，一起動！'); return; }
+  if (state === 'drink' || state === 'gaze') { say(state === 'drink' ? '咕嚕咕嚕～' : '看遠一點～'); return; }   // 打拳中被點：繼續打
   if (state === 'climb' || state === 'hang') { say('別吵，練功中！'); return; }
   if (state === 'roll' || KUNGFU.includes(state)) { gain(2); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
@@ -525,6 +592,7 @@ function menu() {
     { label: '來追我', click: () => { lastTouch = now(); startChase(); } },
     { label: '躲貓貓', click: () => { lastTouch = now(); startPeek(); } },
     { label: '吟詩一首', click: () => recite(true) },
+    { label: '勉勵我一句', click: () => encourage(true) },
     { type: 'separator' },
     {
       label: '大小', submenu: [[0.75, '小'], [1, '中'], [1.5, '大']].map(([s, label]) => ({
@@ -550,7 +618,13 @@ function menu() {
     { label: '寫傳音符…（定時提醒）', click: openNotes },
     { label: scrollWin ? '收起今日三件事' : '今日三件事', click: () => openScroll(true) },
     {
-      label: '起身活動提醒', submenu: [
+      label: '健康提醒', submenu: [
+        { label: '喝水（每用一小時）', type: 'checkbox', checked: cfg.water, click: (m) => { cfg.water = m.checked; saveCfg(); waterAcc = 0; } },
+        { label: '護眼（每用 20 分鐘）', type: 'checkbox', checked: cfg.eyes, click: (m) => { cfg.eyes = m.checked; saveCfg(); eyeAcc = 0; } },
+        { label: '現在喝口水', click: startDrink },
+        { label: '現在看看遠方', click: startGaze },
+        { type: 'separator' },
+        { label: '起身活動：', enabled: false },
         ...STRETCH.map((m) => ({
           label: m ? `每坐 ${m} 分鐘提醒` : '關閉', type: 'radio', checked: cfg.stretch === m,
           click: () => { cfg.stretch = m; saveCfg(); sitSince = Date.now(); say(m ? `好，每 ${m} 分鐘叫你起來` : '不提醒了，記得自己動動', true); },
@@ -584,14 +658,16 @@ function create() {
   win.once('ready-to-show', () => {
     win.showInactive();
     set('idle', 2500);
-    setTimeout(() => say(greeting()), 600);
+    setTimeout(() => (morningDue() ? morning() : say(greeting())), 1500);
     setInterval(tick, TICK);
     setInterval(checkStretch, 10000);
     setInterval(checkNotes, 5000);
     if (todos().items.some((x) => x.text)) openScroll();
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
-    if (demo === 'ui') { openNotes(); openScroll(); }
+    if (demo === 'drink') setTimeout(startDrink, 2500);
+    else if (demo === 'gaze') setTimeout(startGaze, 2500);
+    else if (demo === 'ui') { openNotes(); openScroll(); }
     else if (demo === 'todo') {   // 寫兩件事、三秒後劃掉一件、七秒後劃掉另一件（應該放煙火）
       cfg.todos = { date: today(), items: [{ text: '交立面圖給業主', done: false }, { text: '回覆結構技師', done: false }, { text: '', done: false }] };
       openScroll();

@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const OUT = ['hit', 'drag-start', 'drag-end', 'click', 'menu', 'roll'];
+const OUT = ['hit', 'drag-start', 'drag-end', 'click', 'menu', 'roll', 'frame'];
 
 contextBridge.exposeInMainWorld('pet', {
   send: (ch, arg) => { if (OUT.includes(ch)) ipcRenderer.send(ch, arg); },

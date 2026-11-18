@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "poems.js",
+      "quotes.js",
       "preload.js",
       "ui-preload.js",
       "pet.html",
