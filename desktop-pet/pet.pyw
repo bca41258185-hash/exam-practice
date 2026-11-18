@@ -109,6 +109,7 @@ class Pet:
         self.home: tuple[int, int] | None = None     # 跑出去之前待的地方
         self.arrived = None                          # 抵達後要做的事
         self.hop = 0.0                               # 跳躍動畫的進度（0 表示沒在跳）
+        self.chasing = False                         # 正跟著游標跑（有事要告訴你的那段時間）
         self.dragging = False
         self.moved = False
         self.modal = 0
@@ -205,6 +206,7 @@ class Pet:
         self.size = size
         self.size_var.set(size)
         self.target = self.home = None
+        self.chasing = False
         nx = max(0, min(x + ow // 2 - self.w // 2, self.root.winfo_screenwidth() - self.w))
         ny = max(0, min(y + oh - self.h, self.root.winfo_screenheight() - self.h))
         self.canvas.config(width=self.w, height=self.h)
@@ -225,6 +227,7 @@ class Pet:
             return
         self.visible = on
         self.target = self.home = None
+        self.chasing = False
         if on:
             self.root.deiconify()
             self.root.attributes("-topmost", True)
@@ -343,23 +346,57 @@ class Pet:
                     c.itemconfigure(item, font=_scale_font(font, k))
 
     # ------------------------------------------------------------ 有事時跑到滑鼠旁邊
+    def _screen_bounds(self) -> tuple[int, int, int, int]:
+        """所有螢幕合起來的範圍（左、上、右、下）。Windows 多螢幕時游標可能在主螢幕以外，座標也可能是負的。"""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                m = ctypes.windll.user32.GetSystemMetrics
+                left, top, width, height = m(76), m(77), m(78), m(79)
+                if width > 0 and height > 0:
+                    return left, top, left + width, top + height
+            except Exception:
+                pass
+        return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+    def _spot(self) -> tuple[int, int] | None:
+        """游標「現在」旁邊的位置（不蓋住游標）。游標在副螢幕的觸控面板上時回傳 None：那邊由面板裡的史萊姆去找你。"""
+        if panel.pointer_on_panel():
+            return None
+        px, py = self.root.winfo_pointerxy()
+        left, top, right, bottom = self._screen_bounds()
+        if not (left <= px < right and top <= py < bottom):
+            return None
+        x = px + 28 if px + 28 + self.w <= right else px - self.w - 28
+        return max(left, min(x, right - self.w)), max(top, min(py - self.h // 2, bottom - self.h))
+
     def run_to_pointer(self, then=None) -> None:
-        """跳到滑鼠游標旁邊（不蓋住游標）。then 是抵達後要做的事，例如說出是哪一件。"""
+        """跳到滑鼠游標旁邊，路上游標移動就跟著改方向；到了之後游標再走遠也會跟過去，直到 go_home。
+        then 是抵達後要做的事，例如說出是哪一件。"""
         if not self.visible:   # 被關掉了：不出來，也不說話
             return None
-        if self.dragging or self.modal:
-            return then() if then else None
-        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        px, py = self.root.winfo_pointerxy()
-        if px < 0 or py < 0:   # 游標不在這個螢幕上
+        spot = None if self.dragging or self.modal else self._spot()
+        if spot is None:
             return then() if then else None
         if self.target is None and self.home is None:
             self.home = (self.root.winfo_x(), self.root.winfo_y())   # 記住原本待的地方，之後回去
-        x = px + 28 if px + 28 + self.w <= sw else px - self.w - 28
-        self.target = (max(0, min(x, sw - self.w)), max(0, min(py - self.h // 2, sh - self.h)))
-        self.arrived = then
+        self.target, self.arrived, self.chasing = spot, then, True
+
+    def _chase(self) -> None:
+        """追著游標現在的位置。游標移到觸控面板上（或移出所有螢幕）就回原位，在那裡把話說完。"""
+        spot = self._spot()
+        if spot is None:
+            if self.home:
+                self.target, self.home = self.home, None
+            self.chasing = False
+            return
+        if self.target is not None:
+            self.target = spot
+        elif math.hypot(spot[0] - self.root.winfo_x(), spot[1] - self.root.winfo_y()) > 120:
+            self.target = spot
 
     def go_home(self) -> None:
+        self.chasing = False
         if self.home and not self.dragging:
             self.target, self.arrived, self.home = self.home, None, None
 
@@ -370,6 +407,7 @@ class Pet:
             return
         if self.dragging:
             self.target = self.home = None
+            self.chasing = False
             return
         x, y = self.root.winfo_x(), self.root.winfo_y()
         dx, dy = self.target[0] - x, self.target[1] - y
@@ -394,6 +432,8 @@ class Pet:
         if not self.visible:
             self.root.after(60, self._tick)
             return
+        if self.chasing and not self.dragging and self.frame % 3 == 0:
+            self._chase()
         self._step()
         if self.target is None and self.frame % 2 == 0:
             self._walk()

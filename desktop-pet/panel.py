@@ -638,6 +638,14 @@ def _guess_project(repo: str, candidates: list[str]) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+_PANEL_POINTER = {"inside": False, "at": 0.0}   # 滑鼠或手指現在是不是在觸控面板上（面板回報）
+
+
+def pointer_on_panel() -> bool:
+    """游標在觸控面板上時，桌面史萊姆就不跑過去（面板裡的史萊姆會去）。面板沒再回報十分鐘就當作不在。"""
+    return _PANEL_POINTER["inside"] and time.time() - _PANEL_POINTER["at"] < 600
+
+
 def pet_state() -> dict:
     cfg = core.load_config()
     size = cfg.get("pet_size", 100)
@@ -962,6 +970,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise
             elif path == "/api/pet":
                 self._send(200, set_pet(body))
+            elif path == "/api/pointer":
+                _PANEL_POINTER.update(inside=body.get("inside") is True, at=time.time())
+                self._send(200, {"ok": True})
             elif path == "/api/shelve":
                 if not isinstance(body.get("thread"), str):
                     raise ValueError("格式不對")

@@ -763,6 +763,12 @@ class ServerTest(Base):
         for bad in ({"size": 77}, {"size": True}, {"size": "130"}, {"visible": "no"}):
             self.assertEqual(self.call("/api/pet", bad)[0], 400, bad)
         self.assertEqual(self.call("/api/pet")[1]["size"], 130, "錯的值不會蓋掉原本的設定")
+        # 面板回報游標在不在它上面：在的時候桌面史萊姆不跑過去
+        self.assertFalse(panel.pointer_on_panel())
+        self.call("/api/pointer", {"inside": True})
+        self.assertTrue(panel.pointer_on_panel())
+        self.call("/api/pointer", {"inside": "yes"})
+        self.assertFalse(panel.pointer_on_panel(), "只有 true 才算")
         self.assertEqual(self.call("/api/files?limit=abc")[0], 200)
         for bad in ([1, 2], "x", 7, {"path": 5}, {"path": None}, {}):
             self.assertEqual(self.call("/api/open", bad)[0], 400, bad)

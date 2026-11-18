@@ -163,6 +163,8 @@
   .tcol { flex: 1 1 0; min-width: 26rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
   #talk-cols:not(.overview) .msgs { padding-left: max(.6rem, calc((100% - 64rem) / 2)); padding-right: max(.6rem, calc((100% - 64rem) / 2)); }   /* 進入對話後，訊息不要拉得太寬 */
   #talk-cols.overview { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); }
+  .tcard.closed { align-items: center; justify-content: center; gap: .3rem; border-top-color: var(--line); color: var(--dim); text-align: center; background: transparent; border: 2px dashed var(--line); }
+  .tcard.closed b { font-size: 2rem; color: var(--text); } .tcard.closed small { font-size: .85rem; }
   .tcard { background: var(--panel); border-radius: 1rem; border-top: .35rem solid var(--s); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .tcard-body { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .7rem .8rem .4rem; text-align: center; }
   .tcard-body:active { background: var(--card); }
@@ -262,6 +264,7 @@
   @keyframes zzz { 0% { opacity: 0; transform: translateY(4px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
 
   /* 跑出來找你的史萊姆 */
+  .runner:not(.hopping):not(.leaving) { transition-duration: .35s; }
   .runner { position: fixed; z-index: 25; display: flex; align-items: flex-end; gap: .3rem; transform: translate(-50%, -50%); transition: left .9s cubic-bezier(.45, 0, .3, 1), top .9s cubic-bezier(.45, 0, .3, 1); filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
   .runner .slime { width: 4.4rem; height: 4.1rem; }
   .runner.hopping .slime { animation: hop calc(.9s / var(--hops, 3)) ease-in-out calc(var(--hops, 3)); }
@@ -619,8 +622,17 @@ function slime(state, id) {
     <g class="sl-mark"><circle cx="52" cy="11" r="9"/><text x="52" y="15.5" text-anchor="middle">!</text></g>
     <text class="sl-zzz" x="47" y="14">z</text><text class="sl-zzz z2" x="54" y="7">z</text></svg>`;
 }
-const pointer = {x: innerWidth / 2, y: innerHeight * .55, known: false};   // 游標或手指最後的位置
-["pointermove", "pointerdown"].forEach(t => document.addEventListener(t, ev => { pointer.x = ev.clientX; pointer.y = ev.clientY; pointer.known = true; }, {passive: true}));
+// 游標「現在」在哪裡：滑鼠在面板上移動就隨時更新；滑鼠移出面板（例如回到主螢幕）就標成不在這裡，
+// 由主螢幕上的桌面史萊姆去找你。手指沒有「懸停」，以手指正碰著或剛碰的位置為準。
+const pointer = {x: innerWidth / 2, y: innerHeight * .55, inside: false};
+function pointerHere(on) {   // 告訴桌面史萊姆：游標在面板上時由面板這隻去找你，牠不用跑過來
+  if (pointer.inside === on) return;
+  pointer.inside = on;
+  api("/api/pointer", {inside: on}).catch(() => {});
+}
+["pointermove", "pointerdown"].forEach(t => document.addEventListener(t, ev => { pointer.x = ev.clientX; pointer.y = ev.clientY; pointerHere(true); }, {passive: true}));
+document.documentElement.addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") pointerHere(false); });
+window.addEventListener("blur", () => pointerHere(false));
 const knownState = {};     // 每件事上次的狀態，用來發現「剛做完」「剛出錯」
 let stateSeeded = false;
 const runners = {};        // 正跑出來找你的史萊姆
@@ -649,22 +661,24 @@ function summon(t) {
   document.body.appendChild(el);
   if (home.el) home.el.classList.add("away");
   const r = runners[t.id] = {el, task: t, timer: 0};
-  const go = () => {   // 跳到游標旁邊；游標之後移開很遠就再跟一次
-    const size = 64, x = Math.min(innerWidth - 150, Math.max(size, pointer.x + 46 + n * 30)), y = Math.min(innerHeight - size, Math.max(size, pointer.y + 34 + n * 26));
+  const go = () => {   // 跳到游標現在的位置旁邊，游標移動就跟著走；游標不在面板上就在原位下方等你
+    const size = 64, home = homeOf(t.id);
+    const at = pointer.inside ? {x: pointer.x + 46 + n * 30, y: pointer.y + 34 + n * 26} : {x: home.x + n * 70, y: home.y + 80};
+    const x = Math.min(innerWidth - 150, Math.max(size, at.x)), y = Math.min(innerHeight - size, Math.max(size, at.y));
     const dist = Math.hypot(x - parseFloat(el.style.left), y - parseFloat(el.style.top));
-    if (dist < 150 && r.arrived) return;
-    el.classList.add("hopping"); el.style.setProperty("--hops", Math.max(2, Math.round(dist / 170)));
+    if (dist < 40 && r.arrived) return;
+    el.classList.toggle("hopping", dist > 120); el.style.setProperty("--hops", Math.max(2, Math.round(dist / 170)));
     el.style.left = x + "px"; el.style.top = y + "px"; r.arrived = true;
-    setTimeout(() => el.classList.remove("hopping"), 950);
+    clearTimeout(r.hopEnd); r.hopEnd = setTimeout(() => el.classList.remove("hopping"), 950);
   };
   requestAnimationFrame(() => requestAnimationFrame(go));
-  r.follow = setInterval(go, 1800);
+  r.follow = setInterval(go, 300);
   r.timer = setTimeout(() => dismiss(t.id), 25000);   // 沒人理它，一陣子後自己回去
 }
 function dismiss(id, now) {
   const r = runners[id];
   if (!r) return;
-  clearInterval(r.follow); clearTimeout(r.timer); delete runners[id];
+  clearInterval(r.follow); clearTimeout(r.timer); clearTimeout(r.hopEnd); delete runners[id];
   const home = homeOf(id);
   r.el.classList.add("leaving", "hopping"); r.el.style.left = home.x + "px"; r.el.style.top = home.y + "px";
   setTimeout(() => { r.el.remove(); document.querySelectorAll(".slime.away").forEach(s => { if (!Object.keys(runners).length) s.classList.remove("away"); }); }, now ? 0 : 900);
@@ -754,6 +768,20 @@ function allThreads(d) {   // 每段 AI 對話一張卡；順序固定（依專�
   d.loose.forEach(t => out.push({t, project: "", key: "__loose"}));
   return out.sort((x, y) => x.project.localeCompare(y.project) || (x.t.started || 0) - (y.t.started || 0));
 }
+function shelvedThreads(d) {
+  return [...d.columns.flatMap(c => (c.shelved || []).map(t => ({t, project: projName(c.name)[1]}))), ...(d.loose_shelved || []).map(t => ({t, project: ""}))];
+}
+const isShelved = id => !!state.talk && shelvedThreads(state.talk).some(x => x.t.id === id);
+function closedTile(d) {
+  const n = shelvedThreads(d).length;
+  return n ? `<button class="tcard closed" data-act="closed-list"><span>已關閉的對話</span><b>${n}</b><small>點這裡找回</small></button>` : "";
+}
+function closedSheet() {
+  const list = shelvedThreads(state.talk || {columns: []});
+  if (!list.length) return closeSheet();
+  sheet(head("已關閉的對話") + `<div class="list two">` + list.map(({t, project}) =>
+    `<button class="big" data-shelve="${esc(t.id)}" data-on=""><span>${esc(t.title)}<small>${project ? project + "・" : ""}點一下放回總覽</small></span></button>`).join("") + `</div>`);
+}
 function talkCard({t, project}) {
   const [done, total] = t.progress || [0, 0];
   const lastAi = [...(t.messages || [])].reverse().find(m => m.role === "ai");
@@ -778,7 +806,7 @@ function renderTalk() {
   let html;
   if (open) html = talkColumn(open.key, esc(open.t.title) + (open.project ? `<small class="cproj">${open.project}</small>` : ""), [open.t],
     open.key === "__loose" && d.projects.length && open.t.repo ? `<button class="f" data-act="link">這是哪個專案的？</button>` : "");
-  else if (all.length) html = all.map(talkCard).join("");
+  else if (all.length) html = all.map(talkCard).join("") + closedTile(d);
   else html = `<section class="tcol"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
     d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面上的史萊姆按右鍵 →「追蹤 AI 助手的 GitHub 專案」"}</div></section>`;
   box.classList.toggle("overview", !open);
@@ -893,17 +921,45 @@ function fileMenu(path) {
     <button class="big main" data-reveal="${esc(path)}">${icon("folder")}<span>在檔案總管顯示<small>舊版、同資料夾的其他檔案都在那裡</small></span></button>
     <button class="big" data-pin="${esc(path)}" data-on="${f.pinned ? "" : "1"}">${f.pinned ? "取消釘選" : "釘選到最上面"}</button></div>`);
 }
+// 一段 AI 對話的選單：打開、回覆、在 Claude 開啟、關閉
+function threadMenu(id) {
+  const t = (state.threads || {})[id];
+  if (!t) return;
+  const away = isShelved(id);
+  sheet(head(esc(t.title)) + `<div class="list two">
+    <button class="big main" data-open-thread="${esc(id)}">打開這段對話</button>
+    ${t.can_reply ? `<button class="big" data-reply="${esc(id)}">回覆…</button>` : "<span></span>"}
+    ${t.url ? `<button class="big" data-url="${esc(t.url)}">在瀏覽器開啟<small>GitHub 上的成果</small></button>` : ""}
+    ${away ? `<button class="big" data-shelve="${esc(id)}" data-on="">放回總覽</button>`
+           : `<button class="big quiet" data-shelve="${esc(id)}" data-on="1">關閉這段對話<small>從總覽拿掉；之後有新動靜會自己回來</small></button>`}</div>`);
+}
+// 專案的選單：在檔案總管開啟、隱藏
+function projMenu(path) {
+  const p = state.projects.find(x => x.path === path);
+  if (!p) return;
+  sheet(head(esc(p.name)) + `<div class="list two">
+    <button class="big main" data-reveal="${esc(path)}">${icon("folder")}在檔案總管開啟</button>
+    <button class="big quiet" data-hide-ask="${esc(path)}">從清單隱藏<small>檔案不受影響，可恢復</small></button></div>`);
+}
+const CTX = '.file .open[data-open], [data-open-thread], .tcol [data-task], [data-runner], .proj[data-proj]:not([data-proj=""])';
+function ctxMenu(el) {
+  closeSheet();
+  if ("open" in el.dataset) fileMenu(el.dataset.open);
+  else if ("proj" in el.dataset) projMenu(el.dataset.proj);
+  else threadMenu(el.dataset.openThread || el.dataset.task || el.dataset.runner);
+}
 let pressTimer, pressed = false;
-document.addEventListener("pointerdown", ev => {
-  const el = ev.target.closest(".file .open[data-open]");
+document.addEventListener("pointerdown", ev => {   // 觸控長按 = 右鍵
+  const el = ev.target.closest(CTX);
   pressed = false; clearTimeout(pressTimer);
-  if (el) pressTimer = setTimeout(() => { pressed = true; fileMenu(el.dataset.open); }, 550);
+  if (el && ev.pointerType !== "mouse") pressTimer = setTimeout(() => { pressed = true; ctxMenu(el); }, 550);
 });
 ["pointerup", "pointercancel", "pointermove"].forEach(t => document.addEventListener(t, ev => {
   if (t !== "pointermove" || Math.abs(ev.movementX) + Math.abs(ev.movementY) > 6) clearTimeout(pressTimer); }));
-document.addEventListener("contextmenu", ev => {   // 觸控長按或滑鼠右鍵
-  const el = ev.target.closest(".file .open[data-open]");
-  if (el) { ev.preventDefault(); clearTimeout(pressTimer); if (!pressed) { pressed = true; fileMenu(el.dataset.open); } }
+document.addEventListener("contextmenu", ev => {   // 滑鼠右鍵（或系統把長按當成右鍵）
+  const el = ev.target.closest(CTX);
+  ev.preventDefault();   // 面板裡不跳出瀏覽器自己的選單
+  if (el) { clearTimeout(pressTimer); if (!pressed) { ctxMenu(el); if (ev.pointerType === "touch") pressed = true; } }   // 觸控之後還會有一下點擊，要吃掉
 });
 
 /* ---------- 事件 ---------- */
@@ -934,11 +990,21 @@ document.addEventListener("click", async ev => {
   const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
   if (Date.now() - changedAt < 550 && sameSpot) return;
   lastTap = {x: ev.clientX, y: ev.clientY};
-  const el = ev.target.closest("[data-open-thread],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  const el = ev.target.closest("[data-shelve],[data-hide-ask],[data-open-thread],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
   if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
   const d = el.dataset;
   try {
-    if ("openThread" in d) { state.open = d.openThread; renderTalk(); }
+    if ("shelve" in d) {
+      const on = d.on === "1";
+      await api("/api/shelve", {thread: d.shelve, on});
+      if (on && state.open === d.shelve) state.open = null;
+      toast(on ? "已關閉這段對話；可在總覽最後的「已關閉的對話」找回" : "已放回總覽");
+      await loadTalk();
+      if (!on && $("sheet").textContent.startsWith("已關閉的對話")) closedSheet(); else closeSheet();
+    }
+    else if ("hideAsk" in d) { state.project = d.hideAsk; confirmSheet(`把「${esc(name(d.hideAsk))}」從清單隱藏？<br><small>檔案不受影響；之後可在「設定」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`); }
+    else if (d.act === "closed-list") closedSheet();
+    else if ("openThread" in d) { closeSheet(); if (!document.body.classList.contains("talk")) setMode(true); state.open = d.openThread; renderTalk(); }
     else if (d.act === "talk-home") { state.open = null; renderTalk(); }
     else if ("runner" in d) {   // 點跑來的史萊姆：帶你到那件事的對話
       const id = d.runner, t = runners[id] && runners[id].task;
