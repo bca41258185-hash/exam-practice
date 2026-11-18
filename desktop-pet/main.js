@@ -9,7 +9,13 @@ const TICK = 33;            // 毫秒
 const FORWARD = process.platform !== 'linux'; // 點擊穿透的滑鼠轉送只有 Windows / macOS 支援
 
 let win, tray;
-let cfg = { scale: 1, top: true, helmet: false, talk: true, xp: 0 };
+let cfg = { scale: 1, top: true, species: 'cat', hat: 'none', robe: 'qing', gear: 'none', talk: true, xp: 0 };
+
+// 裝扮的選項：[設定值, 選單上的名字]
+const SPECIES = [['cat', '靈貓'], ['fox', '狐仙'], ['rabbit', '玉兔'], ['panda', '熊貓'], ['dragon', '小青龍']];
+const HATS = [['none', '不戴'], ['douli', '斗笠'], ['guan', '道冠玉簪'], ['jin', '書生方巾'], ['lotus', '蓮花冠'], ['mask', '狐狸面具'], ['wreath', '花環']];
+const ROBES = [['qing', '青'], ['yuebai', '月白'], ['fei', '緋紅'], ['mo', '墨黑'], ['zixia', '紫霞'], ['jin', '金黃']];
+const GEARS = [['none', '不帶'], ['sword', '背劍'], ['gourd', '酒葫蘆'], ['fan', '摺扇']];
 let pos = { x: 0, y: 0 }, vel = { x: 0, y: 0 };
 let state = 'idle', dir = 1, until = 0, phase = 0;
 let grab = null, lastCur = null, maxSpeed = 0, bounces = 0;
@@ -19,6 +25,11 @@ const cfgFile = () => path.join(app.getPath('userData'), 'settings.json');
 function loadCfg() {
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { /* 首次啟動 */ }
   if (![0.75, 1, 1.5].includes(cfg.scale)) cfg.scale = 1;
+  if (cfg.helmet === true && cfg.hat === 'none') cfg.hat = 'douli';   // 舊版的「戴斗笠」
+  delete cfg.helmet;
+  for (const [key, list] of [['species', SPECIES], ['hat', HATS], ['robe', ROBES], ['gear', GEARS]]) {
+    if (!list.some(([v]) => v === cfg[key])) cfg[key] = list[0][0];
+  }
 }
 function saveCfg() {
   try { fs.writeFileSync(cfgFile(), JSON.stringify(cfg)); } catch { /* 存不了就算了 */ }
@@ -42,7 +53,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, helmet: cfg.helmet }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -270,7 +281,20 @@ function menu() {
         label, type: 'radio', checked: cfg.scale === s, click: () => setScale(s),
       })),
     },
-    { label: '戴斗笠', type: 'checkbox', checked: cfg.helmet, click: (m) => { cfg.helmet = m.checked; saveCfg(); pushState(); } },
+    {
+      label: '角色', submenu: SPECIES.map(([v, name]) => ({
+        label: name, type: 'radio', checked: cfg.species === v,
+        click: () => { cfg.species = v; saveCfg(); pushState(); set('happy', 1400); say(`化身${name}！`); },
+      })),
+    },
+    {
+      label: '裝扮', submenu: [['hat', '頭飾', HATS], ['robe', '道袍顏色', ROBES], ['gear', '配件', GEARS]].map(([key, label, list]) => ({
+        label, submenu: list.map(([v, name]) => ({
+          label: name, type: 'radio', checked: cfg[key] === v,
+          click: () => { cfg[key] = v; saveCfg(); pushState(); set('happy', 1200); say(key === 'robe' ? `換上${name}色道袍！` : v === 'none' ? '輕裝上路' : `換上${name}！`); },
+        })),
+      })),
+    },
     { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
     { label: '開機自動啟動', type: 'checkbox', checked: login, visible: process.platform !== 'linux', click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },

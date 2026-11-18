@@ -2,7 +2,7 @@
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d', { willReadFrequently: true });
 
-let S = { state: 'idle', dir: 1, helmet: false };
+let S = { state: 'idle', dir: 1, outfit: {} };
 let stStart = performance.now();
 let look = { x: 0, y: 0 };
 let bubble = null;
@@ -33,7 +33,7 @@ function frame(now) {
   ctx.clearRect(0, 0, 200, 200);
   if (bubble && now - bubble.start > 3200) bubble = null;
   drawPet(ctx, {
-    state: S.state, dir: S.dir, helmet: S.helmet, look,
+    state: S.state, dir: S.dir, outfit: S.outfit, look,
     t: now / 1000, st: (now - stStart) / 1000,
     bubble: bubble && { text: bubble.text, age: (now - bubble.start) / 1000 },
   });
