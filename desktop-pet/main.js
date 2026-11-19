@@ -693,8 +693,10 @@ function endDisguise(caught) {
 function foxTrick() {
   if (cfg.species !== 'fox') { if (disguise) { disguise = null; poof++; pushState(); } return; }
   const t = now();
-  if (disguise) { if (t > disguise.until && state === 'idle') endDisguise(false); return; }
-  if (state === 'idle' && !morph && !spar && !demon && t - lastTouch > 20000 && t - lastTrick > 120000 && Math.random() < 0.0008) startDisguise();
+  const calm = ['idle', 'walk', 'sleep'].includes(state);   // 站著、走路、打坐時都可能偷偷變（以前只在站著時，一小時才一兩次，幾乎看不到）
+  if (disguise) { if (t > disguise.until && calm) endDisguise(false); return; }
+  // 冷卻兩分鐘後，平均約四分鐘變一次（每格 33ms 的機率）→ 大約每 6～8 分鐘看到一次
+  if (calm && !morph && !spar && !demon && !saverVillain && t - lastTouch > 20000 && t - lastTrick > 120000 && Math.random() < TICK / 240000) startDisguise();
 }
 
 // ---- 全螢幕特效：技能的氣勁、月光、雨、龍影畫在一個蓋滿螢幕的透明視窗上（滑鼠穿透），不會被桌寵的小視窗切掉
@@ -1784,6 +1786,7 @@ function create() {
     else if (demo && demo.startsWith('boss')) setTimeout(() => openVillain(demo.split(':')[1] || 'lamp'), 2500);
     else if (demo === 'villain') setTimeout(() => { openSaver(true); setTimeout(() => saverWin && saverWin.webContents.executeJavaScript('window.saverVillain && window.saverVillain()'), 3000); }, 2000);
     else if (demo === 'story') setTimeout(() => tellStory(true), 2500);
+    else if (demo === 'disguise') setTimeout(startDisguise, 2500);
     else if (demo === 'pair') setTimeout(() => { openCompanion(); setTimeout(pairTalk, 2500); }, 1500);
     else if (demo === 'divine') setTimeout(() => { cfg.divine = null; divine(); }, 2500);
     else if (demo === 'demon') setTimeout(() => { lastDemon = 0; demon = { hp: 3, t0: now(), until: Date.now() + 45000, hitAt: 0 }; pushState(); sayLines([...Q.pick(DEMON_SAYS), '道友快點牠，打散心魔！'], 2600); }, 2500);
