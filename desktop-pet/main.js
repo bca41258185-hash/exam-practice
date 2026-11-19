@@ -75,7 +75,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), grab: state === 'drag' ? grabFace : undefined, evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -1174,6 +1174,7 @@ function tick() {
     }
     lastCur = cur;
     pos.x = cur.x - grab.x; pos.y = cur.y - grab.y;
+    updateGrabFace(k);
   } else if (state === 'fall') {
     vel.y += 1.6 * k;
     pos.x += vel.x; pos.y += vel.y;
@@ -1351,8 +1352,28 @@ function onClick(zone) {
   touchGain();
   set('happy', 1500);
 }
+// 被抓起來的表情看你怎麼抓：剛抓起來嚇一跳；甩很快＝驚嚇；左右晃＝緊閉眼；慢慢移動＝星星眼（好玩）；拿著不動＝享受
+// 換表情至少隔 0.5 秒，才不會一直閃
+let grabFace = 'shock', grabFaceAt = 0, grabStart = 0, grabFlips = [], grabLastSign = 0, grabStill = 0;
+function updateGrabFace(k) {
+  const t = now(), sp = Math.hypot(vel.x, vel.y) / k;
+  const sgn = Math.abs(vel.x) / k > 3 ? Math.sign(vel.x) : 0;
+  if (sgn && grabLastSign && sgn !== grabLastSign) grabFlips.push(t);
+  if (sgn) grabLastSign = sgn;
+  grabFlips = grabFlips.filter((x) => t - x < 1000);
+  grabStill = sp < 1.5 ? grabStill || t : 0;
+  let want;
+  if (t - grabStart < 350) want = 'shock';
+  else if (sp > 24) want = 'shock';
+  else if (grabFlips.length >= 3) want = 'squeeze';
+  else if (grabStill && t - grabStill > 600) want = 'comfy';
+  else if (sp > 5) want = 'star';
+  else want = grabFace;
+  if (want !== grabFace && t - grabFaceAt > 500) { grabFace = want; grabFaceAt = t; pushState(); }
+}
 function onDragStart() {
   if (!win) return;
+  grabFace = 'shock'; grabFaceAt = grabStart = now(); grabFlips = []; grabLastSign = 0; grabStill = 0;
   lastTouch = now();
   const c = screen.getCursorScreenPoint();
   grab = { x: c.x - pos.x, y: c.y - pos.y };
@@ -1621,4 +1642,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, leaveSaver, checkSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { set, say, feed, gain, grabFace: () => grabFace, updateGrabFace, setVel: (x, y) => { vel = { x, y }; }, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, leaveSaver, checkSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
