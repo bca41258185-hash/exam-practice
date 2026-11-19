@@ -598,7 +598,42 @@
     ctx.restore();
   }
 
-  // ── 碎片龍：整條龍切成大片不規則多邊形，碎片之間留透明的縫；每片是水彩質感的青、藍、紫漸層；不描邊，靠剪影 ──
+  // ── 色塊碎片龍：造型來自 loong-shards.js（由 AI 低多邊形青龍轉成大片三角），每片一個平塗色，片間留縫 ──
+  // drawShardDragon(ctx, 中心x, 中心y, 高, { flip, scatter(0 拼好～1 散開), t, palette })
+  const SHARD_PALETTES = {
+    qingci: ['#12505E', '#1C7C86', '#2E9E9A', '#5CBFB0', '#9ED8C8', '#F3EAD3', '#E2A83A'],   // 青瓷（預設）
+    mojin: ['#151B2E', '#22304F', '#2F4470', '#44608F', '#6F8DB5', '#E9DDBF', '#D9A441'],    // 墨金
+    cuiyu: ['#0F3D2E', '#1C6B4A', '#2F8F5E', '#5DB37F', '#A3D9A5', '#F1E9D2', '#E3B23C'],    // 翠玉
+  };
+  root.SHARD_PALETTES = SHARD_PALETTES;
+  root.SHARD_PALETTE = 'qingci';
+  function drawShardDragon(ctx, cx, cy, h, o) {
+    const D = root.LOONG_SHARDS; if (!D) return false;
+    o = o || {};
+    const pal = SHARD_PALETTES[o.palette || root.SHARD_PALETTE] || SHARD_PALETTES.qingci, tr = D.tris, t = o.t || 0;
+    const scat = Math.max(0, Math.min(1, o.scatter || 0)), fl = o.flip ? -1 : 1, gap = h * 0.0034, ar = D.aspect;
+    ctx.save();
+    for (let k = 0, idx = 0; k < tr.length; k += 7, idx++) {
+      const hs = Math.sin(idx * 127.1 + 311.7) * 43758.5453, hh = hs - Math.floor(hs);
+      const xs = [tr[k], tr[k + 2], tr[k + 4]], ys = [tr[k + 1], tr[k + 3], tr[k + 5]];
+      const my = (ys[0] + ys[1] + ys[2]) / 3;
+      // 身體跟著呼吸，從頭到尾一波一波地微微起伏
+      const wx = Math.sin(t * 1.3 + my * 5) * 0.004, wy = Math.sin(t * 1.6 + my * 6) * 0.003;
+      const X = xs.map((x) => cx + fl * (x - ar / 2 + wx) * h), Y = ys.map((y) => cy + (y - 0.5 + wy) * h);
+      const gx = (X[0] + X[1] + X[2]) / 3, gy = (Y[0] + Y[1] + Y[2]) / 3;
+      const ang = hh * 6.283, dist = scat * scat * (0.35 + hh * 0.7) * h, rot = scat * (hh - 0.5) * 4;
+      ctx.save(); ctx.globalAlpha *= 1 - scat * 0.85; ctx.translate(gx + Math.cos(ang) * dist, gy + Math.sin(ang) * dist - scat * 0.08 * h); ctx.rotate(rot);
+      ctx.beginPath();
+      for (let j = 0; j < 3; j++) { const dx = X[j] - gx, dy = Y[j] - gy, d = Math.hypot(dx, dy) || 1, f = Math.max(0, 1 - gap / d); j ? ctx.lineTo(dx * f, dy * f) : ctx.moveTo(dx * f, dy * f); }
+      ctx.closePath(); ctx.fillStyle = pal[tr[k + 6]] || pal[2]; ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    return true;
+  }
+  root.drawShardDragon = drawShardDragon;
+
+  // ── 碎片龍（程式沿脊椎切的舊版）：整條龍切成大片不規則多邊形，碎片之間留透明的縫；每片是水彩質感的青、藍、紫漸層；不描邊，靠剪影 ──
   // o.scatter：0 拼好、1 碎片四散（龍吟時用來「聚合成龍」和「碎裂散開」）
   const SHARD_PAL = ['#1F9AA3', '#5FC9BE', '#245F99', '#34407F', '#55306E', '#178993', '#7FD6C9', '#3D2A6B'];
   let shardTex = null;
@@ -1624,9 +1659,12 @@
       ctx.restore();
     }
     if (strike === 'dragonrise' && far) {   // 小青龍．龍吟：一條小龍從身邊盤旋升起（關掉全螢幕特效時的小視窗版）
-      const head = Math.min(1.25, st * 0.55), pts = [];
-      for (let i = 0; i < 34; i++) { const p = Math.max(0, head - i * 0.022); pts.push([20 + p * 150, 182 - p * 150 + Math.sin(p * 11) * 14]); }
-      ctx.save(); ctx.globalAlpha *= Math.min(1, (1.3 - head) * 4); drawLoong(ctx, pts, 0.42, t, { sg: 1 }); ctx.restore();
+      const sc = st < 0.8 ? 1 - st / 0.8 : st > 3.3 ? Math.min(1, (st - 3.3) / 0.8) : 0;
+      if (!drawShardDragon(ctx, 100 + dir * 40, 88, 150, { flip: dir < 0, scatter: sc, t })) {
+        const head = Math.min(1.25, st * 0.55), pts = [];
+        for (let i = 0; i < 34; i++) { const p = Math.max(0, head - i * 0.022); pts.push([20 + p * 150, 182 - p * 150 + Math.sin(p * 11) * 14]); }
+        ctx.save(); ctx.globalAlpha *= Math.min(1, (1.3 - head) * 4); drawLoong(ctx, pts, 0.42, t, { sg: 1 }); ctx.restore();
+      }
     }
     if (appear) {   // 出現時地上一圈結界
       ctx.save(); ctx.globalAlpha = 1 - Math.min(1, st / 0.65); ctx.strokeStyle = C.qi; ctx.lineWidth = 3;

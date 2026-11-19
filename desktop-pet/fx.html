@@ -8,6 +8,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="loong-shards.js"></script>
 <script src="draw.js"></script>
 <script>
   // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
@@ -193,16 +194,13 @@
     dragonriseShard(u, A, k, D) {
       const inT = 1.2, outT = 0.9, ease = (x) => 1 - Math.pow(1 - x, 3);
       const scatter = u < inT ? 1 - ease(clamp(u / inT)) : u > D - outT ? Math.pow(clamp((u - (D - outT)) / outT), 1.5) : 0;
-      const h = Math.min(H * 0.78, 950 * k), w = h * 0.8, side = P.x < W / 2 ? 1 : -1;
-      const ox = clamp(P.x + side * w * 0.35, w / 2 + 20, W - w / 2 - 20) - w / 2, oy = (H - h) / 2 + h * 0.07;   // 往下留空間給龍角
-      const br = Math.sin(u * 1.8) * 0.012;   // 呼吸
-      const ctrl = [[0.74, 0.12], [0.52, 0.16], [0.33 - br, 0.3], [0.36, 0.5 + br], [0.6 + br, 0.56], [0.76, 0.7], [0.6, 0.86 - br], [0.34, 0.86], [0.18, 0.76]];
-      const pts = window.loongSpine(ctrl.map(([x, y]) => [ox + (side > 0 ? x : 1 - x) * w, oy + y * h]), 90);
+      const h = Math.min(H * 0.82, 980 * k), w = h * ((window.LOONG_SHARDS || {}).aspect || 0.56), side = P.x < W / 2 ? 1 : -1;
+      const ox = clamp(P.x + side * w * 0.35, w / 2 + 20, W - w / 2 - 20) - w / 2, oy = (H - h) / 2;
       ctx.save(); ctx.globalAlpha *= A;
       // 拼好的那一刻，背後亮一下
       const flashA = u > inT - 0.15 && u < inT + 0.6 ? 1 - Math.abs(u - inT - 0.1) / 0.5 : 0;
       if (flashA > 0) { const g = ctx.createRadialGradient(ox + w / 2, oy + h / 2, 10, ox + w / 2, oy + h / 2, h * 0.6); g.addColorStop(0, `rgba(160,230,220,${0.35 * flashA})`); g.addColorStop(1, 'rgba(160,230,220,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
-      window.drawLoong(ctx, pts, 1, u, { style: 'shard', sg: side, pearl: true, scatter });
+      window.drawShardDragon(ctx, ox + w / 2, oy + h / 2, h, { flip: side < 0, scatter, t: u });
       ctx.restore();
     },
     dragonriseVector(u, A, k, D) {

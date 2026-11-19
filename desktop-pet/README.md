@@ -133,13 +133,13 @@
 
 ## 小青龍的龍
 
-奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是程式畫的**碎片龍**：整條龍切成大片不規則多邊形，碎片之間留透明的縫，每片是水彩質感的青、藍、紫漸層，不描邊、靠剪影。龍吟時碎片從四面八方飛來拼成一條 S 形盤繞的龍，停留時微微呼吸，最後碎裂散開。
+奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是**色塊碎片龍**：龍的造型取自一張 AI 畫的低多邊形青龍，再由程式切成大片三角形，每片一個平塗色，片與片之間留縫。龍吟時碎片從四面八方飛來拼成龍、全身微微起伏呼吸，最後碎裂散開；螢幕保護裡牠從雲下游過。
 
-![碎片龍](build/loong-pose-shard.png)
+![三種配色](build/loong-shards-palettes.jpg)
 
-`draw.js` 裡還有其他風格可換（改 `LOONG_STYLE`）：`real` 國風寫實、`chibi` Q 版、`ink` 水墨、`gold` 金龍、`poly` 低多邊形、`flat` 扁平幾何、`cloud` 雲中青龍、`geoqing` 幾何青龍、`line` 黑金線描。`node build/art/loong-pose.js 風格` 畫 S 形大圖，`node build/art/loong.js 風格,風格 檔名` 畫對照圖。
-
-另外有三張用 Figma AI 畫的龍插畫（原圖在 `build/art/dragon/`，去背的青龍在 `assets/dragon/`），目前沒用。要改用青龍插畫，把 `fx.html` 和 `saver.html` 裡的 `DRAGON_ART` 改成 `true`。
+- **配色**：`draw.js` 的 `SHARD_PALETTE`，`qingci` 青瓷（預設）、`mojin` 墨金、`cuiyu` 翠玉。
+- **造型**：`loong-shards.js`，由 `build/art/dragon/make-shards.py` 從 `build/art/dragon/geo-lowpoly-original.png` 產生。後面可以接一個數字調碎片大小，例如 `python3 make-shards.py 2` 片數更少、更大片。換一張龍的圖，也能照樣轉出新造型。
+- 其他程式畫法（國風寫實、Q 版、水墨、金龍、幾何青龍、黑金線描等）都還在 `draw.js`，改 `LOONG_STYLE` 可換；三張 AI 插畫原圖在 `build/art/dragon/`。
 
 ## 螢幕保護
 

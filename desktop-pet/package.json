@@ -40,6 +40,7 @@
       "fx.html",
       "wheel.html",
       "saver.html",
+      "loong-shards.js",
       "assets/**"
     ],
     "directories": {
