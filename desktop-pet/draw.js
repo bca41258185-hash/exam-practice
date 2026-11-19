@@ -1217,6 +1217,7 @@
     const flip = state === 'leap';                          // 輕功：空中翻筋斗
     const float = state === 'hover' || state === 'land';    // 踏空、飄落
     const taichi = state === 'taichi';                      // 打太極
+    const fm = state === 'foxtrain' ? (o.outfit && o.outfit.foxmove) || 'meditate' : '';   // 狐仙修煉狐火的招式
     const climb = state === 'climb', hang = state === 'hang';   // 壁虎遊牆功、倒掛
     const drink = state === 'drink', gaze = state === 'gaze';   // 喝水、看遠方
     const strike = state === 'strike' ? (fit.move || 'palm') : '';   // 出招
@@ -1261,6 +1262,11 @@
     if (climb) rot = -Math.PI / 2;                   // 腳貼著牆（左右牆都一樣，因為已經先左右翻轉）
     if (hang) rot = Math.PI + Math.sin(t * 3) * 0.08;   // 倒掛，輕輕晃
     if (state === 'spin') rot = st * Math.PI * 4;   // 被劍氣吹得原地轉圈
+    if (fm === 'gather') { sy = 1 + Math.sin(st * 3) * 0.03; lift = 2; }
+    if (fm === 'cast') { const p = Math.min(1, st / 0.5); rot = -0.15 + p * 0.3; sx = 1 + Math.max(0, Math.sin(st * 6)) * 0.05; }
+    if (fm === 'spin') rot = st * Math.PI * 2.2;
+    if (fm === 'juggle') lift = Math.abs(Math.sin(t * 5)) * 5;
+    if (fm === 'meditate') { lift = 10 + Math.sin(t * 1.6) * 3; sy = 0.94; sx = 1.04; }
     if (taichi) { rot = Math.sin(t * 1.4) * 0.16; sy = 1 + Math.sin(t * 2.8) * 0.03; lift = 2 + Math.max(0, Math.sin(t * 1.4)) * 3; }
 
     ctx.save();
@@ -1276,6 +1282,21 @@
       ctx.save(); ctx.globalAlpha = 0.3 + Math.sin(t * 2) * 0.12; ctx.lineWidth = 2.5;
       ellipse(ctx, 100, 187, 44 + Math.sin(t * 2) * 3, 7, null, C.qi);
       ctx.restore();
+    }
+    if (fm) {   // 修煉狐火：藍白色的火焰
+      const fire = (x, y, r, a) => {
+        ctx.save(); ctx.globalAlpha *= a;
+        const g = ctx.createRadialGradient(x, y, 1, x, y, r * 2.4); g.addColorStop(0, 'rgba(120,210,255,0.8)'); g.addColorStop(1, 'rgba(120,210,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#6FD3FF'; ctx.beginPath(); ctx.moveTo(x, y - r * 1.8); ctx.quadraticCurveTo(x + r, y - r * 0.4, x, y + r); ctx.quadraticCurveTo(x - r, y - r * 0.4, x, y - r * 1.8); ctx.fill();
+        ctx.fillStyle = '#E8FBFF'; ctx.beginPath(); ctx.ellipse(x, y, r * 0.35, r * 0.6, 0, 0, 6.283); ctx.fill();
+        ctx.restore();
+      };
+      if (fm === 'gather') { for (let i = 0; i < 6; i++) { const p = ((st * 0.7 + i / 6) % 1), a = i * 1.05 + st; fire(100 + Math.cos(a) * (70 - p * 60), 120 + Math.sin(a) * (50 - p * 44) - lift, 4 + p * 3, 1 - p * 0.3); } fire(100, 64 - lift, 7 + Math.min(st, 2) * 2, 1); }
+      if (fm === 'cast') { const p = Math.min(1, st / 0.6); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + (i - 2) * 0.55; fire(100 + Math.cos(a) * p * 80, 130 + Math.sin(a) * p * 70, 5, 1 - p * 0.6); } }
+      if (fm === 'spin') for (let i = 0; i < 9; i++) { const a = st * 6 + i * 0.7; fire(100 + Math.cos(a) * 58, 140 + Math.sin(a) * 30 - lift, 4, 0.9); }
+      if (fm === 'juggle') for (let i = 0; i < 3; i++) { const ph = (t * 1.4 + i / 3) % 1; fire(84 + ph * 32, 70 - Math.sin(ph * Math.PI) * 36 - lift, 5, 1); }
+      if (fm === 'meditate') for (let i = 0; i < 4; i++) { const p = (t * 0.35 + i / 4) % 1; fire(100 + Math.sin(i * 2 + t) * 40, 176 - p * 110, 3.5, Math.sin(p * Math.PI)); }
     }
     if (fit.done) {   // 渡劫圓滿：一層金光
       ctx.save();
@@ -1489,7 +1510,7 @@
     ctx.fillStyle = C.line; ctx.lineWidth = 2.6;
     const lash = sp.lash || fit.fake === 'fox';   // 女生角色（狐仙、玉兔）有睫毛；狐仙變裝時睫毛也還在
     const eye = (x) => {
-      const shut = yawn || (med || taichi || drink) || (blink && (state === 'idle' || moving || state === 'peek' || fly));
+      const shut = yawn || (med || taichi || drink || fm === 'meditate' || fm === 'gather') || (blink && (state === 'idle' || moving || state === 'peek' || fly));
       if (lash && state !== 'dizzy' && grab !== 'star') {   // 睫毛：眼睛外側上緣三根，閉眼時往下
         const o = x < 6 ? -1 : 1;
         ctx.save(); ctx.lineWidth = 1.7; ctx.lineCap = 'round'; ctx.strokeStyle = sp.patches ? '#FFFFFF' : C.line; ctx.beginPath();

@@ -18,6 +18,7 @@
 <script src="loong-shards.js"></script>
 <script src="loong-swim.js"></script>
 <script src="draw.js"></script>
+<script src="villains.js"></script>
 <script>
   // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
   window.DRAGON_ART = false;
@@ -151,11 +152,11 @@
       },
       tails(T) { return Math.min(9, 1 + Math.floor((T - this.t0) / 18)); },
       // 第 k 條尾巴上的第 j 團（0 根部～5 尾尖）：從狐仙身後往上、往後彎，九條展開成扇形，輕輕擺
-      tailSlot(k, n, j, T) {
+      tailSlot(k, n, j, T, spin) {
         const P = petPos || { x: W * 0.8, y: H - 80 * K, dir: -1 }, d = P.dir < 0 ? -1 : 1;
         // 像狐仙自己的尾巴一樣，以身體為中心往上、往兩側對稱展開（一條時稍微偏向身後）
         const rootX = P.x - (n === 1 ? d * 26 * K : 0), rootY = P.y - 4 * K, fan = Math.min(2.95, 0.42 * (n - 1));   // 九條時張開成大半圓，最外側的尾巴不會掉到地面下
-        const base = -Math.PI / 2 - (n === 1 ? d * 0.6 : 0), ang = base + (n > 1 ? (k - (n - 1) / 2) * fan / (n - 1) : 0);
+        const base = -Math.PI / 2 - (n === 1 ? d * 0.6 : 0) + (spin || 0), ang = base + (n > 1 ? (k - (n - 1) / 2) * fan / (n - 1) : 0);
         const t = (j + 1) / 6, L = (190 + n * 16) * K, side = Math.cos(ang) < 0 ? -1 : 1;   // 尾巴拉長，狐火之間留空隙
         const sway = Math.sin(T * 1.6 + k * 0.9) * 0.28 * t, curl = side * 0.85 * t * t;   // 尾尖往外捲
         const a = ang + sway + curl;
@@ -169,6 +170,14 @@
         return [W * (0.5 + 0.44 * Math.sin(o.ph * 3 + T * 0.09)), H * (0.5 + 0.4 * Math.sin(o.ph * 5 + T * 0.07))];
       },
       swap(T) { this.form = (this.form + 1) % 3; this.next = T + 16; for (const o of things) if (!o.tail) burst(o.x, o.y, '#FFFFFF'); },
+      // 狐仙出招：gather 狐火往牠身邊聚；cast 從牠身上噴出新的狐火；spin 狐尾繞著轉；meditate 尾巴更亮
+      foxfx(move, T) {
+        this.fx = { move, at: T };
+        if (move === 'cast' && petPos) for (let i = 0; i < 4; i++) {
+          const o = this.flame(T, false); o.born = T; o.x = petPos.x; o.y = petPos.y - 30 * K; const a = -Math.PI / 2 + (i - 1.5) * 0.6;
+          o.px = Math.cos(a) * 900 * K; o.py = Math.sin(a) * 900 * K; things.push(o);
+        }
+      },
       alpha(o, T) {
         if (T < o.born) return 0;
         const inA = clamp((T - o.born) / 0.6);
@@ -187,13 +196,17 @@
           if (T > o.born + o.dur) {   // 熄了：過一下在別的地方亮起來
             o.born = T + rnd(0.3, 2); o.dur = rnd(4, 9); o.x = rnd(0.1, 0.9) * W; o.y = rnd(0.15, 0.85) * H; o.px = o.py = 0;
           }
-          const [tx, ty] = this.slot(i, free.length, T, o), dx = o.x - mouse.x, dy = o.y - mouse.y, d = Math.hypot(dx, dy), R = 170 * K;
+          let [tx, ty] = this.slot(i, free.length, T, o);
+          if (this.fx && this.fx.move === 'gather' && T - this.fx.at < 3 && petPos) { const a = i * 2.4 + T * 2; tx = petPos.x + Math.cos(a) * 90 * K; ty = petPos.y - 60 * K + Math.sin(a) * 60 * K; }   // 被狐仙聚過去
+          const dx = o.x - mouse.x, dy = o.y - mouse.y, d = Math.hypot(dx, dy), R = 170 * K;
           if (d < R && d > 0.1) { const f = (1 - d / R) * 1100 * K; o.px += dx / d * f * dt; o.py += dy / d * f * dt; }   // 逗你：一靠近就溜
           o.px *= 1 - Math.min(1, dt * 2.5); o.py *= 1 - Math.min(1, dt * 2.5);
-          o.x += ((tx - o.x) * 0.6 + o.px) * dt; o.y += ((ty - o.y) * 0.6 + o.py + Math.sin(T * 2 + o.ph) * 6 * K) * dt;
+          const pull = this.fx && this.fx.move === 'gather' && T - this.fx.at < 3 ? 2.2 : 0.6;
+          o.x += ((tx - o.x) * pull + o.px) * dt; o.y += ((ty - o.y) * pull + o.py + Math.sin(T * 2 + o.ph) * 6 * K) * dt;
         });
         for (const o of tails) {   // 飛向自己在尾巴上的位置
-          const [tx, ty] = this.tailSlot(o.k, n, o.j, T), f = Math.min(1, dt * 5);
+          const spin = this.fx && this.fx.move === 'spin' && T - this.fx.at < 3.5 ? (T - this.fx.at) * 1.8 : 0;   // 轉尾：整把尾巴繞著狐仙轉
+          const [tx, ty] = this.tailSlot(o.k, n, o.j, T, spin), f = Math.min(1, dt * 5);
           o.x += (tx - o.x) * f; o.y += (ty - o.y) * f;
         }
       },
@@ -201,7 +214,8 @@
         for (const o of things) {
           const a = this.alpha(o, T); if (a <= 0.01) continue;
           ctx.save(); ctx.globalAlpha *= a;
-          const r = o.tail ? (20 - o.j * 2) * K : o.r;   // 尾巴根部大、尾尖小
+          const glow = this.fx && this.fx.move === 'meditate' && T - this.fx.at < 5 ? 1.25 : 1;   // 打坐時尾巴更亮更大
+          const r = (o.tail ? (20 - o.j * 2) * K : o.r) * (o.tail ? glow : 1);
           foxfire(o.x, o.y, r, T, o.ph);
           ctx.restore();
         }
@@ -432,19 +446,21 @@
   let villain = null, nextVillain = null, lastReport = 0, petPos = null, orbs = [];
   // BOSS：心魔麾下的大將。比黑風怪大、血多、會朝靈寵丟黑氣彈；打不完 75 秒後會撤退
   const BOSSES = {
-    lamp: { name: '燈影魔將', hp: 20, sc: 1.6, body: '#3A2A5C', dark: '#1A1030', eye: '#FFB03B', aura: 'rgba(255,176,59,0.45)', say: '師父的燈，歸心魔了！', every: 3.2 },
-    jiao: { name: '九幽蛟魔', hp: 28, sc: 1.9, body: '#1F3A4A', dark: '#0B1820', eye: '#5BF0FF', aura: 'rgba(91,240,255,0.4)', say: '九幽之水，淹沒青雲山！', every: 2.7 },
-    heart: { name: '心魔本尊', hp: 40, sc: 2.2, body: '#2A0F1A', dark: '#12050A', eye: '#FF2D55', aura: 'rgba(255,45,85,0.45)', say: '你越累，我越強……', every: 2.2 },
+    lamp: { name: '燈影魔梟', type: 'owl', hp: 20, sc: 1.6, body: '#3A2A5C', dark: '#1A1030', eye: '#FFB03B', aura: 'rgba(255,176,59,0.45)', say: '師父的燈，歸心魔了！', every: 3.2 },
+    jiao: { name: '九幽黑蛟', type: 'jiao', hp: 28, sc: 1.9, body: '#1F3A4A', dark: '#0B1820', eye: '#5BF0FF', aura: 'rgba(91,240,255,0.4)', say: '九幽之水，淹沒青雲山！', every: 2.7 },
+    heart: { name: '心魔本尊', type: 'heart', hp: 40, sc: 2.2, body: '#2A0F1A', dark: '#12050A', eye: '#FF2D55', aura: 'rgba(255,45,85,0.45)', say: '你越累，我越強……', every: 2.2 },
   };
   const BOSS_ID = new URLSearchParams(location.search).get('boss');   // petPos：桌面上那隻靈寵（主程序每幾格告訴我們）
   function villainStart(T, bossId) {
     const side = Math.random() < 0.5 ? -1 : 1;
     const B = BOSSES[bossId || BOSS_ID];
     if (B) {   // BOSS 從畫面邊緩緩走進來，站在中間開打
-      villain = { boss: B, x: side < 0 ? -140 * K : W + 140 * K, y: H - 74 * K, dir: -side, hp: B.hp, max: B.hp, state: 'come', t0: T, hitAt: -9, loot: null, tx: W * rnd(0.4, 0.6), nextShot: T + 3 };
+      villain = { boss: B, type: B.type, name: B.name, x: side < 0 ? -140 * K : W + 140 * K, y: H - 74 * K, dir: -side, hp: B.hp, max: B.hp, state: 'come', t0: T, hitAt: -9, loot: null, tx: W * rnd(0.4, 0.6), nextShot: T + 3 };
       return;
     }
-    villain = { x: side < 0 ? -80 * K : W + 80 * K, y: H - 74 * K, dir: -side, hp: 6, max: 6, state: 'come', t0: T, hitAt: -9, said: T, loot: null,
+    const MINOR = ['wolf', 'rat', 'crow', 'monkey'], type = MINOR[Math.floor(Math.random() * MINOR.length)];
+    const INFO = (window.VILLAIN_INFO || {})[type];
+    villain = { type, name: INFO ? INFO.name : '黑風怪', x: side < 0 ? -80 * K : W + 80 * K, y: H - 74 * K, dir: -side, hp: 6, max: 6, state: 'come', t0: T, hitAt: -9, said: T, loot: null,
       tx: sp === 'panda' && S.lowBun ? null : W * rnd(0.35, 0.65) };
     if (MODE_V) villain.tx = null;
   }
@@ -513,36 +529,42 @@
     const B = v.boss, k = K * (B ? B.sc : 1), bob = Math.abs(Math.sin(T * (v.state === 'flee' ? 16 : B ? 3 : 8))) * 6 * k, hurt = T - v.hitAt < 0.25;
     const COL = B ? { body: B.body, dark: B.dark, head: B.body, eye: B.eye } : { body: '#2B2238', dark: '#120C1A', head: '#3A2F4C', eye: '#FF3B3B' };
     const fade = v.state === 'down' ? 1 - clamp((T - v.downAt) / 1.1) : 1;
-    ctx.save(); ctx.globalAlpha *= fade; ctx.translate(v.x + (hurt ? Math.sin(T * 90) * 4 * k : 0), v.y - bob); ctx.scale(v.dir, 1);
-    // 影子
-    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(0, 12 * k + bob, 30 * k, 6 * k, 0, 0, 6.283); ctx.fill();
-    // 破斗篷
-    if (B) {   // BOSS 身後一圈會轉的光環
-      ctx.save(); ctx.strokeStyle = B.aura; ctx.lineWidth = 5 * k;
-      for (let i = 0; i < 2; i++) { const a = T * (1.2 + i) ; ctx.beginPath(); ctx.arc(0, -55 * k, (62 + i * 14) * k, a, a + 4.2); ctx.stroke(); }
+    if (window.drawVillain && v.type) {   // 新的反派造型（villains.js）：可愛但壞壞的動物
+      ctx.save(); ctx.globalAlpha *= fade; ctx.translate(v.x + (hurt ? Math.sin(T * 90) * 3 * k : 0), v.y); ctx.scale(k, k);
+      window.drawVillain(ctx, v.type, { t: T, st: T - (v.state === 'down' ? v.downAt : v.state === 'flee' ? (v.fleeAt || v.t0) : v.t0), dir: v.dir, state: v.state, hurt, hp: v.hp, max: v.max });
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.globalAlpha *= fade; ctx.translate(v.x + (hurt ? Math.sin(T * 90) * 4 * k : 0), v.y - bob); ctx.scale(v.dir, 1);
+      // 影子
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(0, 12 * k + bob, 30 * k, 6 * k, 0, 0, 6.283); ctx.fill();
+      // 破斗篷
+      if (B) {   // BOSS 身後一圈會轉的光環
+        ctx.save(); ctx.strokeStyle = B.aura; ctx.lineWidth = 5 * k;
+        for (let i = 0; i < 2; i++) { const a = T * (1.2 + i) ; ctx.beginPath(); ctx.arc(0, -55 * k, (62 + i * 14) * k, a, a + 4.2); ctx.stroke(); }
+        ctx.restore();
+      }
+      ctx.fillStyle = hurt ? '#FFFFFF' : COL.body; ctx.strokeStyle = COL.dark; ctx.lineWidth = 2.5 * k;
+      ctx.beginPath(); ctx.moveTo(-26 * k, 6 * k); ctx.lineTo(-18 * k, 4 * k); ctx.lineTo(-12 * k, 10 * k); ctx.lineTo(-4 * k, 3 * k); ctx.lineTo(4 * k, 10 * k); ctx.lineTo(12 * k, 3 * k); ctx.lineTo(22 * k, 9 * k);
+      ctx.quadraticCurveTo(30 * k, -40 * k, 6 * k, -78 * k); ctx.quadraticCurveTo(-30 * k, -76 * k, -26 * k, 6 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // 頭、角、紅眼
+      ctx.fillStyle = hurt ? '#FFFFFF' : COL.head; ctx.beginPath(); ctx.arc(2 * k, -80 * k, 20 * k, 0, 6.283); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5A4A6E';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo((2 + s * 10) * k, -96 * k); ctx.lineTo((2 + s * 18) * k, -116 * k); ctx.lineTo((2 + s * 4) * k, -98 * k); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = COL.eye; ctx.shadowColor = COL.eye; ctx.shadowBlur = 8;
+      for (const ex of [4, 14]) { ctx.beginPath(); ctx.ellipse(ex * k, -82 * k, 3.4 * k, 2.4 * k, 0.3, 0, 6.283); ctx.fill(); }
+      ctx.shadowBlur = 0;
+      if (B) {   // BOSS 拿的東西：燈影魔將提著師父的燈；九幽蛟魔一條蛟尾；心魔本尊頭上一頂黑冠
+        if (B.name === '燈影魔梟') { ctx.strokeStyle = '#7A5A3A'; ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.moveTo(22 * k, -40 * k); ctx.lineTo(30 * k, -10 * k); ctx.stroke(); ctx.fillStyle = '#FFB03B'; ctx.shadowColor = '#FFB03B'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.ellipse(30 * k, 0, 9 * k, 12 * k, 0, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; }
+        else if (B.name === '九幽黑蛟') { ctx.strokeStyle = '#0B1820'; ctx.lineWidth = 10 * k; ctx.beginPath(); ctx.moveTo(-20 * k, 0); ctx.quadraticCurveTo(-70 * k, 10 * k, -80 * k, -30 * k + Math.sin(T * 3) * 10 * k); ctx.stroke(); ctx.strokeStyle = '#2F6A7A'; ctx.lineWidth = 6 * k; ctx.stroke(); }
+        else { ctx.fillStyle = '#12050A'; ctx.beginPath(); ctx.moveTo(-16 * k, -98 * k); for (let i = 0; i < 5; i++) { ctx.lineTo((-16 + i * 8 + 4) * k, -118 * k); ctx.lineTo((-16 + (i + 1) * 8) * k, -100 * k); } ctx.closePath(); ctx.fill(); }
+      } else {   // 背上的麻袋
+        ctx.fillStyle = '#8B6A3E'; ctx.strokeStyle = '#4A3A2A'; ctx.beginPath(); ctx.ellipse(-24 * k, -44 * k, 13 * k, 16 * k, -0.3, 0, 6.283); ctx.fill(); ctx.stroke();
+      }
+      // 黑風：身邊繞的黑氣
+      ctx.strokeStyle = 'rgba(80,60,110,0.55)'; ctx.lineWidth = 3 * k;
+      for (let i = 0; i < 3; i++) { const a = T * 4 + i * 2.1; ctx.beginPath(); ctx.arc(0, -40 * k, (40 + i * 8) * k, a, a + 1.3); ctx.stroke(); }
       ctx.restore();
     }
-    ctx.fillStyle = hurt ? '#FFFFFF' : COL.body; ctx.strokeStyle = COL.dark; ctx.lineWidth = 2.5 * k;
-    ctx.beginPath(); ctx.moveTo(-26 * k, 6 * k); ctx.lineTo(-18 * k, 4 * k); ctx.lineTo(-12 * k, 10 * k); ctx.lineTo(-4 * k, 3 * k); ctx.lineTo(4 * k, 10 * k); ctx.lineTo(12 * k, 3 * k); ctx.lineTo(22 * k, 9 * k);
-    ctx.quadraticCurveTo(30 * k, -40 * k, 6 * k, -78 * k); ctx.quadraticCurveTo(-30 * k, -76 * k, -26 * k, 6 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
-    // 頭、角、紅眼
-    ctx.fillStyle = hurt ? '#FFFFFF' : COL.head; ctx.beginPath(); ctx.arc(2 * k, -80 * k, 20 * k, 0, 6.283); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#5A4A6E';
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo((2 + s * 10) * k, -96 * k); ctx.lineTo((2 + s * 18) * k, -116 * k); ctx.lineTo((2 + s * 4) * k, -98 * k); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-    ctx.fillStyle = COL.eye; ctx.shadowColor = COL.eye; ctx.shadowBlur = 8;
-    for (const ex of [4, 14]) { ctx.beginPath(); ctx.ellipse(ex * k, -82 * k, 3.4 * k, 2.4 * k, 0.3, 0, 6.283); ctx.fill(); }
-    ctx.shadowBlur = 0;
-    if (B) {   // BOSS 拿的東西：燈影魔將提著師父的燈；九幽蛟魔一條蛟尾；心魔本尊頭上一頂黑冠
-      if (B.name === '燈影魔將') { ctx.strokeStyle = '#7A5A3A'; ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.moveTo(22 * k, -40 * k); ctx.lineTo(30 * k, -10 * k); ctx.stroke(); ctx.fillStyle = '#FFB03B'; ctx.shadowColor = '#FFB03B'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.ellipse(30 * k, 0, 9 * k, 12 * k, 0, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; }
-      else if (B.name === '九幽蛟魔') { ctx.strokeStyle = '#0B1820'; ctx.lineWidth = 10 * k; ctx.beginPath(); ctx.moveTo(-20 * k, 0); ctx.quadraticCurveTo(-70 * k, 10 * k, -80 * k, -30 * k + Math.sin(T * 3) * 10 * k); ctx.stroke(); ctx.strokeStyle = '#2F6A7A'; ctx.lineWidth = 6 * k; ctx.stroke(); }
-      else { ctx.fillStyle = '#12050A'; ctx.beginPath(); ctx.moveTo(-16 * k, -98 * k); for (let i = 0; i < 5; i++) { ctx.lineTo((-16 + i * 8 + 4) * k, -118 * k); ctx.lineTo((-16 + (i + 1) * 8) * k, -100 * k); } ctx.closePath(); ctx.fill(); }
-    } else {   // 背上的麻袋
-      ctx.fillStyle = '#8B6A3E'; ctx.strokeStyle = '#4A3A2A'; ctx.beginPath(); ctx.ellipse(-24 * k, -44 * k, 13 * k, 16 * k, -0.3, 0, 6.283); ctx.fill(); ctx.stroke();
-    }
-    // 黑風：身邊繞的黑氣
-    ctx.strokeStyle = 'rgba(80,60,110,0.55)'; ctx.lineWidth = 3 * k;
-    for (let i = 0; i < 3; i++) { const a = T * 4 + i * 2.1; ctx.beginPath(); ctx.arc(0, -40 * k, (40 + i * 8) * k, a, a + 1.3); ctx.stroke(); }
-    ctx.restore();
     // 血條、台詞
     for (const o of orbs) {   // 黑氣彈
       ctx.save(); const g = ctx.createRadialGradient(o.x, o.y, 1, o.x, o.y, 20 * K); g.addColorStop(0, o.col); g.addColorStop(1, 'rgba(20,8,30,0)');
@@ -563,7 +585,7 @@
       ctx.font = `bold ${Math.round(15 * k)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.fillStyle = '#2B2238';
       const WANT = { cat: '小魚乾拿來！', fox: '狐火借我玩玩！', rabbit: '月餅是我的！', panda: '包子拿來！', dragon: '龍珠歸我了！' };
       const line = v.state === 'flee' ? (v.loot || MODE_V ? '嘿嘿，到手了！' : '下次再來！') : (WANT[sp] || '這裡歸我了！');
-      ctx.strokeText('黑風怪', v.x, y0 - 22 * k); ctx.fillText('黑風怪', v.x, y0 - 22 * k);
+      ctx.strokeText(v.name || '黑風怪', v.x, y0 - 22 * k); ctx.fillText(v.name || '黑風怪', v.x, y0 - 22 * k);
       ctx.font = `${Math.round(13 * k)}px "Microsoft JhengHei"`; ctx.strokeText(line, v.x, y0 - 6 * k); ctx.fillText(line, v.x, y0 - 6 * k);
       ctx.restore();
     } else {
@@ -575,6 +597,7 @@
   if (api.onCmd) api.onCmd((c) => {
     const T = now();
     if (c.kind === 'pet') petPos = { x: c.x, y: c.y, dir: c.dir };
+    else if (c.kind === 'foxfx') { if (S && S.foxfx) S.foxfx(c.move, T); }
     else if (c.kind === 'hit') villainHit(c.dmg || 1, T);
     else if (c.kind === 'eat' && S && S.eat) S.eat(c.id, c.x, c.y, T);
   });

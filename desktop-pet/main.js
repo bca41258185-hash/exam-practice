@@ -76,7 +76,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || (disguise && disguise.as) || cfg.species, fake: disguise && !morph && cfg.species === 'fox' ? 'fox' : undefined, poof, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), grab: state === 'drag' ? grabFace : undefined, evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || (disguise && disguise.as) || cfg.species, fake: disguise && !morph && cfg.species === 'fox' ? 'fox' : undefined, poof, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), grab: state === 'drag' ? grabFace : undefined, evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo(), foxmove: state === 'foxtrain' ? foxMove : undefined } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -791,11 +791,13 @@ function openSaver(manual) {
   mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
   mine.on('closed', () => {
     if (saverWin === mine) { saverWin = null; saverBun = null; saverVillain = null; }
+    if (state === 'foxtrain') set('idle', 1200);
     if (state === 'sleep' && !lockAt) set('idle', 1200);
   });
   saverAt = Date.now(); saverLeaving = false;
   saverHold = manual ? Date.now() + 45000 : 0;   // 手動開的：你明明在電腦前，所以先飄 45 秒再說
-  if (!BUSY.includes(state) && !manual) set('sleep', 24 * 3600000);   // 你不在，牠就打坐
+  if (!BUSY.includes(state) && !manual) saverRest();   // 你不在，牠就打坐（狐仙改成修煉狐火）
+  else if (manual && cfg.species === 'fox' && !BUSY.includes(state)) setTimeout(saverRest, 2500);
   stat('savers');
 }
 function closeSaver() { if (saverWin && !saverWin.isDestroyed()) saverWin.close(); }
@@ -828,8 +830,8 @@ const VILLAIN_LORE = [
 ];
 const BOSS_ORDER = ['lamp', 'jiao', 'heart'];
 const BOSS_LORE = {
-  lamp: ['燈影魔將倒下了！', '牠手上那盞燈……', '是師父的燈！', '燈裡有師父的聲音', '「好好休息，別讓心魔長大」'],
-  jiao: ['九幽蛟魔沉回深淵', '小青龍說牠是龍宮', '被心魔帶走的守衛', '心魔就躲在九幽之下'],
+  lamp: ['燈影魔梟倒下了！', '牠手上那盞燈……', '是師父的燈！', '燈裡有師父的聲音', '「好好休息，別讓心魔長大」'],
+  jiao: ['九幽黑蛟沉回深淵', '小青龍說牠是龍宮', '被心魔帶走的守衛', '心魔就躲在九幽之下'],
   heart: ['心魔本尊散了！', '原來心魔就是', '大家累積的疲憊', '道友好好休息', '牠就再也長不大了', '師父從燈裡走出來了！'],
 };
 function nextBoss() {   // 照故事順序；心魔本尊要渡劫才會出現
@@ -909,11 +911,30 @@ function saverChase(t, l, k) {   // 在地面上跑向包子或反派（每格�
   }
 }
 
+// 狐仙在螢幕保護時不只是睡：一招一招修煉狐火，螢幕上的狐火跟著動
+const FOX_MOVES = ['gather', 'cast', 'spin', 'juggle', 'meditate'];
+const FOX_SAY = { gather: ['狐火，聚！', '聚靈成火～'], cast: ['去！', '狐火，散！'], spin: ['九尾，開！', '轉～轉～'], juggle: ['看我拋火～', '一、二、三！'], meditate: ['吐納……', '練到第幾重了呢'] };
+let foxMove = '', foxMoveAt = 0;
+function saverRest() {
+  if (cfg.species !== 'fox') return set('sleep', 24 * 3600000);
+  foxMove = ''; foxMoveAt = 0; set('foxtrain', 24 * 3600000);
+}
+function foxTrainTick(t) {   // 每三四秒換一招
+  if (t < foxMoveAt) return;
+  const choices = FOX_MOVES.filter((m) => m !== foxMove);
+  foxMove = choices[Math.floor(Math.random() * choices.length)];
+  foxMoveAt = t + (foxMove === 'meditate' ? 5000 : rnd(3200, 4200));
+  pushState(); stStartPush();
+  saverCmd({ kind: 'foxfx', move: foxMove });
+  if (Math.random() < 0.55) say(Q.pick(FOX_SAY[foxMove]), true);
+}
+function stStartPush() { send('state', { state: 'idle', dir, outfit: {} }); pushState(); }   // 讓畫面端的「這一招開始了幾秒」重新計時
+
 function checkSaver(idle) {
   const open = saverWin && !saverWin.isDestroyed();
   if (open) {
     if (idle < 10 && Date.now() > saverHold) leaveSaver();
-    else if (!saverLeaving && !saverHold && ['idle', 'walk'].includes(state) && !saverVillain) set('sleep', 24 * 3600000);   // 開始時牠剛好在忙，忙完再坐下
+    else if (!saverLeaving && ['idle', 'walk'].includes(state) && !saverVillain && (!saverHold || cfg.species === 'fox')) saverRest();   // 開始時牠剛好在忙，忙完再坐下（狐仙去修煉）
     return;
   }
   if (cfg.saver && idle >= cfg.saver * 60) openSaver(false);
@@ -1420,6 +1441,8 @@ function tick() {
       pos.x += dir * 1.6 * k;
       if (pos.x <= l.xmin && dir < 0) { if (can('climb') && Math.random() < 0.35) startClimb(-1); else dir = 1, pushState(); }
       else if (pos.x >= l.xmax && dir > 0) { if (can('climb') && Math.random() < 0.35) startClimb(1); else dir = -1, pushState(); }
+    } else if (state === 'foxtrain') {
+      if (!saverWin || saverWin.isDestroyed()) set('idle', 800); else foxTrainTick(t);
     } else if (state === 'bunrun' || state === 'villainrun') {
       saverChase(t, l, k);
     } else if (state === 'peekout') {
