@@ -1,4 +1,5 @@
-// 用法：node render.js shots 2,10,20   → 存幾張檢查用的畫面到 out/
+// 用法：node render.js edl cut.json ../../trailer.mp4 → 照剪輯表剪出精簡版（目前的正式版）
+//       node render.js shots 2,10,20   → 存幾張檢查用的畫面到 out/
 //       node render.js video           → 逐格畫出來交給 ffmpeg，輸出 out/video.mp4（無聲）
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -18,7 +19,20 @@ const FPS = 30, out = path.join(__dirname, 'out');
   await p.waitForFunction(() => { const a = document.getElementById('fxf').contentWindow, b = document.getElementById('svf').contentWindow; return a && a.fxPreview && a.DRAGON_READY && b && b.saverManual && b.DRAGON_READY; });
   const grab = (t, q) => p.evaluate(([t, q]) => { render(t); return document.getElementById('c').toDataURL('image/jpeg', q).split(',')[1]; }, [t, q]);
   const [mode, arg] = process.argv.slice(2);
-  if (mode === 'range') {   // node render.js range 開始秒 結束秒 輸出檔.mp4 ：只算其中一段（配樂也剪同一段）
+  if (mode === 'edl') {   // node render.js edl 剪輯表.json 輸出檔.mp4 ：照剪輯表挑原時間軸的片段接起來（配樂同步剪，接點交叉淡化）
+    const [, cutFile, outFile] = process.argv.slice(2), segs = JSON.parse(fs.readFileSync(path.resolve(cutFile), 'utf8')).segments.filter(Array.isArray);
+    const tmp = path.join(out, 'edl.mp4');
+    const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-crf', '21', '-pix_fmt', 'yuv420p', tmp], { stdio: ['pipe', 'inherit', 'inherit'] });
+    for (const [t0, t1] of segs) {
+      for (let u = Math.max(0, t0 - 4); u < t0; u += 0.1) await p.evaluate((u) => render(u), u);
+      for (let i = 0; i < Math.round((t1 - t0) * FPS); i++) { const buf = Buffer.from(await grab(t0 + i / FPS, 0.92), 'base64'); if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r)); }
+      console.log('段落', t0, '→', t1);
+    }
+    ff.stdin.end(); await new Promise((r) => ff.on('close', r));
+    const music = path.join(out, 'music.wav'), cutWav = path.join(out, 'music-cut.wav');
+    await new Promise((r) => spawn('python3', [path.join(__dirname, 'cutmusic.py'), music, cutWav, JSON.stringify(segs)], { stdio: 'inherit' }).on('close', r));
+    await new Promise((r) => spawn('ffmpeg', ['-y', '-loglevel', 'error', '-i', tmp, '-i', cutWav, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', outFile], { stdio: 'inherit' }).on('close', r));
+  } else if (mode === 'range') {   // node render.js range 開始秒 結束秒 輸出檔.mp4 ：只算其中一段（配樂也剪同一段）
     const [, a0, a1, outFile] = process.argv.slice(2), t0 = Number(a0), t1 = Number(a1);
     for (let u = Math.max(0, t0 - 4); u < t0; u += 0.1) await p.evaluate((u) => render(u), u);   // 先往前演幾秒，連續的段落才對
     const tmp = path.join(out, 'range.mp4');
