@@ -2,7 +2,7 @@
 
 ![桌面靈寵封面](build/cover.png)
 
-**預告片**：[trailer.mp4](trailer.mp4)（1 分 48 秒，含故事劇情與配樂；原始檔在 `build/trailer/`，執行 `node render.js video` 與 `python3 music.py` 可重新產生）
+**介紹影片**：[trailer.mp4](trailer.mp4)（2 分 35 秒，含故事劇情、外觀進化、本命技能、快捷輪盤、螢幕保護與配樂；原始檔在 `build/trailer/`，執行 `node render.js video` 與 `python3 music.py` 可重新產生）
 
 一隻穿道袍的小靈獸，停在螢幕桌面最上層陪你工作。透明視窗、角色以外的區域滑鼠可穿透，不會擋到底下的軟體。
 
