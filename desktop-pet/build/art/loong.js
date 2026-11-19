@@ -1,17 +1,21 @@
 // 畫出龍的四種風格對照圖 → build/loong-styles.png（左：整條；右：龍頭特寫；最右：螢幕保護裡游過去的大小）
-// 用法：node build/art/loong.js
+// 用法：node build/art/loong.js [風格,風格,...] [輸出檔名]，例如 node build/art/loong.js poly,flat loong-geo.png
 const { chromium } = require('playwright');
 const path = require('path');
 (async () => {
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 1700, height: 1300 } });
+  const ROWS = (process.argv[2] || 'real,chibi,ink,gold').split(','), OUT = process.argv[3] || 'loong-styles.png', HT = 40 + ROWS.length * 315;
+  const p = await b.newPage({ viewport: { width: 1700, height: HT } });
   p.on('pageerror', (e) => { console.error('PAGE ERROR', e.message); process.exitCode = 1; });
-  await p.setContent('<body style="margin:0"><canvas id="c" width="1700" height="1300"></canvas></body>');
+  await p.setContent(`<body style="margin:0"><canvas id="c" width="1700" height="${HT}"></canvas></body>`);
+  await p.evaluate((r) => { window.LOONG_ROWS = r; }, ROWS);
   await p.addScriptTag({ path: path.join(__dirname, '..', '..', 'draw.js') });
   await p.evaluate(() => {
     const c = document.getElementById('c').getContext('2d'), KAI = '"AR PL UKai TW","DFKai-SB","KaiTi",serif';
-    const g = c.createLinearGradient(0, 0, 0, 1300); g.addColorStop(0, '#12303A'); g.addColorStop(1, '#1E5A5A'); c.fillStyle = g; c.fillRect(0, 0, 1700, 1300);
-    const rows = [['real', '①國風寫實（現在）', '細長、鹿角、火焰鬃毛'], ['chibi', '②Q 版萌龍', '和桌寵同畫風：大頭圓眼、短胖'], ['ink', '③水墨', '墨色、飛白、金色點睛'], ['gold', '④金龍', '宮廷刺繡色、紅鰭、火焰紋']];
+    const HT = c.canvas.height, g = c.createLinearGradient(0, 0, 0, HT); g.addColorStop(0, '#12303A'); g.addColorStop(1, '#1E5A5A'); c.fillStyle = g; c.fillRect(0, 0, 1700, HT);
+    const ALL = { real: ['國風寫實', '細長、鹿角、火焰鬃毛'], chibi: ['Q 版萌龍', '和桌寵同畫風：大頭圓眼、短胖'], ink: ['水墨', '墨色、飛白、金色點睛'], gold: ['金龍', '宮廷刺繡色、紅鰭、火焰紋'],
+      poly: ['低多邊形', '每節都是明暗三角切面，像摺紙'], flat: ['扁平幾何', '直線、正圓、正三角、六角鱗，像建築圖'] };
+    const rows = (window.LOONG_ROWS || ['real', 'chibi', 'ink', 'gold']).map((k, i) => [k, '①②③④⑤⑥'[i] + ALL[k][0], ALL[k][1]]);
     const spine = (x0, y0, len, amp, n, ph) => Array.from({ length: n }, (_, i) => { const q = i / (n - 1); return [x0 - q * len, y0 + Math.sin(q * 6.5 + ph) * amp]; });
     rows.forEach(([st, name, desc], r) => {
       const y = 40 + r * 315;
@@ -32,6 +36,6 @@ const path = require('path');
       c.restore();
     });
   });
-  await p.locator('#c').screenshot({ path: path.join(__dirname, '..', 'loong-styles.png') });
+  await p.locator('#c').screenshot({ path: path.join(__dirname, '..', OUT) });
   await b.close();
 })();
