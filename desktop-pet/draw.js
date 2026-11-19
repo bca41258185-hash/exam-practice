@@ -647,12 +647,79 @@
       ctx.save(); ctx.globalAlpha *= 1 - scat * 0.85; ctx.translate(gx + Math.cos(ang) * dist, gy + Math.sin(ang) * dist); ctx.rotate(rot);
       ctx.beginPath();
       [A, B, C].forEach(([x, y], j) => { const dx = x - gx, dy = y - gy, d = Math.hypot(dx, dy) || 1, f = Math.max(0, 1 - gap / d); j ? ctx.lineTo(dx * f, dy * f) : ctx.moveTo(dx * f, dy * f); });
-      ctx.closePath(); ctx.fillStyle = pal[tr[k + 6]] || pal[2]; ctx.fill(); ctx.restore();
+      ctx.closePath(); ctx.fillStyle = pal[tr[k + 6]] || pal[2]; ctx.fill();
+      if (o.glint) {   // 流光：亮帶從龍頭往龍尾掃過去
+        const sc = (tr[k] + tr[k + 2] + tr[k + 4]) / 3, c = 1.15 - ((t * 0.55) % 1.6), e = Math.abs(sc - c);
+        if (e < 0.05) { ctx.globalAlpha *= o.glint * (1 - e / 0.05) * (0.45 + 0.4 * hh); ctx.fillStyle = '#FFFFFF'; ctx.fill(); }
+      }
+      ctx.restore();
     }
     ctx.restore();
     return true;
   }
   root.drawShardSwim = drawShardSwim;
+
+  // ── 游龍的幾何特效（不記狀態，給第幾秒就畫得出來，影片可以任意跳格） ──
+  // drawSwimFx(ctx, 路線, 龍頭位置, 身長, { t, v(龍頭每秒走幾像素), mirror, n(脫落碎片數), pearl, palette, layer: 'back' | 'front' })
+  // back：身後脫落、旋轉飄散的三角碎片與線框；front：龍頭前方的多面龍珠
+  function drawSwimFx(ctx, route, qh, BL, o) {
+    o = o || {};
+    const pal = SHARD_PALETTES[o.palette || root.SHARD_PALETTE] || SHARD_PALETTES.qingci, t = o.t || 0, v = o.v || 0, up = o.mirror ? -1 : 1, z = BL / 1800;
+    const hash = (i, j) => { const x = Math.sin(i * 91.7 + j * 47.3 + 13.1) * 43758.5453; return x - Math.floor(x); };
+    const normal = (q) => { const p = route.at(q), p2 = route.at(q + 3), dx = p2[0] - p[0], dy = p2[1] - p[1], l = Math.hypot(dx, dy) || 1; return [p, -dy / l * up, dx / l * up, dx / l, dy / l]; };
+    ctx.save();
+    if (o.layer !== 'front') {
+      const n = o.n == null ? 46 : o.n;
+      for (let i = 0; i < n; i++) {
+        const life = 1.1 + hash(i, 1) * 1.1, a = ((t / life + hash(i, 2)) % 1 + 1) % 1, g = 0.06 + hash(i, 3) * 0.9;
+        const q = qh - v * a * life - g * BL; if (qh - v * a * life < 0.05 * BL) continue;   // 那時候龍還沒出來
+        const [p, nx, ny, tx, ty] = normal(q), side = hash(i, 4) < 0.5 ? -1 : 1, off = (0.012 + a * (0.05 + hash(i, 5) * 0.09)) * BL * side;
+        const x = p[0] + nx * off - tx * a * 40 * z, y = p[1] + ny * off - ty * a * 40 * z + a * a * 30 * z;
+        const r = (10 + hash(i, 6) * 26) * z * (1 - a * 0.6), rot = hash(i, 7) * 6.28 + a * (hash(i, 8) - 0.5) * 9;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = (o.alpha == null ? 1 : o.alpha) * Math.pow(1 - a, 1.3) * Math.min(1, a * 8);
+        ctx.beginPath(); for (let j = 0; j < 3; j++) { const an = j * 2.094 + (hash(i, 9 + j) - 0.5) * 1.1, rr = r * (0.7 + hash(i, 12 + j) * 0.5); j ? ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : ctx.moveTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+        ctx.closePath();
+        if (i % 3 === 0) { ctx.strokeStyle = i % 2 ? pal[6] : pal[4]; ctx.lineWidth = Math.max(1, 2.2 * z); ctx.stroke(); }   // 三分之一是線框
+        else { ctx.fillStyle = pal[[2, 3, 4, 6, 1][i % 5]]; ctx.fill(); }
+        ctx.restore();
+      }
+    }
+    if (o.layer !== 'back' && o.pearl !== false) {   // 龍珠：多面寶珠，外面一圈旋轉的六芒星線框
+      const [p, nx, ny] = normal(qh), lead = 0.07 * BL, R = 0.026 * BL, bob = Math.sin(t * 3.1) * 0.012 * BL;
+      const [hx, hy] = route.at(qh + lead), cx = hx + nx * bob, cy = hy + ny * bob - 0.01 * BL;
+      ctx.save(); ctx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+      const gr = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 3.2); gr.addColorStop(0, 'rgba(255,236,170,0.55)'); gr.addColorStop(1, 'rgba(255,236,170,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, R * 3.2, 0, 6.283); ctx.fill();
+      ctx.translate(cx, cy);
+      ctx.save(); ctx.rotate(t * 0.9); ctx.strokeStyle = pal[6]; ctx.lineWidth = Math.max(1, 2 * z);
+      for (let w = 0; w < 2; w++) { ctx.beginPath(); for (let j = 0; j < 3; j++) { const an = j * 2.094 + w * 1.047; j ? ctx.lineTo(Math.cos(an) * R * 1.9, Math.sin(an) * R * 1.9) : ctx.moveTo(Math.cos(an) * R * 1.9, Math.sin(an) * R * 1.9); } ctx.closePath(); ctx.stroke(); }
+      ctx.restore();
+      ctx.rotate(-t * 1.4);
+      const cols = ['#FFF6DC', pal[6], '#F6D88A', pal[5], '#E9B85A', '#FFFFFF'];
+      for (let j = 0; j < 6; j++) { const a0 = j * 1.047, a1 = a0 + 1.047; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a0) * R, Math.sin(a0) * R); ctx.lineTo(Math.cos(a1) * R, Math.sin(a1) * R); ctx.closePath(); ctx.fillStyle = cols[j]; ctx.fill(); }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  root.drawSwimFx = drawSwimFx;
+  // 幾何陣：一圈圈旋轉放大的六角形＋六芒星線框（出場、碎裂時用）
+  root.drawHexBurst = function (ctx, x, y, R, f, o) {
+    o = o || {}; if (f <= 0 || f >= 1) return;
+    const pal = SHARD_PALETTES[o.palette || root.SHARD_PALETTE] || SHARD_PALETTES.qingci;
+    ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'miter';
+    for (let w = 0; w < 3; w++) {
+      const g = f * 1.25 - w * 0.12; if (g <= 0 || g >= 1) continue;
+      const r = R * (0.25 + 0.75 * (1 - Math.pow(1 - g, 2.4))), al = (o.alpha == null ? 1 : o.alpha) * Math.pow(1 - g, 1.4);
+      ctx.save(); ctx.rotate((w % 2 ? -1 : 1) * (g * 1.4 + w * 0.5)); ctx.globalAlpha = al; ctx.strokeStyle = w === 1 ? pal[4] : pal[6]; ctx.lineWidth = Math.max(1.5, R * 0.012 * (1 - g * 0.5));
+      ctx.beginPath(); for (let j = 0; j <= 6; j++) { const an = j * 1.047; j ? ctx.lineTo(Math.cos(an) * r, Math.sin(an) * r) : ctx.moveTo(Math.cos(an) * r, Math.sin(an) * r); } ctx.stroke();
+      if (w !== 1) for (let h = 0; h < 2; h++) { ctx.beginPath(); for (let j = 0; j < 3; j++) { const an = j * 2.094 + h * 1.047 + 0.5236; j ? ctx.lineTo(Math.cos(an) * r * 0.86, Math.sin(an) * r * 0.86) : ctx.moveTo(Math.cos(an) * r * 0.86, Math.sin(an) * r * 0.86); } ctx.closePath(); ctx.stroke(); }
+      // 六個角上各彈出一片小三角
+      ctx.fillStyle = w === 1 ? pal[3] : pal[6];
+      for (let j = 0; j < 6; j++) { const an = j * 1.047, rr = r * (1.08 + g * 0.25); ctx.save(); ctx.translate(Math.cos(an) * rr, Math.sin(an) * rr); ctx.rotate(an + g * 3); ctx.beginPath(); ctx.moveTo(R * 0.03, 0); ctx.lineTo(-R * 0.02, R * 0.02); ctx.lineTo(-R * 0.02, -R * 0.02); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      ctx.restore();
+    }
+    ctx.restore();
+  };
 
   // ── 色塊碎片龍：造型來自 loong-shards.js（由 AI 低多邊形青龍轉成大片三角），每片一個平塗色，片間留縫 ──
   // drawShardDragon(ctx, 中心x, 中心y, 高, { flip, scatter(0 拼好～1 散開), t, palette })

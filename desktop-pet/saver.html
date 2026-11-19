@@ -240,7 +240,7 @@
       step(T, dt) {
         for (const c of this.clouds) { c.x += c.v * K * dt; if (c.x > W + 140 * c.s) c.x = -140 * c.s; }
         for (const o of things) if (drift(o, T, dt, 700, 0)) reenter(o, T);
-        if (T > this.swim + 11) this.swim = T + rnd(8, 16);
+        if (T > this.swim + 14) this.swim = T + rnd(8, 16);
       },
       draw(T) {
         // 雲下面的雨（平常疏疏的，打雷後一陣大雨）
@@ -255,16 +255,19 @@
         }
         for (const o of things) if (T >= o.at) orb(o);
         // 青龍偶爾從雲裡浮現：慢慢往上飄、淡入淡出（插畫還沒載好就用程式畫的小龍游過去）
-        const p = (T - this.swim) / 9;
+        const p = (T - this.swim) / 12;
         const img = window.DRAGON_IMG;
         if (p >= 0 && p <= 1 && img && img.complete && img.naturalWidth) {
           if (this.swimX == null || this.swimAt !== this.swim) { this.swimAt = this.swim; this.swimX = W * (Math.random() < 0.5 ? 0.22 : 0.78); }
           const h = H * 0.62, w = h * img.naturalWidth / img.naturalHeight, y = H * 0.5 + (0.5 - p) * 90 * K;
           ctx.save(); ctx.globalAlpha *= Math.sin(p * Math.PI) * 0.85; ctx.drawImage(img, this.swimX - w / 2, y - h / 2, w, h); ctx.restore();
         } else if (p >= 0 && p <= 1 && window.LOONG_SWIM && !window.DRAGON_ART) {
-          const BL = Math.min(W * 0.6, 1180 * K);   // 龍的全長
-          if (!this.route || this.routeW !== W) { this.routeW = W; const pts = []; for (let i = 0; i <= 60; i++) { const x = -0.1 * W + i / 60 * (1.2 * W + BL); pts.push([x, H * 0.5 + Math.sin(i / 60 * 7) * H * 0.07]); } this.route = window.makeRoute(pts); }
-          window.drawShardSwim(ctx, this.route, p * (this.route.total + BL * 0.3), BL, { t: T, amp: 0.04 });
+          const BL = Math.min(W * 0.95, 1800 * K);   // 龍的全長（比半個螢幕還長，慢慢橫越）
+          if (!this.route || this.routeW !== W) { this.routeW = W; const pts = []; for (let i = 0; i <= 80; i++) { const x = -0.1 * W + i / 80 * (1.2 * W + BL); pts.push([x, H * 0.5 + Math.sin(i / 80 * 6) * H * 0.12]); } this.route = window.makeRoute(pts); }
+          const qh = p * (this.route.total + BL * 0.3), v = (this.route.total + BL * 0.3) / 12;
+          window.drawSwimFx(ctx, this.route, qh, BL, { t: T, v, layer: 'back', n: 26, alpha: 0.8 });
+          window.drawShardSwim(ctx, this.route, qh, BL, { t: T * 0.8, amp: 0.03, glint: 0.7 });
+          window.drawSwimFx(ctx, this.route, qh, BL, { t: T, layer: 'front' });
         } else if (p >= 0 && p <= 1.35 && !(img && img.naturalWidth) && !window.LOONG_SWIM) {   // 只有碎片龍資料沒載到才用程式畫的舊龍
           const pts = [];
           for (let i = 0; i < 48; i++) { const q = p - i * 0.0062; pts.push([-120 * K + q * (W + 240 * K), H * 0.42 + Math.sin(q * 11) * 80 * K]); }
