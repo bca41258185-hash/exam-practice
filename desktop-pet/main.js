@@ -182,6 +182,7 @@ function checkStretch() {
   checkHealth(idle);
   checkThunder(idle);
   checkDemon(idle);
+  checkVillain(idle);
   checkCurfew(idle);
   checkOmen(idle);
   checkSaver(idle);
@@ -809,18 +810,79 @@ function leaveSaver() {   // 你回來了：告訴它慢慢散掉（它自己數
 // 螢幕保護回報：熊貓看到包子就跑去吃；黑風怪出現就跑去打
 let saverBun = null, saverVillain = null, villainSaid = 0;
 function saverOrigin() { const b = saverWin && !saverWin.isDestroyed() ? saverWin.getBounds() : { x: 0, y: 0 }; return b; }
-function saverCmd(c) { if (saverWin && !saverWin.isDestroyed()) saverWin.webContents.send('saver-cmd', c); }
-ipcMain.on('saver-report', (_e, r) => {
+let villWin = null;   // 平時黑風怪出現用的透明視窗（跟螢幕保護同一頁，只有反派）
+function overlays() { return [saverWin, villWin].filter((w) => w && !w.isDestroyed()); }
+function saverCmd(c) { for (const w of overlays()) w.webContents.send('saver-cmd', c); }
+// 黑風怪的來歷：每打退一次，靈寵多說一段（和故事裡的心魔、師父的燈連在一起）
+const VILLAIN_LORE = [
+  ['這是心魔的爪牙', '黑風怪！'],
+  ['牠身上有燈油味…', '是師父那盞燈的油'],
+  ['心魔在找那盞燈', '派牠來探路'],
+  ['牠偷的東西', '都拿去餵心魔了'],
+  ['每次你累了不休息', '心魔就壯大一點'],
+  ['所以黑風怪越來越多', '道友要記得歇息'],
+  ['牠的黑風散開時', '我看見一隻小山妖'],
+  ['原來牠是被附身的', '山下的小妖怪'],
+  ['再打散牠幾次', '牠就能自由了'],
+  ['黑風怪說謝謝你', '牠變回小山妖回家了'],
+];
+const BOSS_ORDER = ['lamp', 'jiao', 'heart'];
+const BOSS_LORE = {
+  lamp: ['燈影魔將倒下了！', '牠手上那盞燈……', '是師父的燈！', '燈裡有師父的聲音', '「好好休息，別讓心魔長大」'],
+  jiao: ['九幽蛟魔沉回深淵', '小青龍說牠是龍宮', '被心魔帶走的守衛', '心魔就躲在九幽之下'],
+  heart: ['心魔本尊散了！', '原來心魔就是', '大家累積的疲憊', '道友好好休息', '牠就再也長不大了', '師父從燈裡走出來了！'],
+};
+function nextBoss() {   // 照故事順序；心魔本尊要渡劫才會出現
+  const beaten = (cfg.stats && cfg.stats.bossBeat) || {};
+  for (const id of BOSS_ORDER) { if (id === 'heart' && realm() < 8) continue; if (!beaten[id]) return id; }
+  const pool = BOSS_ORDER.filter((id) => id !== 'heart' || realm() >= 8);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function villainLore() { const i = Math.min(VILLAIN_LORE.length - 1, (cfg.stats && cfg.stats.villains) || 0); return VILLAIN_LORE[i]; }
+function openVillain(bossId) {   // 平時叫出黑風怪（或 BOSS）；螢幕保護開著就在螢幕保護裡出現
+  if (bossId === undefined) {   // 大約每四次遇到一次 BOSS
+    cfg.stats = cfg.stats || {}; cfg.stats.meets = (cfg.stats.meets || 0) + 1;
+    bossId = cfg.stats.meets % 4 === 0 ? nextBoss() : '';
+  }
+  if (saverWin && !saverWin.isDestroyed()) { saverWin.webContents.executeJavaScript(`window.saverVillain && window.saverVillain(${JSON.stringify(bossId || '')})`); return; }
+  if (villWin && !villWin.isDestroyed()) return;
+  const w = W(), a = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).workArea;
+  const mine = villWin = new BrowserWindow({
+    x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
+    hasShadow: false, focusable: false, alwaysOnTop: true, backgroundColor: '#00000000', show: false,
+    webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  mine.setAlwaysOnTop(true, 'floating');
+  mine.setIgnoreMouseEvents(true, { forward: true });
+  mine.loadFile(path.join(__dirname, 'saver.html'), { query: bossId ? { mode: 'villain', boss: bossId } : { mode: 'villain' } });
+  if (bossId) setTimeout(() => { if (!BUSY.includes(state)) { stopPoem(); say(Q.pick(['好重的魔氣…', 'BOSS 來了！', '是心魔的大將！']), true); } }, 1200);
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
+  mine.on('closed', () => { if (villWin === mine) { villWin = null; saverVillain = null; } });
+  setTimeout(() => { if (villWin === mine && !mine.isDestroyed()) mine.close(); }, 120000);   // 保險：兩分鐘一定收掉
+}
+let nextVillainAt = Date.now() + rnd(20, 50) * 60000;
+function checkVillain(idle) {   // 平時：大約每 40～90 分鐘（你真的在用電腦、牠也沒在忙時）來一次
+  if (idle >= 60 || Date.now() < nextVillainAt || (saverWin && !saverWin.isDestroyed()) || !healthFree()) return;
+  nextVillainAt = Date.now() + rnd(40, 90) * 60000;
+  openVillain();
+}
+ipcMain.on('saver-report', (e, r) => {
   if (!r || typeof r !== 'object') return;
-  const o = saverOrigin();
+  const sw = BrowserWindow.fromWebContents(e.sender), o = sw && !sw.isDestroyed() ? sw.getBounds() : saverOrigin();
   if (r.kind === 'bun' && cfg.species === 'panda') {
     saverBun = { id: String(r.id), x: o.x + Number(r.x), y: o.y + Number(r.y), at: Date.now() };
     if (!saverVillain && ['sleep', 'idle'].includes(state) && !BUSY.includes(state)) { set('bunrun', 9000); say(Q.pick(['包子！', '聞到包子香了！', '我的包子～']), true); }
+  } else if (r.kind === 'pethit') {   // 被 BOSS 的黑氣彈打中：踉蹌一下，繼續打
+    if (!BUSY.includes(state)) { set('startle', 700); say(Q.pick(['好痛！', '可惡！', '這點傷不算什麼！']), true); }
   } else if (r.kind === 'villain') {
     if (r.state === 'gone') {
       saverVillain = null;
       if (['villainrun', 'strike'].includes(state) || state === 'sleep') {
-        if (r.beaten) { gain(10); stat('villains'); set('fireworks', 2400); say('邪不勝正！修為 +10', true); }
+        if (r.beaten && r.boss) {   // 打倒 BOSS：大獎勵＋一段關鍵劇情
+          const id = BOSS_LORE[r.boss] ? r.boss : 'lamp';
+          cfg.stats = cfg.stats || {}; cfg.stats.bossBeat = Object.assign({}, cfg.stats.bossBeat, { [id]: ((cfg.stats.bossBeat || {})[id] || 0) + 1 });
+          gain(30); stat('bosses'); saveCfg(); set('fireworks', 3600); sayLines(['大獲全勝！修為 +30', ...BOSS_LORE[id]], 2800);
+        } else if (r.beaten) { const lore = villainLore(); gain(10); stat('villains'); set('fireworks', 2400); sayLines(['邪不勝正！修為 +10', ...lore], 2600); }
         else { set('dizzy', 1600); say(Q.pick(['讓牠跑了…可惡！', '下次別讓我遇到！']), true); }
       }
       return;
@@ -833,7 +895,7 @@ ipcMain.on('saver-report', (_e, r) => {
 });
 function saverChase(t, l, k) {   // 在地面上跑向包子或反派（每格呼叫）
   const goal = state === 'bunrun' ? saverBun : saverVillain;
-  if (!goal || !saverWin || saverWin.isDestroyed()) { set('idle', 800); return; }
+  if (!goal || !overlays().length) { set('idle', 800); return; }
   const tx = goal.x - 100 * k, dx = tx - pos.x, d = dx < 0 ? -1 : 1;
   if (d !== dir) { dir = d; pushState(); }
   const reach = state === 'bunrun' ? 18 * k : 120 * k;
@@ -1386,7 +1448,7 @@ function tick() {
         refreshUi();
       }
       else if (state === 'peek') { set('walk', 2500); }
-      else if (state === 'strike' && saverVillain) { set('villainrun', 30000); }
+      else if ((state === 'strike' || state === 'startle') && saverVillain) { set('villainrun', 30000); }
       else if (state === 'bunrun' || state === 'villainrun') { set('idle', 800); }
       else if ((state === 'spell' || state === 'sword') && !spar) { set('idle', 800); }
       else if (state === 'hexagram') { hexShow = null; set('idle', 1500); }
@@ -1396,7 +1458,7 @@ function tick() {
     }
   }
   compTick(l, k);
-  if (saverWin && !saverWin.isDestroyed() && tickN % 3 === 0) { const o = saverOrigin(); saverCmd({ kind: 'pet', x: pos.x + 100 * k - o.x, y: pos.y + 150 * k - o.y, dir }); }
+  if (tickN % 3 === 0) for (const w of overlays()) { const o = w.getBounds(); w.webContents.send('saver-cmd', { kind: 'pet', x: pos.x + 100 * k - o.x, y: pos.y + 150 * k - o.y, dir }); }
   tickAt = Date.now();
   if (Date.now() - lastFrameMsg > 200) { place(); compPlace(); }   // 畫面端沒在要（例如被系統暫停）時，照舊每次移動
 
@@ -1553,6 +1615,8 @@ function menu() {
     { label: '比劍', click: () => openGame('duel.html', 600, 360) },
     { label: '願望簿', click: openWish },
     { label: '聽牠講故事', click: () => tellStory(true) },
+    { label: '引出黑風怪（練手）', click: () => openVillain('') },
+    { label: '挑戰 BOSS', click: () => openVillain(nextBoss()) },
     { label: '吟詩一首', click: () => recite(true) },
     { label: '勉勵我一句', click: () => encourage(true) },
     { type: 'separator' },
@@ -1649,6 +1713,8 @@ function create() {
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
     if (demo === 'saver') setTimeout(() => openSaver(true), 2000);
+    else if (demo === 'villainnow') setTimeout(() => openVillain(''), 2500);
+    else if (demo && demo.startsWith('boss')) setTimeout(() => openVillain(demo.split(':')[1] || 'lamp'), 2500);
     else if (demo === 'villain') setTimeout(() => { openSaver(true); setTimeout(() => saverWin && saverWin.webContents.executeJavaScript('window.saverVillain && window.saverVillain()'), 3000); }, 2000);
     else if (demo === 'story') setTimeout(() => tellStory(true), 2500);
     else if (demo === 'pair') setTimeout(() => { openCompanion(); setTimeout(pairTalk, 2500); }, 1500);
@@ -1708,14 +1774,14 @@ ipcMain.on('hold', (e) => { if (!fromComp(e)) openWheel(); });
 ipcMain.on('ult', (e) => { if (!fromComp(e)) startSkill('ult'); });
 ipcMain.on('wheel-pick', (_e, id) => wheelPick(String(id)));
 ipcMain.handle('saver-info', () => saverInfo());
-ipcMain.on('saver-exit', closeSaver);
+ipcMain.on('saver-exit', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && w === villWin) w.close(); else closeSaver(); });
 ipcMain.on('saver-play', () => {   // 你在玩螢幕保護裡的東西：多留 20 秒；如果已經在散，就叫它回來
   if (!saverWin || saverWin.isDestroyed()) return;
   saverHold = Date.now() + 20000;
   if (saverLeaving) { saverLeaving = false; saverWin.webContents.send('saver-stay'); }
 });
 ipcMain.on('saver-off', () => { cfg.saver = 0; saveCfg(); closeSaver(); say('好，螢幕保護不自動開了（右鍵可再打開）', true); });
-ipcMain.on('saver-clickable', (_e, on) => { if (saverWin && !saverWin.isDestroyed()) saverWin.setIgnoreMouseEvents(!on, { forward: true }); });
+ipcMain.on('saver-clickable', (e, on) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && !w.isDestroyed()) w.setIgnoreMouseEvents(!on, { forward: true }); });
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
