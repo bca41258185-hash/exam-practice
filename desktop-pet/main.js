@@ -366,7 +366,7 @@ function startPeek() {
   set('peekout', 15000);
 }
 const KUNGFU = ['leap', 'hover', 'land', 'swordland', 'climb', 'hang', 'vanish', 'appear'];   // 輕功動作（都在空中，自己處理位置）
-const BUSY = ['drag', 'fall', 'tribulation', 'roll', ...KUNGFU];
+const BUSY = ['drag', 'fall', 'tribulation', 'roll', 'foxride', ...KUNGFU];
 
 // ---- 角色的故事：照境界一段一段說；同門在旁邊時，兩隻會聊彼此的關係
 let lastStory = 0;
@@ -515,7 +515,7 @@ function endSpar() {
 function onSwipe() {   // 畫面端：游標在身上來回揮了一下
   const t = now();
   if (spar) { if (spar.kind === 'sword' && t < spar.until) sparAct(); return; }
-  if (BUSY.includes(state) || demon) return;
+  if (BUSY.includes(state) || demon || saverVillain) return;   // 反派／BOSS 在場：揮劍是去打牠，不是跟靈寵對練
   swipes = swipes.filter((x) => t - x < 1500); swipes.push(t);
   if (swipes.length >= 3) { swipes = []; startSpar('sword'); }
 }
@@ -891,7 +891,7 @@ ipcMain.on('saver-report', (e, r) => {
     }
     saverVillain = { x: o.x + Number(r.x), y: o.y + Number(r.y), hp: r.hp, state: r.state };
     if (!['villainrun', 'strike'].includes(state) && !BUSY.includes(state) && Date.now() - villainSaid > 4000) {
-      villainSaid = Date.now(); stopPoem(); set('villainrun', 30000); say(Q.pick(['何方妖孽！', '黑風怪！哪裡跑！', '休想偷東西！']), true);
+      villainSaid = Date.now(); stopPoem(); spar = null; set('villainrun', 30000); say(Q.pick(['何方妖孽！', '黑風怪！哪裡跑！', '休想偷東西！']), true);
     }
   }
 });
@@ -912,9 +912,9 @@ function saverChase(t, l, k) {   // 在地面上跑向包子或反派（每格�
 }
 
 // 狐仙在螢幕保護時不只是睡：一招一招修煉狐火，螢幕上的狐火跟著動
-const FOX_MOVES = ['gather', 'cast', 'spin', 'juggle', 'meditate'];
-const FOX_SAY = { gather: ['狐火，聚！', '聚靈成火～'], cast: ['去！', '狐火，散！'], spin: ['九尾，開！', '轉～轉～'], juggle: ['看我拋火～', '一、二、三！'], meditate: ['吐納……', '練到第幾重了呢'] };
-let foxMove = '', foxMoveAt = 0;
+const FOX_MOVES = ['gather', 'cast', 'spin', 'juggle', 'meditate', 'ride', 'ride'];
+const FOX_SAY = { ride: ['御劍穿火！', '踏劍遊火海～'], gather: ['狐火，聚！', '聚靈成火～'], cast: ['去！', '狐火，散！'], spin: ['九尾，開！', '轉～轉～'], juggle: ['看我拋火～', '一、二、三！'], meditate: ['吐納……', '練到第幾重了呢'] };
+let foxMove = '', foxMoveAt = 0, foxRide = null;
 function saverRest() {
   if (cfg.species !== 'fox') return set('sleep', 24 * 3600000);
   foxMove = ''; foxMoveAt = 0; set('foxtrain', 24 * 3600000);
@@ -923,6 +923,14 @@ function foxTrainTick(t) {   // 每三四秒換一招
   if (t < foxMoveAt) return;
   const choices = FOX_MOVES.filter((m) => m !== foxMove);
   foxMove = choices[Math.floor(Math.random() * choices.length)];
+  if (foxMove === 'ride') {   // 御劍穿火：踩著飛劍在狐火之間繞一大圈，再降落
+    const a = area(), k = cfg.scale, w = W(), pts = [];
+    for (let i = 0; i < 5; i++) pts.push({ x: a.x + a.width * rnd(0.08, 0.92) - w / 2, y: a.y + a.height * rnd(0.12, 0.6) - w * 0.6 });
+    foxRide = { pts, i: 0, home: pos.x };
+    foxMoveAt = t + 12000;
+    set('foxride', 9000); say(Q.pick(FOX_SAY.ride), true);
+    return;
+  }
   foxMoveAt = t + (foxMove === 'meditate' ? 5000 : rnd(3200, 4200));
   pushState(); stStartPush();
   saverCmd({ kind: 'foxfx', move: foxMove });
@@ -1342,6 +1350,16 @@ function tick() {
       if (vel.y > 9 * k) { vel.y = -vel.y * 0.45; vel.x *= 0.7; bounces++; }
       else landReaction(k);
     }
+  } else if (state === 'foxride' && foxRide) {   // 御劍在狐火裡遊走：一個點一個點飛過去，龍頭有轉向感
+    const p = foxRide.pts[foxRide.i];
+    if (!p || t > until) { set('swordland'); foxRide = null; }
+    else {
+      const dx = p.x - pos.x, dy = p.y - pos.y, dist = Math.hypot(dx, dy), step = Math.min(dist, Math.max(4 * k, dist * 0.09), 20 * k);
+      if (dist > 1) { pos.x += dx / dist * step; pos.y += dy / dist * step; }
+      const d = dx < 0 ? -1 : 1; if (d !== dir && Math.abs(dx) > 20 * k) { dir = d; pushState(); }
+      if (dist < 30 * k) foxRide.i += 1;
+      pos.x = Math.max(l.xmin, Math.min(l.xmax, pos.x)); pos.y = Math.max(l.ymin, Math.min(l.ground, pos.y));
+    }
   } else if (spar && (state === 'spell' || state === 'sword')) {
     // 鬥法時不會站著挨打：每隔兩三秒換個位置，用輕功跑、御劍飛、或縮地成寸瞬移，範圍大半個螢幕
     if (t > spar.nextMove) {
@@ -1513,7 +1531,7 @@ function onClick(zone) {
   if (state === 'climb' || state === 'hang') { say('別吵，練功中！'); return; }
   if (state === 'roll' || KUNGFU.includes(state)) { touchGain(); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
-  if (clicks.length >= 5 && !BUSY.includes(state)) { clicks = []; return startSpar('spell'); }   // 連點五下：比法術
+  if (clicks.length >= 5 && !BUSY.includes(state) && !saverVillain) { clicks = []; return startSpar('spell'); }   // 連點五下：比法術（反派在場時不比）
   if (onTouch(zone)) return;
   touchGain();
   set('happy', 1500);
@@ -1609,62 +1627,107 @@ function menu() {
   const login = app.getLoginItemSettings().openAtLogin;
   return Menu.buildFromTemplate([
     { label: '境界：' + realmText(), enabled: false },
-    { label: '修煉紀錄…', click: openRecords },
-    can('companion')
-      ? { label: comp ? '請同門回去' : '召喚同門', click: () => (comp ? closeCompanion() : openCompanion()) }
-      : { label: lockLabel('召喚同門', 'companion'), enabled: false },
-    {
-      label: '同門的角色', visible: can('companion'), submenu: SPECIES.filter(([v]) => v !== cfg.species).map(([v, name]) => ({
-        label: name, type: 'radio', checked: compSpecies() === v, click: () => { cfg.compSpecies = v; saveCfg(); compPush(); },
-      })),
-    },
-    { type: 'separator' },
     { label: `餵靈丹（修為 +30，今天還有 ${Math.max(0, pillMax() - daily().pills)} 顆）`, click: feed },
+    { type: 'separator' },
     {
-      label: '本命技能', submenu: [
+      label: '修煉', submenu: [
+        { label: '打坐修煉', click: () => set('sleep', 120000) },
+        { label: lockLabel('御劍飛行', 'roll'), enabled: can('roll'), click: () => onRoll(dir) },
+        { label: lockLabel('來追我', 'chase'), enabled: can('chase'), click: () => { lastTouch = now(); startChase(); } },
+        { type: 'separator' },
         { label: `絕技：${skills().sig[1]}${can2('sig') ? '' : `（${REALMS[SKILL_REALM.sig]}解鎖）`}`, enabled: can2('sig'), click: () => startSkill('sig') },
         { label: `奧義：${skills().ult[1]}${can2('ult') ? '' : `（${REALMS[SKILL_REALM.ult]}解鎖）`}`, enabled: can2('ult'), click: () => startSkill('ult') },
+        { label: `天賦：${skills().trait[0]}——${skills().trait[1]}`, enabled: false },
         { type: 'separator' },
-        { label: `天賦：${skills().trait[0]}`, enabled: false },
-        { label: skills().trait[1], enabled: false },
+        { label: '修煉紀錄…', click: openRecords },
       ],
     },
-    { label: '打坐修煉', click: () => set('sleep', 120000) },
-    { label: lockLabel('御劍飛行', 'roll'), enabled: can('roll'), click: () => onRoll(dir) },
-    { label: lockLabel('來追我', 'chase'), enabled: can('chase'), click: () => { lastTouch = now(); startChase(); } },
-    { label: '躲貓貓', click: () => { lastTouch = now(); startPeek(); } },
-    { label: cfg.divine && cfg.divine.date === today() ? '今日卦象（再看一次）' : '求一卦（每日一次）', click: divine },
-    { label: '三仙歸洞（猜杯）', click: () => openGame('cups.html', 460, 300) },
-    { label: '比劍', click: () => openGame('duel.html', 600, 360) },
-    { label: '願望簿', click: openWish },
-    { label: '聽牠講故事', click: () => tellStory(true) },
-    { label: '引出黑風怪（練手）', click: () => openVillain('') },
-    { label: '挑戰 BOSS', click: () => openVillain(nextBoss()) },
-    { label: '吟詩一首', click: () => recite(true) },
-    { label: '勉勵我一句', click: () => encourage(true) },
+    {
+      label: '玩耍', submenu: [
+        { label: '躲貓貓', click: () => { lastTouch = now(); startPeek(); } },
+        { label: '三仙歸洞（猜杯）', click: () => openGame('cups.html', 460, 300) },
+        { label: '比劍', click: () => openGame('duel.html', 600, 360) },
+        { type: 'separator' },
+        { label: '引出黑風怪（練手）', click: () => openVillain('') },
+        { label: '挑戰 BOSS', click: () => openVillain(nextBoss()) },
+        { type: 'separator' },
+        { label: cfg.divine && cfg.divine.date === today() ? '今日卦象（再看一次）' : '求一卦（每日一次）', click: divine },
+        { label: '願望簿', click: openWish },
+      ],
+    },
+    {
+      label: '聽牠說', submenu: [
+        { label: '聽牠講故事', click: () => tellStory(true) },
+        { label: '吟詩一首', click: () => recite(true) },
+        { label: '勉勵我一句', click: () => encourage(true) },
+      ],
+    },
+    {
+      label: '陪我做事', submenu: [
+        { label: scrollWin ? '收起今日三件事' : '今日三件事', click: () => openScroll(true) },
+        { label: '寫傳音符…（定時提醒）', click: openNotes },
+        {
+          label: '健康提醒', submenu: [
+            { label: '喝水（每用一小時）', type: 'checkbox', checked: cfg.water, click: (m) => { cfg.water = m.checked; saveCfg(); waterAcc = 0; } },
+            { label: '護眼（每用 20 分鐘）', type: 'checkbox', checked: cfg.eyes, click: (m) => { cfg.eyes = m.checked; saveCfg(); eyeAcc = 0; } },
+            { label: '現在喝口水', click: startDrink },
+            { label: '現在看看遠方', click: startGaze },
+            { type: 'separator' },
+            { label: '起身活動：', enabled: false },
+            ...STRETCH.map((m) => ({
+              label: m ? `每坐 ${m} 分鐘提醒` : '關閉', type: 'radio', checked: cfg.stretch === m,
+              click: () => { cfg.stretch = m; saveCfg(); sitSince = Date.now(); say(m ? `好，每 ${m} 分鐘叫你起來` : '不提醒了，記得自己動動', true); },
+            })),
+            { type: 'separator' },
+            { label: `已經坐了 ${sittingMinutes()} 分鐘`, enabled: false },
+            { label: '現在就打一套太極', click: () => startTaichi(0) },
+          ],
+        },
+        {
+          label: '宵禁燈籠（勸你收工）', submenu: [0, 21, 22, 23, 24].map((h) => ({
+            label: h ? `${h === 24 ? '凌晨 0' : h} 點以後` : '關閉', type: 'radio', checked: cfg.curfew === (h === 24 ? 0.5 : h) || (!h && !cfg.curfew),
+            click: () => { cfg.curfew = h === 24 ? 0.5 : h; saveCfg(); pushState(); },
+          })),
+        },
+      ],
+    },
+    {
+      label: '同門', submenu: [
+        can('companion')
+          ? { label: comp ? '請同門回去' : '召喚同門', click: () => (comp ? closeCompanion() : openCompanion()) }
+          : { label: lockLabel('召喚同門', 'companion'), enabled: false },
+        {
+          label: '同門的角色', visible: can('companion'), submenu: SPECIES.filter(([v]) => v !== cfg.species).map(([v, name]) => ({
+            label: name, type: 'radio', checked: compSpecies() === v, click: () => { cfg.compSpecies = v; saveCfg(); compPush(); },
+          })),
+        },
+      ],
+    },
     { type: 'separator' },
     {
-      label: '大小', submenu: [[0.75, '小'], [1, '中'], [1.5, '大']].map(([s, label]) => ({
-        label, type: 'radio', checked: cfg.scale === s, click: () => setScale(s),
-      })),
+      label: '外觀', submenu: [
+        {
+          label: '角色', submenu: SPECIES.map(([v, name]) => ({
+            label: name, type: 'radio', checked: cfg.species === v,
+            click: () => { cfg.species = v; saveCfg(); pushState(); compPush(); set('happy', 1400); sayLines([`化身${name}！`, ...((LORE.CHARS[v] || {}).intro || [])], 2600); },
+          })),
+        },
+        {
+          label: '裝扮', submenu: [['hat', '頭飾', HATS], ['robe', '道袍顏色', ROBES], ['gear', '配件', GEARS]].map(([key, label, list]) => ({
+            label, submenu: list.map(([v, name]) => ({
+              label: name, type: 'radio', checked: cfg[key] === v,
+              click: () => { cfg[key] = v; saveCfg(); pushState(); set('happy', 1200); say(key === 'robe' ? `換上${name}色道袍！` : v === 'none' ? '輕裝上路' : `換上${name}！`); },
+            })),
+          })),
+        },
+        {
+          label: '大小', submenu: [[0.75, '小'], [1, '中'], [1.5, '大']].map(([s, label]) => ({
+            label, type: 'radio', checked: cfg.scale === s, click: () => setScale(s),
+          })),
+        },
+        { label: '外觀隨境界進化', type: 'checkbox', checked: cfg.evolve !== false, click: (m) => { cfg.evolve = m.checked; saveCfg(); pushState(); say(m.checked ? '現出真身！' : '變回小時候的樣子', true); } },
+      ],
     },
-    {
-      label: '角色', submenu: SPECIES.map(([v, name]) => ({
-        label: name, type: 'radio', checked: cfg.species === v,
-        click: () => { cfg.species = v; saveCfg(); pushState(); compPush(); set('happy', 1400); sayLines([`化身${name}！`, ...((LORE.CHARS[v] || {}).intro || [])], 2600); },
-      })),
-    },
-    {
-      label: '裝扮', submenu: [['hat', '頭飾', HATS], ['robe', '道袍顏色', ROBES], ['gear', '配件', GEARS]].map(([key, label, list]) => ({
-        label, submenu: list.map(([v, name]) => ({
-          label: name, type: 'radio', checked: cfg[key] === v,
-          click: () => { cfg[key] = v; saveCfg(); pushState(); set('happy', 1200); say(key === 'robe' ? `換上${name}色道袍！` : v === 'none' ? '輕裝上路' : `換上${name}！`); },
-        })),
-      })),
-    },
-    { label: '外觀隨境界進化', type: 'checkbox', checked: cfg.evolve !== false, click: (m) => { cfg.evolve = m.checked; saveCfg(); pushState(); say(m.checked ? '現出真身！' : '變回小時候的樣子', true); } },
-    { label: '鬥法音效', type: 'checkbox', checked: cfg.sound !== false, click: (m) => { cfg.sound = m.checked; saveCfg(); } },
-    { label: '全螢幕技能特效', type: 'checkbox', checked: cfg.fullFx !== false, click: (m) => { cfg.fullFx = m.checked; saveCfg(); } },
     {
       label: '螢幕保護', submenu: [
         { label: '現在開始', click: () => openSaver(true) },
@@ -1674,34 +1737,15 @@ function menu() {
         })),
       ],
     },
-    { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
-    { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
-    { label: '寫傳音符…（定時提醒）', click: openNotes },
-    { label: scrollWin ? '收起今日三件事' : '今日三件事', click: () => openScroll(true) },
     {
-      label: '宵禁燈籠（勸你收工）', submenu: [0, 21, 22, 23, 24].map((h) => ({
-        label: h ? `${h === 24 ? '凌晨 0' : h} 點以後` : '關閉', type: 'radio', checked: cfg.curfew === (h === 24 ? 0.5 : h) || (!h && !cfg.curfew),
-        click: () => { cfg.curfew = h === 24 ? 0.5 : h; saveCfg(); pushState(); },
-      })),
-    },
-    {
-      label: '健康提醒', submenu: [
-        { label: '喝水（每用一小時）', type: 'checkbox', checked: cfg.water, click: (m) => { cfg.water = m.checked; saveCfg(); waterAcc = 0; } },
-        { label: '護眼（每用 20 分鐘）', type: 'checkbox', checked: cfg.eyes, click: (m) => { cfg.eyes = m.checked; saveCfg(); eyeAcc = 0; } },
-        { label: '現在喝口水', click: startDrink },
-        { label: '現在看看遠方', click: startGaze },
-        { type: 'separator' },
-        { label: '起身活動：', enabled: false },
-        ...STRETCH.map((m) => ({
-          label: m ? `每坐 ${m} 分鐘提醒` : '關閉', type: 'radio', checked: cfg.stretch === m,
-          click: () => { cfg.stretch = m; saveCfg(); sitSince = Date.now(); say(m ? `好，每 ${m} 分鐘叫你起來` : '不提醒了，記得自己動動', true); },
-        })),
-        { type: 'separator' },
-        { label: `已經坐了 ${sittingMinutes()} 分鐘`, enabled: false },
-        { label: '現在就打一套太極', click: () => startTaichi(0) },
+      label: '設定', submenu: [
+        { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
+        { label: '鬥法音效', type: 'checkbox', checked: cfg.sound !== false, click: (m) => { cfg.sound = m.checked; saveCfg(); } },
+        { label: '全螢幕技能特效', type: 'checkbox', checked: cfg.fullFx !== false, click: (m) => { cfg.fullFx = m.checked; saveCfg(); } },
+        { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
+        { label: '開機自動啟動', type: 'checkbox', checked: login, visible: process.platform !== 'linux', click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },
       ],
     },
-    { label: '開機自動啟動', type: 'checkbox', checked: login, visible: process.platform !== 'linux', click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },
     { type: 'separator' },
     { label: '解除安裝…', visible: !!uninstaller(), click: uninstall },
     { label: '結束', click: () => app.quit() },

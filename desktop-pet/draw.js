@@ -1210,7 +1210,7 @@
     const look = o.look || { x: 0, y: 0 };
     const moving = state === 'walk' || state === 'chase' || state === 'climb' || state === 'bunrun' || state === 'villainrun' || !!(o.outfit && o.outfit.spar && o.outfit.spar.running);
     const air = state === 'drag' || state === 'fall';
-    const fly = state === 'roll' || state === 'swordland' || !!(o.outfit && o.outfit.spar && o.outfit.spar.flying);   // 御劍飛行（鬥法時在空中也是）
+    const fly = state === 'roll' || state === 'swordland' || state === 'foxride' || !!(o.outfit && o.outfit.spar && o.outfit.spar.flying);   // 御劍飛行（鬥法時在空中也是）
     const med = state === 'sleep';           // 打坐修煉
     const trib = state === 'tribulation';    // 渡劫
     const zap = (trib && st < 2.3 && (st * 8 % 2) < 1.1) || (state === 'struck' && (st * 10 % 2) < 1.2);

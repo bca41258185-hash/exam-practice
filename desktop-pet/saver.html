@@ -204,6 +204,10 @@
           const pull = this.fx && this.fx.move === 'gather' && T - this.fx.at < 3 ? 2.2 : 0.6;
           o.x += ((tx - o.x) * pull + o.px) * dt; o.y += ((ty - o.y) * pull + o.py + Math.sin(T * 2 + o.ph) * 6 * K) * dt;
         });
+        if (petPos) for (const o of free) {   // 狐仙飛過：附近的狐火被撥開、冒火花
+          const dx = o.x - petPos.x, dy = o.y - (petPos.y - 30 * K), d = Math.hypot(dx, dy);
+          if (d < 110 * K && d > 0.1) { o.px += dx / d * 1400 * K * dt; o.py += dy / d * 1400 * K * dt; if (Math.random() < dt * 3) burst(o.x, o.y, '#9BE3FF'); }
+        }
         for (const o of tails) {   // 飛向自己在尾巴上的位置
           const spin = this.fx && this.fx.move === 'spin' && T - this.fx.at < 3.5 ? (T - this.fx.at) * 1.8 : 0;   // 轉尾：整把尾巴繞著狐仙轉
           const [tx, ty] = this.tailSlot(o.k, n, o.j, T, spin), f = Math.min(1, dt * 5);
@@ -622,9 +626,37 @@
     ctx.restore();
     // 游標在可點的東西上，才接住滑鼠（其餘地方點擊照樣穿透到桌面）
     const on = !!S.hit(mouse.x, mouse.y, T) || overBar(mouse.x, mouse.y) || villainOver(mouse.x, mouse.y) || !!orbOver(mouse.x, mouse.y);
-    if (on !== hot) { hot = on; api.clickable(on); document.body.style.cursor = on ? 'pointer' : 'default'; }
+    if (on !== hot) { hot = on; api.clickable(on); }
+    const cur = villainOver(mouse.x, mouse.y) ? SWORD_CUR : on ? 'pointer' : 'default';   // 游標在反派身上：變成劍
+    if (cur !== curNow) { curNow = cur; document.body.style.cursor = cur; }   // 只在要換時才換（一直重設會讓視窗以為滑鼠離開）
+    drawSlash();
   }
-  addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
+  addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; watchSlash(e.clientX, e.clientY); });
+  // 在反派／BOSS 身上來回揮：方向一換、這一趟走了 30 以上，就砍一劍（留下劍痕）
+  let slashX = null, slashDir = 0, slashFrom = 0, slashT = 0, slashTrail = [];
+  function watchSlash(x, y) {
+    const t = performance.now();
+    if (villainOver(x, y)) slashTrail.push({ x, y, t });
+    slashTrail = slashTrail.filter((p) => t - p.t < 260).slice(-30);
+    if (!villainOver(x, y)) { slashX = null; return; }
+    if (slashX === null || t - slashT > 400) { slashX = x; slashFrom = x; slashDir = 0; slashT = t; return; }
+    const d = x - slashX; if (Math.abs(d) < 2) return;
+    const dir = d > 0 ? 1 : -1;
+    if (slashDir && dir !== slashDir) { if (Math.abs(slashX - slashFrom) >= 30) { villainHit(1, now()); slashFx = t; } slashFrom = slashX; }
+    slashDir = dir; slashX = x; slashT = t;
+  }
+  let slashFx = 0, curNow = '';
+  function drawSlash() {
+    const t = performance.now();
+    if (slashTrail.length > 1) {
+      ctx.save(); ctx.lineCap = 'round';
+      for (let i = 1; i < slashTrail.length; i++) { const a = 1 - (t - slashTrail[i].t) / 260; ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 1 + a * 7; ctx.beginPath(); ctx.moveTo(slashTrail[i - 1].x, slashTrail[i - 1].y); ctx.lineTo(slashTrail[i].x, slashTrail[i].y); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+  const SWORD_CUR = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.translate(4, 4); g.rotate(Math.PI / 4);
+    g.fillStyle = '#E8F4F8'; g.strokeStyle = '#4A3A2A'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -2); g.lineTo(26, -2); g.lineTo(30, 0); g.lineTo(26, 2); g.lineTo(0, 2); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#F5B82E'; g.fillRect(-3, -6, 4, 12); g.strokeRect(-3, -6, 4, 12); return `url(${c.toDataURL()}) 4 4, crosshair`; })();
   // 收起／關閉的按鈕：游標在上面時視窗接住滑鼠
   const bar = document.getElementById('bar');
   function overBar(x, y) { const r = bar.getBoundingClientRect(); return x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6; }
@@ -658,7 +690,8 @@
   window.saverManual = (species, pre) => { clock = 0; sp = species; things = []; bursts = []; leaveAt = 0; flash = -9; hot = false; mouse = { x: -9999, y: -9999 }; size(); SCENES[sp].init(-(pre || 12)); S = SCENES[sp]; born = -9; last = 0; };
   window.saverDraw = (T, mx, my) => { clock = T; if (mx != null) mouse = { x: mx, y: my }; frame(T * 1000); };
   window.saverSpot = () => { const T = clock || 0; if (sp === 'cat') return S.bell(); if (sp === 'fox') return things[0]; if (sp === 'rabbit') return S.moon(T); if (sp === 'panda') return S.buns.find((b) => T >= b.at && b.y < H - 80 && b.y > 120) || S.buns[0]; return S.clouds[0]; };
-  window.saverPet = (x, y, dir) => { petPos = { x, y, dir }; };   // 測試／預告片：指定靈寵位置
+  window.saverPet = (x, y, dir) => { petPos = { x, y, dir }; };
+  window.saverFoe = () => villain && { x: villain.x, y: villain.y, hp: villain.hp, state: villain.state, type: villain.type };   // 測試用   // 測試／預告片：指定靈寵位置
   window.saverVillain = (bossId) => { villainStart(clock || now(), bossId); return !!villain; };
   window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
   requestAnimationFrame(frame);
