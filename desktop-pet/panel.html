@@ -1,0 +1,1299 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>檔案管家</title>
+<style>
+  /* 設計原則：報告當下只做一件事 —— 點專案、點檔案。其餘功能都收進「⋯」。 */
+  :root {
+    --bg: #121418; --panel: #1a1d23; --card: #23272f; --card-hi: #2f3540; --line: #343a45;
+    --text: #f0efea; --dim: #9aa0ab; --accent: #f4b860; --accent-ink: #2a1c05;
+    --running: #5aa9e6; --waiting: #f4b860; --failed: #ef6b60; --done: #62c483; --idle: #6b7280;
+    --scale: 1;
+  }
+  /* 字級跟著螢幕高度走：不論 Windows 縮放設多少，2560×720 的副螢幕上版面都一樣 */
+  html { font-size: calc(clamp(12px, 2.9vh, 24px) * var(--scale)); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: "Microsoft JhengHei UI", "PingFang TC", "Noto Sans CJK TC", "Noto Sans TC", "WenQuanYi Zen Hei", system-ui, sans-serif;
+    user-select: none; touch-action: manipulation; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+  svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .app { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: .5rem; height: 100vh; padding: .5rem; }
+  .app.many { grid-template-columns: 22rem minmax(0, 1fr); }
+  .aibtn { flex: none; display: flex; align-items: center; gap: .4rem; height: 3.3rem; padding: 0 1rem 0 .5rem; border-radius: .8rem; background: var(--card); font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .aibtn:active { background: var(--card-hi); }
+  .petctl { flex: none; display: none; align-items: stretch; height: 3.3rem; border-radius: .8rem; background: var(--card); overflow: hidden; }
+  .petctl.on { display: flex; }
+  .petctl button { display: flex; align-items: center; justify-content: center; min-width: 3.3rem; padding: 0 .7rem; font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .petctl button:active { background: var(--card-hi); }
+  .petctl button + button { border-left: 1px solid var(--line); }
+  .petctl .sz { font-size: 1.5rem; min-width: 3.3rem; padding: 0; color: var(--dim); }
+  .petctl .sz:disabled { opacity: .3; }
+  .petctl .pw { gap: .35rem; } .petctl .pw i { width: .8rem; height: .8rem; border-radius: 50%; background: var(--dim); }
+  .petctl.shown .pw i { background: var(--done); box-shadow: 0 0 .5rem var(--done); }
+  .petctl:not(.shown) .pw { color: var(--dim); } .petctl:not(.shown) .sz { display: none; }
+  .aibtn #mascot { margin: 0; } .aibtn b { color: var(--waiting); font-size: 1.15rem; margin-right: .15rem; }
+  .f .x { margin-left: .2rem; opacity: .7; }
+  .hint { font-weight: 700; color: var(--accent); }
+  .big .dot { width: .8rem; height: .8rem; }
+  .proj .dot, .label .dot, .big .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--accent); flex: none; }
+  .label .dot { margin: 0 .3rem 0 .8rem; }
+  .app.many .grid { grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
+  .col { background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  /* 看得見的細捲軸：讓人知道下面還有多少 */
+  .scroll { overflow-y: auto; flex: 1; min-height: 0; padding: .5rem .5rem 2.2rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
+  .col { position: relative; }
+  .col.below::after { content: "▼ 往下還有"; position: absolute; left: 0; right: 0; bottom: 0; height: 2.4rem; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: .3rem; font-size: .72rem; color: var(--text); letter-spacing: .1em; pointer-events: none;
+    background: linear-gradient(rgba(26,29,35,0), var(--panel) 55%); border-radius: 0 0 1rem 1rem; }
+  .label { font-size: .8rem; font-weight: 700; letter-spacing: .14em; color: var(--dim); padding: .7rem 1rem .1rem; }
+
+  /* 專案 */
+  #projects { display: grid; gap: .35rem; align-content: start; }
+  .many #projects { grid-template-columns: 1fr 1fr; }
+  #projects .label { grid-column: 1 / -1; padding: .5rem .5rem 0; }
+  .proj { display: flex; align-items: center; gap: .5rem; min-height: 4rem; padding: .3rem .8rem; border-radius: .8rem; background: var(--card); font-size: 1.1rem; font-weight: 700; min-width: 0; }
+  .proj.all { grid-column: 1 / -1; }
+  .proj > span { flex: 1; min-width: 0; }
+  .proj em { font-style: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; word-break: break-all; }
+  .many .proj { font-size: 1rem; }
+  .proj small { display: block; font-size: .72rem; font-weight: 400; color: var(--dim); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .proj:active { background: var(--card-hi); }
+  .proj.sel { background: var(--accent); color: var(--accent-ink); }
+  .proj.sel small { color: #5b4514; }
+  .proj.sel .dot { background: var(--accent-ink); }
+
+  /* 中間：一排篩選 + 大卡片 */
+  .bar { display: none; align-items: center; gap: .5rem; padding: 0 .5rem; }
+  .bar.searching { display: flex; }
+  .fhead { display: flex; align-items: center; gap: .8rem; padding: .45rem .5rem .1rem 1rem; min-height: 3.9rem; }
+  .fhead h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col:has(.setbtn).below::after { bottom: 3.9rem; }   /* 「往下還有」的提示放在設定鈕上面，不要蓋住它 */
+  .setbtn { flex: none; position: relative; z-index: 2; background: var(--panel); margin: .4rem .5rem .5rem; min-height: 3rem; border-radius: .8rem; color: var(--dim); font-size: .95rem; text-align: center; border: 1px solid var(--line); }
+  .setbtn:active { background: var(--card); }
+  #fchip .f, #fexp .f { height: 3rem; }
+  .sec span { margin-left: .6rem; letter-spacing: 0; font-weight: 400; color: var(--text); }
+  .filters { display: flex; gap: .4rem; overflow-x: auto; flex: 1; scrollbar-width: none; padding: .1rem; }
+  .filters::-webkit-scrollbar { display: none; }
+  .f { flex: none; height: 3.3rem; padding: 0 1rem; border-radius: .8rem; background: var(--card); font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: .45rem; white-space: nowrap; }
+  .f i { width: .7rem; height: .7rem; border-radius: 50%; background: var(--k); }
+  .f small { font-size: .8rem; font-weight: 400; color: var(--dim); }
+  .f.on { background: var(--accent); color: var(--accent-ink); } .f.on small { color: #5b4514; }
+  .f:active { background: var(--card-hi); }
+  .f svg { width: 1.15rem; height: 1.15rem; }
+  .f[data-act="subs"] { max-width: 15rem; } .f[data-act="subs"] > span { overflow: hidden; text-overflow: ellipsis; }
+  .filters.more-x { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); }
+  .big > span { min-width: 0; word-break: break-all; }
+  .big > span.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+  .gap { flex: none; width: .5rem; }
+  #busy { display: none; flex: none; font-size: .8rem; color: var(--dim); white-space: nowrap; }
+  .updating #busy { display: block; animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .35; } }
+  .round { flex: none; width: 3.3rem; height: 3.3rem; border-radius: .8rem; display: grid; place-items: center; color: var(--dim); background: var(--card); }
+  .round:active { background: var(--card-hi); color: var(--accent); }
+  #q { display: none; flex: 1; height: 3.3rem; border-radius: .8rem; border: 2px solid var(--accent); background: var(--card); color: var(--text); font: inherit; font-size: 1.1rem; padding: 0 1rem; outline: 0; user-select: text; min-width: 0; }
+  .searching #q { display: block; } .searching .filters { display: none; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: .5rem; align-content: start; transition: opacity .15s; }
+  .grid.loading { opacity: .45; }
+  .sec { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; color: var(--dim); letter-spacing: .14em; padding: .3rem .4rem 0; }
+  .sum { grid-column: 1 / -1; font-size: 1.05rem; padding: .2rem .4rem .1rem; line-height: 1.5; user-select: text; }
+  .sum b { color: var(--accent); }
+  .file { display: flex; align-items: stretch; background: var(--card); border-radius: .9rem; min-height: 5.4rem; overflow: hidden; }
+  .file .open { flex: 1; min-width: 0; display: flex; align-items: center; gap: .9rem; padding: .5rem .8rem; }
+  .file .open:active { background: var(--card-hi); }
+  .file.opening { outline: 2px solid var(--accent); }
+  .file.opening .open { pointer-events: none; }
+  .file.pinned .ext::before { content: "釘"; position: absolute; left: -.35rem; top: -.35rem; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: .72rem; }
+  /* 釘選模式：提示固定在清單上方不隨捲動消失，所有卡片（含彈出清單裡的）加虛線框 */
+  #pinbar { display: none; align-items: center; gap: .8rem; margin: .5rem .5rem 0; padding: .4rem .5rem .4rem 1rem; border-radius: .8rem; border: 2px dashed var(--accent); font-size: 1rem; }
+  #pinbar b { color: var(--accent); } #pinbar .f { margin-left: auto; height: 2.7rem; }
+  .pinmode #pinbar { display: flex; }
+  .pinmode .file { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .file.opened .ext::after { content: "✓"; position: absolute; right: -.35rem; top: -.35rem; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--done); color: #0d2616; display: grid; place-items: center; font-size: .8rem; }
+  .ext { position: relative; flex: none; width: 3.9rem; height: 3.9rem; border-radius: .8rem; display: grid; place-items: center; font-size: .9rem; font-weight: 800; background: var(--k); color: #14161a; }
+  .file .t { min-width: 0; }
+  .file .n { font-size: 1.15rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+  .file .m { font-size: .82rem; color: var(--dim); margin-top: .2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag { display: inline-block; font-size: .7rem; font-weight: 700; border-radius: .3rem; padding: 0 .35rem; margin-right: .4rem; background: var(--done); color: #0d2616; }
+  .tag.latest { background: var(--accent); color: var(--accent-ink); }
+  .tag.warn { background: none; border: 1px solid var(--accent); color: var(--accent); }
+  .ver { flex: none; align-self: stretch; display: grid; place-items: center; padding: 0 .8rem; font-size: .82rem; font-weight: 700; color: var(--accent); border-left: 1px solid var(--line); text-align: center; line-height: 1.3; }
+  .ver:active { background: var(--card-hi); }
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 2.5rem 1rem; line-height: 2; font-size: 1.05rem; }
+  .big { display: flex; align-items: center; gap: .7rem; min-height: 3.8rem; padding: .4rem 1.2rem; border-radius: .8rem; background: var(--card-hi); font-weight: 700; font-size: 1.05rem; width: 100%; }
+  .big small { display: block; font-size: .78rem; font-weight: 400; color: var(--dim); }
+  .big:active { background: var(--line); }
+  .big.main { background: var(--accent); color: var(--accent-ink); }
+  .big.quiet { background: none; border: 1px solid var(--line); color: var(--dim); }
+  .empty .big { display: inline-flex; width: auto; margin: .3rem; }
+
+  /* AI 助手：一行一件 */
+  .task { display: block; width: 100%; background: var(--card); border-radius: .8rem; padding: .7rem .8rem; margin-bottom: .35rem; border-left: .35rem solid var(--s); }
+  .task:active { background: var(--card-hi); }
+  .task .n { font-weight: 700; font-size: 1rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .task .st { font-size: .85rem; color: var(--s); font-weight: 700; margin-top: .25rem; }
+  .task .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .many .task .st em { display: none; }
+  .many .task { padding: .55rem .7rem; }
+  .prog { height: .35rem; border-radius: .2rem; background: var(--line); margin-top: .45rem; overflow: hidden; }
+  .prog b { display: block; height: 100%; background: var(--s); }
+  .s-running { --s: var(--running); } .s-waiting { --s: var(--waiting); } .s-failed { --s: var(--failed); } .s-done { --s: var(--done); } .s-idle { --s: var(--idle); }
+  .detail li { list-style: none; padding: .25rem 0 .25rem 1.6em; position: relative; font-size: 1rem; }
+  .detail ul { margin: 0 0 .6rem; padding: 0; }
+  .detail li::before { content: "○"; position: absolute; left: 0; color: var(--dim); }
+  .detail li.completed { color: var(--done); } .detail li.completed::before { content: "●"; color: var(--done); }
+  .detail li.in_progress { font-weight: 700; } .detail li.in_progress::before { content: "▶"; color: var(--running); }
+  .detail p { user-select: text; }
+
+  /* AI 對話畫面 */
+  .label.go { display: flex; align-items: center; width: 100%; min-height: 2.6rem; }
+  .label.go span { margin-left: auto; letter-spacing: 0; font-weight: 700; color: var(--accent); background: rgba(244,184,96,.14); border-radius: .6rem; padding: .35rem .7rem; }
+  .label.go:active span { background: rgba(244,184,96,.3); }
+  #talk { display: none; height: 100vh; padding: .5rem; gap: .5rem; }
+  .talk #app { display: none; } .talk #talk { display: flex; }
+  #talk nav { flex: none; width: 4.6rem; display: flex; flex-direction: column; gap: .5rem; }
+  .navbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; width: 100%; min-height: 5rem; border-radius: 1rem; background: var(--panel); color: var(--accent); font-size: .82rem; font-weight: 700; text-align: center; }
+  .navbtn:active { background: var(--card-hi); }
+  #talk-cols { flex: 1; min-width: 0; display: flex; gap: .5rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+  #talk-cols::-webkit-scrollbar { display: none; }
+  /* 一次並排三欄（和草圖一樣）；專案更多時往左滑 */
+  .tcol { flex: 1 1 0; min-width: 26rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: .3rem solid var(--s, var(--line)); }
+  #talk-cols:not(.overview) .msgs { padding-left: max(.6rem, calc((100% - 64rem) / 2)); padding-right: max(.6rem, calc((100% - 64rem) / 2)); }   /* 進入對話後，訊息不要拉得太寬 */
+  #talk-cols.overview { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); }
+  .tcard.closed { align-items: center; justify-content: center; gap: .3rem; border-top-color: var(--line); color: var(--dim); text-align: center; background: transparent; border: 2px dashed var(--line); }
+  .tcard.closed b { font-size: 2rem; color: var(--text); } .tcard.closed small { font-size: .85rem; }
+  .tcard { background: var(--panel); border-radius: 1rem; border-top: .35rem solid var(--s); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .tcard-body { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .7rem .8rem .4rem; text-align: center; }
+  .tcard-body:active { background: var(--card); }
+  .tcard .slime { width: 4.6rem; height: 4.3rem; }
+  .tcard b { font-size: 1.12rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cproj { display: block; font-size: .78rem; font-weight: 400; color: var(--dim); }
+  .tcard .cst { font-size: .9rem; font-weight: 700; color: var(--s); }
+  .tcard .prog { display: block; width: 80%; height: .35rem; border-radius: .2rem; background: var(--line); overflow: hidden; }
+  .tcard .prog i { display: block; height: 100%; background: var(--s); }
+  .tcard .csnip { flex: 1; min-height: 0; overflow: hidden; font-size: .88rem; line-height: 1.5; color: var(--dim); text-align: left; width: 100%; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+  .tcard.need { animation: needme 1.8s ease-in-out infinite; }
+  .tcard .rbar { width: calc(100% - 1rem); min-height: 2.9rem; }
+  /* 摘要欄：沒展開的專案。窄窄一條，但看得到史萊姆、狀態與最後一句話 */
+  .ccol { flex: 0 0 11.5rem; scroll-snap-align: start; background: var(--panel); border-radius: 1rem; border-top: .3rem solid var(--s, var(--line)); display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .6rem .6rem .5rem; text-align: center; min-height: 0; overflow: hidden; }
+  .ccol:active { background: var(--card); }
+  .ccol .slime { width: 4.2rem; height: 3.9rem; margin-top: .3rem; }
+  .ccol b { font-size: 1rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+  .ccol .cst { font-size: .82rem; font-weight: 700; color: var(--s); line-height: 1.3; }
+  .ccol .prog { display: block; width: 100%; height: .35rem; border-radius: .2rem; background: var(--line); overflow: hidden; margin-top: 0; }
+  .ccol .prog i { display: block; height: 100%; background: var(--s); }
+  .ccol .csnip { flex: 1; min-height: 0; overflow: hidden; font-size: .8rem; line-height: 1.45; color: var(--dim); text-align: left; width: 100%; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+  .ccol .csnip em { font-style: normal; color: var(--text); }
+  .ccol .cgo { flex: none; font-size: .78rem; color: var(--accent); display: flex; align-items: center; gap: .25rem; }
+  .ccol .cgo svg { width: .95rem; height: .95rem; }
+  .ccol.need { animation: needme 1.8s ease-in-out infinite; }   /* 等你或出錯：邊框輕輕閃，提醒這一欄有事 */
+  @keyframes needme { 50% { box-shadow: inset 0 0 0 2px var(--s); } }
+  #talk-counts { display: flex; flex-direction: column; gap: .4rem; }
+  .tcount { display: flex; flex-direction: column; align-items: center; width: 100%; padding: .45rem 0; border-radius: .9rem; background: var(--panel); border-left: .3rem solid var(--s); font-size: .74rem; color: var(--s); font-weight: 700; text-align: center; }
+  .tcount b { font-size: 1.35rem; line-height: 1.1; }
+  .tcount:active { background: var(--card-hi); }
+  .thead { display: flex; align-items: center; gap: .4rem; padding: .3rem .5rem .25rem .4rem; }
+  .thead .f { height: 2.6rem; font-size: .88rem; padding: 0 .8rem; }
+  .tabs { display: flex; gap: .35rem; overflow-x: auto; padding: 0 .5rem .35rem; scrollbar-width: none; flex: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; max-width: 13rem; height: 2.4rem; padding: 0 .8rem; border-radius: .6rem; background: var(--card); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: .25rem solid var(--s); }
+  .tab.on { background: var(--card-hi); font-weight: 700; }
+  .tabs.kids { align-items: center; } .tabs.kids > span { flex: none; font-size: .75rem; color: var(--dim); padding: 0 .2rem 0 .3rem; }
+  .tabs.kids .tab { height: 2.2rem; font-size: .8rem; background: none; border: 1px solid var(--line); border-left: .25rem solid var(--s); }
+  .ver[disabled], .open[disabled] { opacity: .55; pointer-events: none; }
+  .msgs { flex: 1; min-height: 0; overflow-y: auto; padding: .3rem .6rem .5rem; display: flex; flex-direction: column; gap: .45rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; overscroll-behavior: contain; }
+  .msg { max-width: 88%; padding: .55rem .75rem; font-size: .98rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; user-select: text; }
+  .msg.ai { align-self: flex-start; background: var(--card); border-radius: .3rem .9rem .9rem .9rem; }                       /* 助手：左邊的方框 */
+  .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-radius: .9rem .9rem .3rem .9rem; }   /* 你：右邊的泡泡 */
+  .msg small { display: block; font-size: .7rem; opacity: .65; margin-top: .2rem; }
+  .msg.clip { max-height: 9.5rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+  .who { font-size: .72rem; color: var(--dim); margin: .1rem .2rem -.25rem; }
+  .who.user { align-self: flex-end; }
+  .tstat { flex: 1; min-width: 0; display: flex; align-items: center; gap: .6rem; min-height: 3.6rem; padding: .25rem .5rem .25rem .2rem; border-radius: .8rem; }
+  .tstat:active { background: var(--card); }
+  .tstat .tt { flex: 1; min-width: 0; }
+  .tstat h2 { font-size: 1.1rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tstat .st { font-size: .85rem; font-weight: 700; color: var(--s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .1rem; }
+  .tstat .st em { font-style: normal; font-weight: 400; color: var(--dim); }
+  .tstat .prog { margin-top: .3rem; }
+
+  /* 史萊姆 */
+  .slime { flex: none; width: 3.3rem; height: 3.1rem; overflow: visible; }
+  .slime.away { visibility: hidden; }
+  #mascot { display: inline-flex; margin-right: .5rem; } #mascot .slime { width: 2.2rem; height: 2.05rem; }
+  .sl-skin { fill: color-mix(in srgb, var(--s) 82%, white); stroke: color-mix(in srgb, var(--s) 62%, black); stroke-width: 2; }
+  .sl-shine { fill: rgba(255,255,255,.6); stroke: none; }
+  .sl-eyes ellipse { fill: #1b2230; stroke: none; transform-box: fill-box; transform-origin: center; animation: blink 4.2s infinite; }
+  .sl-lids, .sl-smile, .sl-frown { fill: none; stroke: #1b2230; stroke-width: 2.2; stroke-linecap: round; }
+  .sl-lids, .sl-frown, .sl-drop, .sl-mark, .sl-zzz { display: none; }
+  .sl-shadow { fill: rgba(0,0,0,.35); stroke: none; transform-box: fill-box; transform-origin: center; }
+  .sl-drop { fill: #8fd3ff; stroke: none; }
+  .sl-mark circle { fill: var(--s); stroke: #fff; stroke-width: 1.5; } .sl-mark text { fill: #14161a; font-size: 13px; font-weight: 800; stroke: none; }
+  .sl-zzz { fill: #9db0d0; font-size: 11px; font-weight: 800; stroke: none; }
+  .sl-body { transform-box: fill-box; transform-origin: 50% 100%; animation: jelly 2.6s ease-in-out infinite; }
+  @keyframes jelly { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.06, .93); } }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+  /* 正在做：一下一下地彈 */
+  .sl-running .sl-body { animation: work .7s ease-in-out infinite; }
+  @keyframes work { 0%, 100% { transform: translateY(0) scale(1.08, .9); } 45% { transform: translateY(-13%) scale(.94, 1.08); } }
+  .sl-running .sl-shadow { animation: shrink .7s ease-in-out infinite; }
+  @keyframes shrink { 45% { transform: scale(.75); opacity: .6; } }
+  /* 等你：頭上冒出驚嘆號，左右搖 */
+  .sl-waiting .sl-mark, .sl-failed .sl-mark { display: block; animation: pop 1.1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes pop { 50% { transform: translateY(-2px) scale(1.15); } }
+  .sl-waiting .sl-body { animation: sway 1.3s ease-in-out infinite; }
+  @keyframes sway { 0%, 100% { transform: rotate(-5deg) scale(1.03, .97); } 50% { transform: rotate(5deg) scale(.98, 1.03); } }
+  /* 出錯：發抖、冒汗、嘴角往下 */
+  .sl-failed .sl-body { animation: shiver .28s linear infinite; }
+  @keyframes shiver { 0%, 100% { transform: translateX(-1.2px) scale(1.04, .95); } 50% { transform: translateX(1.2px) scale(1.04, .95); } }
+  .sl-failed .sl-smile { display: none; } .sl-failed .sl-frown, .sl-failed .sl-drop { display: block; }
+  .sl-failed .sl-drop { animation: drip 1.2s ease-in infinite; }
+  @keyframes drip { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(12px); opacity: 0; } }
+  /* 完成：開心地跳 */
+  .sl-done .sl-body { animation: joy 1s cubic-bezier(.3, 0, .3, 1) infinite; }
+  @keyframes joy { 0%, 100% { transform: translateY(0) scale(1.12, .86); } 40% { transform: translateY(-24%) scale(.92, 1.1); } 70% { transform: translateY(0) scale(1.1, .9); } }
+  .sl-done .sl-eyes { display: none; } .sl-done .sl-lids { display: block; }
+  /* 停著：攤平睡覺 */
+  .sl-idle .sl-body { animation: snooze 3.6s ease-in-out infinite; }
+  @keyframes snooze { 0%, 100% { transform: scale(1.14, .78); } 50% { transform: scale(1.1, .83); } }
+  .sl-idle .sl-eyes { display: none; } .sl-idle .sl-lids { display: block; transform: translateY(3px) scaleY(-1); transform-box: fill-box; transform-origin: center; }
+  .sl-idle .sl-smile { display: none; } .sl-idle .sl-zzz { display: block; animation: zzz 2.4s ease-in-out infinite; } .sl-idle .z2 { animation-delay: 1.2s; }
+  @keyframes zzz { 0% { opacity: 0; transform: translateY(4px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+
+  /* 跑出來找你的史萊姆 */
+  .runner:not(.hopping):not(.leaving) { transition-duration: .35s; }
+  .runner { position: fixed; z-index: 25; display: flex; align-items: flex-end; gap: .3rem; transform: translate(-50%, -50%); transition: left .9s cubic-bezier(.45, 0, .3, 1), top .9s cubic-bezier(.45, 0, .3, 1); filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
+  .runner .slime { width: 4.4rem; height: 4.1rem; }
+  .runner.hopping .slime { animation: hop calc(.9s / var(--hops, 3)) ease-in-out calc(var(--hops, 3)); }
+  @keyframes hop { 0%, 100% { transform: translateY(0) scale(1.12, .86); } 50% { transform: translateY(-1.7rem) scale(.92, 1.1); } }
+  .runner .say { max-width: 15rem; background: #fffbe6; color: #3b2a12; border-radius: .9rem .9rem .9rem .2rem; padding: .5rem .75rem; font-size: .95rem; line-height: 1.4; margin-bottom: 1.6rem; opacity: 0; transition: opacity .3s .9s; text-align: left; }
+  .runner .say b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .runner .say small { display: block; font-size: .72rem; opacity: .65; }
+  .runner:not(.leaving) .say { opacity: 1; } .runner.leaving .say { display: none; }
+  /* 拿著圖片的史萊姆：圖片舉在頭上，兩隻小手撐著，走路時一晃一晃 */
+  .runner .carry { position: relative; display: flex; flex-direction: column; align-items: center; }
+  .runner .pic { position: relative; z-index: 1; margin-bottom: -.9rem; padding: .22rem; background: #fff; border-radius: .35rem; box-shadow: 0 .3rem .7rem rgba(0,0,0,.45);
+    transform-origin: 50% 120%; animation: wave 1.1s ease-in-out infinite; }
+  .runner .pic img { display: block; width: 4.6rem; height: 3.4rem; object-fit: cover; border-radius: .2rem; background: #e7e3d8; }
+  .runner .pic::before, .runner .pic::after { content: ""; position: absolute; bottom: -.85rem; width: .38rem; height: 1.1rem; border-radius: .2rem; background: var(--s, #8fb3ff); filter: brightness(.92); }
+  .runner .pic::before { left: 1rem; transform: rotate(14deg); } .runner .pic::after { right: 1rem; transform: rotate(-14deg); }
+  .runner.hopping .pic { animation: wobble .3s ease-in-out infinite; }
+  .runner.empty .pic { visibility: hidden; }
+  @keyframes wave { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg) translateY(-.2rem); } }
+  @keyframes wobble { 0%, 100% { transform: rotate(-12deg) translateY(.1rem); } 50% { transform: rotate(12deg) translateY(-.35rem); } }
+  .runner.throw .slime { animation: throw .45s cubic-bezier(.3, 1.6, .5, 1); }
+  .runner.catch .slime { animation: catch .4s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes throw { 0% { transform: scale(1.25, .7); } 45% { transform: translateY(-1rem) scale(.82, 1.25); } 100% { transform: none; } }
+  @keyframes catch { 0% { transform: translateY(-.6rem) scale(.9, 1.15); } 50% { transform: scale(1.3, .7); } 100% { transform: none; } }
+  .runner.empty .slime { animation: cheer .5s ease-in-out infinite alternate; }
+  @keyframes cheer { from { transform: translateY(0) scale(1.05, .95); } to { transform: translateY(-.5rem) scale(.95, 1.06); } }
+  /* 丟出來的圖片 */
+  .toss-bg { position: fixed; inset: 0; z-index: 40; background: rgba(8, 10, 14, .72); opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toss-bg.show { opacity: 1; }
+  .toss { position: fixed; z-index: 41; padding: .5rem; background: #fff; border-radius: .6rem; box-shadow: 0 1.2rem 3rem rgba(0,0,0,.6); pointer-events: none; will-change: transform; }
+  .toss img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: .3rem; }
+  .toss-tip { position: fixed; z-index: 42; left: 50%; bottom: 1.2rem; transform: translateX(-50%); color: #fff; font-size: 1rem; opacity: .85; pointer-events: none; }
+  .spark { position: fixed; z-index: 42; width: .7rem; height: .7rem; border-radius: 50%; pointer-events: none; animation: spark .7s ease-out forwards; }
+  @keyframes spark { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } }
+  /* 對話裡的圖片：小縮圖，點一下用看圖程式開，按住放大 */
+  .mpic { align-self: flex-start; padding: .25rem; background: #fff; border-radius: .5rem; max-width: 70%; }
+  .mpic.user { align-self: flex-end; }
+  .mpic img { display: block; max-width: 100%; max-height: 9rem; border-radius: .3rem; background: #e7e3d8; min-width: 6rem; min-height: 4rem; object-fit: cover; }
+  .mpic small { display: block; color: #555; font-size: .7rem; padding: .15rem .2rem 0; }
+  /* 已讀 / 未讀 */
+  .newbadge { display: inline-block; background: var(--waiting); color: #2a1c05; font-size: .8rem; font-weight: 700; border-radius: 1rem; padding: .1rem .55rem; }
+  .tcard.unread { box-shadow: 0 0 0 2px var(--waiting) inset; }
+  .newline { display: flex; align-items: center; gap: .5rem; color: var(--waiting); font-size: .78rem; font-weight: 700; margin: .3rem 0; }
+  .newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--waiting); opacity: .6; }
+  #allread { display: none; } #allread.show { display: flex; }
+  @media (prefers-reduced-motion: reduce) { .slime *, .runner, .runner .slime, .runner .pic { animation: none !important; transition: none !important; } }
+
+  .rbar { flex: none; display: flex; align-items: center; width: calc(100% - 1rem); min-height: 3.2rem; margin: 0 .5rem .5rem; padding: 0 .5rem 0 1rem; border-radius: .8rem; background: var(--bg); border: 1px solid var(--line); color: var(--dim); font-size: 1rem; }
+  .rbar span { margin-left: auto; background: var(--accent); color: var(--accent-ink); font-weight: 700; border-radius: .6rem; padding: .45rem 1rem; font-size: .9rem; }
+  .rbar:active { background: var(--card); }
+  .rbar.off { font-size: .8rem; min-height: 2.2rem; border-style: dashed; }
+  #reply-text { width: 100%; min-height: 6.5rem; resize: none; border-radius: .8rem; border: 2px solid var(--accent); background: var(--card); color: var(--text); font: inherit; font-size: 1.1rem; line-height: 1.5; padding: .7rem .9rem; outline: 0; user-select: text; }
+  .big[disabled] { opacity: .5; pointer-events: none; }
+  .tnote { color: var(--dim); font-size: .9rem; line-height: 1.7; text-align: center; margin: auto; padding: 1rem; }
+
+  /* 彈出面板、提示 */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 10; }
+  .sheet-bg.show { display: grid; }
+  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 1.1rem; padding: 1rem; width: min(52rem, 92vw); max-height: 94vh; display: flex; flex-direction: column; }
+  .sheet h3 { margin: 0 0 .7rem .3rem; font-size: 1.15rem; display: flex; align-items: center; gap: .5rem; }
+  .sheet h3 span { flex: 1; }
+  .sheet .list { overflow-y: auto; display: grid; gap: .45rem; scrollbar-width: thin; scrollbar-color: #4a5160 transparent; align-content: start; }
+  .sheet .two { grid-template-columns: 1fr 1fr; }
+  .sheet .three { grid-template-columns: 1fr 1fr 1fr; }
+  .sheet .wide { grid-column: 1 / -1; }
+  .sheet p { color: var(--dim); font-size: .92rem; margin: 0 .3rem .5rem; line-height: 1.6; }
+  .sheet .file .n { -webkit-line-clamp: 3; }
+  .toast { position: fixed; right: 1rem; bottom: 1rem; transform: translateY(6rem); background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: .8rem 1.3rem; border-radius: .9rem; transition: transform .2s; z-index: 20; max-width: 16rem; font-size: 1rem; line-height: 1.4; word-break: break-all; }
+  .toast.show { transform: none; }
+  .toast.err { background: var(--failed); color: #fff; }
+
+  #offline { display: none; position: fixed; inset: 0; z-index: 30; background: rgba(10,11,14,.88); place-items: center; text-align: center; font-size: 1.3rem; line-height: 2; }
+  #offline b { color: var(--accent); }
+  .offline #offline { display: grid; }
+  @media (max-width: 1000px) {
+    body { overflow: auto; height: auto; }
+    .app, .app.many { grid-template-columns: 1fr; height: auto; }
+    .col { max-height: 80vh; }
+  }
+</style>
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <section class="col"><div class="label">專案<i class="dot"></i><span style="letter-spacing:0;font-weight:400">今天有動</span></div><div class="scroll" id="projects"></div>
+    <button class="setbtn" data-act="more">設定</button></section>
+
+  <section class="col">
+    <div class="fhead" id="fhead"><h2 id="ftitle">全部專案</h2><span id="fexp"></span><span id="fchip"></span><span id="busy">更新中…</span>
+      <button class="aibtn" data-act="talk"><i id="mascot"></i><span id="ai-count">AI 對話</span></button>
+      <span class="petctl" id="petctl"><button class="pw" data-act="pet-toggle" aria-label="桌面史萊姆開關"><i></i><span id="pet-label">桌面 開</span></button><button class="sz" data-act="pet-size" data-step="-1" aria-label="史萊姆縮小">−</button><button class="sz" data-act="pet-size" data-step="1" aria-label="史萊姆放大">＋</button></span></div>
+    <div class="bar" id="bar">
+      <div class="filters" id="filters"></div>
+      <input id="q" placeholder="輸入檔名或資料夾名稱" autocomplete="off" spellcheck="false" enterkeyhint="search">
+      <button class="round" data-act="search" id="search-btn" aria-label="結束搜尋"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div id="pinbar"><span>釘選模式：點任何一張卡片（包含版本清單裡的），把它<b>釘選</b>到最上面；已釘選的會取消。</span><button class="f" data-act="pin-cancel">取消</button></div>
+    <div class="scroll" id="scroll"><div class="grid" id="files"><div class="empty">正在讀取檔案清單…</div></div></div>
+  </section>
+</div>
+
+<!-- AI 對話：一個專案一欄，看得到這個專案和 AI 助手說了什麼 -->
+<div id="talk">
+  <nav><button class="navbtn" id="talk-back" data-act="files"><svg><use href="#i-folder"/></svg>找檔案</button>
+    <button class="navbtn" id="allread" data-act="all-read"><span style="font-size:1.4rem;line-height:1">✓</span>全部已讀</button></nav>
+  <div id="talk-cols"></div>
+</div>
+
+<div class="sheet-bg" id="sheet-bg"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+<div id="offline"><div>檔案管家已經關閉。<br>請回到電腦上重新雙擊 <b>pet.pyw</b>，這個畫面會自動恢復。</div></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+const KIND = {"圖面與模型": ["圖面", "#5aa9e6"], "PDF": ["PDF", "#ef6b60"], "試算表": ["試算表", "#62c483"], "簡報": ["簡報", "#f0924a"],
+  "圖片": ["圖片", "#b78be8"], "文件": ["文件", "#7f9cf5"], "影音": ["影音", "#e879b9"], "壓縮檔": ["壓縮檔", "#c9b458"],
+  "安裝檔": ["安裝檔", "#8b93a1"], "程式與資料": ["程式", "#4fd1c5"], "其他": ["其他", "#8b93a1"]};
+const SINCE = {"": "不限時間", today: "今天", week: "本週", lastweek: "上週"};
+const PAGE = 120;
+const state = { project: "", kind: "", since: "", sub: "", q: "", limit: PAGE, projects: [], files: [], subs: [], tasks: [], hidden: [], missing: [] };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const icon = n => `<svg><use href="#i-${n}"/></svg>`;
+const base = p => p.split(/[\\/]/).pop();
+
+async function api(path, body) {
+  let r;
+  try {
+    r = await fetch(path, { method: body ? "POST" : "GET", headers: {"X-Token": TOKEN, "Content-Type": "application/json"},
+      body: body ? JSON.stringify(body) : undefined });
+  } catch (e) {   // 連不上：先用最輕的請求確認是整個程式結束了，還是只有這一個請求失敗
+    let alive = false;
+    try { alive = (await fetch("/api/ping", {headers: {"X-Token": TOKEN}})).status < 500; } catch (e2) {}
+    if (alive) throw new Error("暫時讀不到，請再試一次。");
+    document.body.classList.add("offline");
+    throw new Error("檔案管家已經關閉，請重新雙擊 pet.pyw");
+  }
+  if (document.body.classList.contains("offline")) { location.reload(); }
+  if (r.status === 403) { location.reload(); throw new Error("重新連線中"); }
+  const data = await r.json();
+  if (!r.ok) { const err = new Error(data.error || "發生錯誤"); err.folderOffline = !!data.offline; throw err; }
+  return data;
+}
+let toastTimer;
+function toast(msg, err) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", err ? 4000 : 2200);
+}
+function ago(ts) {
+  if (!(ts > 0)) return "日期異常";   // 檔案的修改時間在未來或太久以前（通常是別台電腦的時鐘錯了）
+  const s = Date.now() / 1000 - ts;
+  if (s < 90) return "剛剛";
+  if (s < 3600) return Math.round(s / 60) + " 分鐘前";
+  if (s < 86400) return Math.round(s / 3600) + " 小時前";
+  const days = Math.round(s / 86400);
+  if (days < 14) return days + " 天前";
+  const d = new Date(ts * 1000), md = `${d.getMonth() + 1}/${d.getDate()}`;
+  if (days < 60) return `${md}（${Math.round(days / 7)} 週前）`;
+  if (days < 335) return `${md}（${Math.round(days / 30)} 個月前）`;
+  return `${d.getFullYear()}/${md}`;
+}
+function bucket(ts) {  // 今天、昨天、本週（週一起）、上週，再往前按月份
+  const now = new Date(), midnight = new Date(now).setHours(0, 0, 0, 0) / 1000;
+  const monday = midnight - ((now.getDay() + 6) % 7) * 86400;
+  if (!(ts > 0)) return "日期異常（修改時間不合理）";
+  if (ts >= midnight) return "今天";
+  if (ts >= midnight - 86400) return "昨天";
+  if (ts >= monday) return "本週";
+  if (ts >= monday - 7 * 86400) return "上週";
+  const d = new Date(ts * 1000);
+  return (d.getFullYear() === now.getFullYear() ? "" : d.getFullYear() + " 年 ") + (d.getMonth() + 1) + " 月";
+}
+/* 檔名：不顯示副檔名（左邊色塊已標示）；太長時省略中間、保留結尾的版號 */
+function shortName(name, max) {
+  const stem = name.replace(/\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,6}$/, "");   // 只去掉真正的副檔名（「圖說 1.5版」保留）
+  const w = c => c.charCodeAt(0) > 255 ? 2 : 1;
+  let total = 0; for (const c of stem) total += w(c);
+  if (total <= max) return esc(stem);
+  const tailMax = Math.floor(max * .4), headMax = max - tailMax - 2;
+  let head = "", tail = "", n = 0;
+  for (const c of stem) { if (n + w(c) > headMax) break; head += c; n += w(c); }
+  n = 0; for (const c of [...stem].reverse()) { if (n + w(c) > tailMax) break; tail = c + tail; n += w(c); }
+  return esc(head) + "…" + esc(tail);
+}
+/* 專案名稱開頭的案號（如 2025-003_）縮成小字，讓名稱主體優先 */
+function projName(name) {
+  const m = name.match(/^([0-9A-Za-z][0-9A-Za-z.\-]*\d)[_\-\s]+(.+)$/);
+  return m ? [esc(m[1]), esc(m[2])] : ["", esc(name)];
+}
+
+/* ---------- 專案 ---------- */
+function renderProjects() {
+  // 案號與「今天有動」放在名稱上方的小字，不佔名稱的寬度
+  const row = (p, [code, name], cls) => `<button class="proj ${cls || ""} ${p.path === state.project ? "sel" : ""}" data-proj="${esc(p.path)}"><span>${code ? `<small>${code}</small>` : ""}<em>${name}</em></span>${p.today ? '<i class="dot"></i>' : ""}</button>`;
+  const active = state.projects.filter(p => p.active), rest = state.projects.filter(p => !p.active);
+  $("app").classList.toggle("many", state.projects.length > 7);
+  $("projects").innerHTML = row({path: "", today: false}, ["", "全部專案"], "all") + active.map(p => row(p, projName(p.name))).join("") +
+    (rest.length ? `<div class="label">兩週以上沒動</div>` + rest.map(p => row(p, projName(p.name))).join("") : "") +
+    ((state.missing || []).length ? `<div class="label" style="color:var(--failed);letter-spacing:0;line-height:1.5">目前讀不到（可能沒連上）：<br>${state.missing.map(m => esc(base(m))).join("、")}</div>` : "");
+}
+let pendingTimer = 0;
+// 桌面史萊姆的開關與大小（只有從 pet.pyw 啟動、桌面上真的有史萊姆時才顯示）
+function renderPet(p) {
+  state.pet = p;
+  const box = $("petctl"), i = p.sizes.indexOf(p.size);
+  box.classList.toggle("on", !!p.attached); box.classList.toggle("shown", !!p.visible);
+  $("pet-label").textContent = p.visible ? "桌面 開" : "桌面 關";
+  box.querySelector('[data-step="-1"]').disabled = i <= 0;
+  box.querySelector('[data-step="1"]').disabled = i >= p.sizes.length - 1;
+}
+async function loadPet() { try { renderPet(await api("/api/pet")); } catch (e) {} }
+
+async function loadProjects() {
+  loadPet();
+  const d = await api("/api/projects");
+  state.projects = d.projects; state.hidden = d.hidden; state.missing = d.missing; state.notice = d.notice;
+  clearTimeout(pendingTimer);
+  if (d.projects.some(p => p.pending)) pendingTimer = setTimeout(() => { if (idle()) refresh(); else loadProjects().catch(() => {}); }, 2000);
+  if (state.project && !d.projects.some(p => p.path === state.project)) state.project = "";
+  renderProjects();
+}
+
+/* ---------- 檔案 ---------- */
+const GROUP = { version: n => `另有<br>${n} 個舊版`, series: n => `同系列<br>另有 ${n} 份`, batch: n => `同一批<br>共 ${n + 1} 張` };
+function fileCard(f, opts = {}) {
+  const where = opts.project ? [projName(f.project)[1], esc(f.rel.replace(/\\/g, "/"))].filter(Boolean).join("／") : esc(f.rel.replace(/\\/g, "/"));
+  const n = f.versions ? f.versions.length + (f.more || 0) : 0;
+  const tags = (opts.latest ? `<span class="tag latest">最新</span>` : "") + (opts.mark ? `<span class="tag latest">${opts.mark}</span>` : "") + ""+
+    "";
+  const warn = f.later ? "・<span class='hint'>之後有新版</span>" : f.oldpin ? "・<span class='hint'>舊版</span>" : "";
+  return `<div class="file ${f.pinned ? "pinned" : ""} ${openedPaths.has(f.path) ? "opened" : ""}" style="--k:${(KIND[f.kind] || KIND["其他"])[1]}">
+    <button class="open" data-open="${esc(f.path)}" title="${esc(f.name)}"><span class="ext">${esc(f.ext || "檔案")}</span>
+      <span class="t"><div class="n">${shortName(f.name, opts.max || (n ? 30 : 40))}</div><div class="m">${tags}${ago(f.mtime)}${where ? "・" + where : ""}${warn}</div></span></button>
+    ${n && opts.versions ? `<button class="ver" data-ver="${esc(f.path)}">${f.group === "batch" ? (n + 1) + "<br>張" : "+" + n + "<br>版"}</button>` : ""}</div>`;
+}
+
+function renderFilters() {   // 用最近一次的資料加上目前的選擇來畫；點了篩選鈕會先呼叫它，讓按鈕立刻變色
+  const f = (val, label) => `<button class="f ${state.since === val ? "on" : ""}" data-since="${val}">${label}</button>`;
+  const picked = [state.sub ? base(state.sub) : "", state.kind ? KIND[state.kind][0] : ""].filter(Boolean).join("・");
+  $("filters").innerHTML = Object.keys(SINCE).map(k => f(k, SINCE[k])).join("") + `<span class="gap"></span>` +
+    `<button class="f" data-act="filter">${icon("folder")}篩選</button>` +
+    (picked ? `<button class="f on" data-act="clear-filter"><span>${esc(picked)}</span><span class="x">✕</span></button>` : "");
+  fades();
+}
+
+let fileSeq = 0, rescan = 0;
+async function loadFiles(quiet) {
+  const seq = ++fileSeq, grid = $("files");
+  clearTimeout(rescan);
+  const slow = setTimeout(() => grid.classList.add("loading"), quiet ? 60000 : 250);
+  const qs = new URLSearchParams({project: state.project, kind: state.kind, since: state.since, sub: state.sub, q: state.q, limit: state.limit});
+  let d;
+  try { d = await api("/api/files?" + qs); }
+  catch (e) {
+    if (seq !== fileSeq) return;
+    toast(e.message, true);
+    if (e.folderOffline && state.project) { state.project = ""; closeSheet(); await refresh(); }   // 回到總覽，那裡會標出「目前讀不到」
+    else if (state.project) {   // 例如另一個視窗把這個專案移除了：確認它還在，不在就回總覽
+      const before = state.project;
+      try { await loadProjects(); } catch (e2) {}
+      if (before && !state.project) { closeSheet(); resetList(); loadFiles(); }
+    }
+    return;
+  }
+  finally { clearTimeout(slow); grid.classList.remove("loading"); }
+  if (seq !== fileSeq) return;  // 已有更新的查詢
+  state.files = d.files; state.subs = d.subs;
+
+  state.last = d;
+  renderFilters();
+
+  if (!d.projects) {
+    grid.innerHTML = d.missing.length
+      ? `<div class="empty"><b style="color:var(--text)">目前讀不到專案資料夾</b><br>${d.missing.map(esc).join("<br>")}<br>
+          <small>網路磁碟或外接硬碟可能沒連上。設定都還在，接上之後這裡會自動恢復。</small></div>`
+      : `<div class="empty">${state.notice ? `<small style="color:var(--failed)">${esc(state.notice)}</small><br>` : ""}<b style="color:var(--text)">先告訴我專案放在哪裡</b><br>
+          <button class="big main" data-add="root">${icon("plus")}<span>加入一整批專案<small style="color:#5b4514">選一個總資料夾（例如 D:\\專案），裡面每個子資料夾＝一個專案</small></span></button>
+          <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button><br>
+          <small>只會讀取檔案清單，不會搬動、改名或刪除任何檔案。之後可以在右上角「⋯」裡移除。</small></div>`;
+    return;
+  }
+  const kindName = state.kind ? KIND[state.kind][0] : "檔案";
+  // 背景還在讀清單（第一次，或慢速磁碟上的更新）：過一下自己再問一次，不必使用者動手
+  $("fhead").classList.toggle("updating", !!d.scanning && d.files.length > 0);   // 畫面上是上次的清單，背景還在更新
+  if (d.scanning) rescan = setTimeout(() => { if (seq === fileSeq && ($("scroll").scrollTop < 5 || !d.files.length)) loadFiles(true); }, 1500);
+  const cname = (cur() || {}).name;
+  if (!d.files.length && d.scanning && !(state.kind || state.since || state.sub || state.q)) {
+    grid.innerHTML = `<div class="empty">正在讀取${cname ? "「" + esc(cname) + "」的" : ""}檔案清單…<br><small>資料夾在網路磁碟上時，第一次會比較久。</small></div>`;
+    return;
+  }
+  if (!d.files.length && older && state.project && !state.q && !state.kind && !state.sub) {
+    grid.innerHTML = `<div class="empty">這兩週沒有動過的檔案。<br><button class="big" data-reveal="${esc(state.project)}">${icon("folder")}<span>在檔案總管開啟（${older} 份）</span></button></div>`;
+    return;
+  }
+  if (!d.files.length) {
+    const kn = (/^[A-Za-z]/.test(kindName) ? " " : "") + kindName;
+    let msg = state.q ? `找不到「${esc(state.q)}」` : state.since ? `${SINCE[state.since]}沒有動過的${kn}` : `這裡沒有${kn}`;
+    if (state.sub) msg += `（資料夾：${esc(state.sub)}）`;
+    const undo = (state.kind ? `<button class="big" data-kind="${esc(state.kind)}">看全部類型</button>` : "") +
+      (state.sub ? `<button class="big" data-act="clear-sub">看全部資料夾</button>` : "") +
+      (state.since ? `<button class="big" data-since="">不限時間</button>` : "");
+    const why = d.denied ? `<br><small>有 ${d.denied} 個資料夾讀不到（可能沒有權限），裡面的檔案沒有列出。</small>` : "";
+    grid.innerHTML = `<div class="empty">${msg}${why}<br>${undo}</div>`;
+    return;
+  }
+  $("ftitle").innerHTML = cur() ? projName(cur().name)[1] : "全部專案";
+  $("fexp").innerHTML = cur() ? `<button class="f" data-reveal="${esc(cur().path)}">${icon("folder")}在檔案總管開啟</button>` : "";
+  const picked = [state.sub ? base(state.sub) : "", state.kind ? KIND[state.kind][0] : "", state.since ? SINCE[state.since] : ""].filter(Boolean).join("・");
+  $("fchip").innerHTML = picked ? `<button class="f on" data-act="clear-filter"><span>只看 ${esc(picked)}</span><span class="x">✕</span></button>` : "";
+  let html = "", last = null;
+  // 區段標題直接寫份數：「上週 11 份」就是報告的第一句話，不必另外按按鈕
+  const secOf = x => x.pinned ? "釘選" : bucket(x.mtime), cnt = {};
+  const RECENT = ["釘選", "今天", "昨天", "本週", "上週"];
+  // 這裡只負責「最近的」；更早的、要仔細找的，交給檔案總管
+  const older = d.files.filter(x => !RECENT.includes(secOf(x))).length + Math.max(0, d.total - d.files.length);
+  if (!state.q && !state.kind && !state.sub) d.files = d.files.filter(x => RECENT.includes(secOf(x)));
+  d.files.forEach(x => { const s = secOf(x); cnt[s] = (cnt[s] || 0) + 1; });
+  if (state.since) {  // 報告用的一句話摘要，可以直接唸
+    const parts = Object.keys(KIND).filter(k => d.kinds[k]).map(k => `${KIND[k][0]} ${d.kinds[k]}`).join("・");
+    html += `<div class="sum">${SINCE[state.since]}動了 <b>${d.total}</b> 份${state.kind ? KIND[state.kind][0] : "：" + parts}${d.new ? `　其中新增 <b>${d.new}</b> 份` : ""}</div>`;
+  }
+  for (const x of d.files) {
+    const sec = secOf(x);
+    if (sec !== last) { html += `<div class="sec">${sec}<span>${cnt[sec]} 份</span></div>`; last = sec; }
+    html += fileCard(x, {project: !state.project});
+  }
+  if (older && !state.q && !state.kind && !state.sub) html += state.project
+    ? `<div class="empty" style="padding:1rem"><button class="big" data-reveal="${esc(state.project)}">${icon("folder")}<span>更早的檔案（${older} 份）→ 在檔案總管開啟</span></button></div>`
+    : `<div class="empty" style="padding:1rem;font-size:.95rem">更早的檔案沒有列在這裡。點左邊的專案，最下面可以直接到檔案總管。</div>`;
+  if (d.denied) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">有 ${d.denied} 個資料夾讀不到（可能沒有權限），裡面的檔案沒有列出。</div>`;
+  if (d.truncated) html += `<div class="empty" style="padding:.6rem;font-size:.9rem">這個專案的檔案太多，只列出一部分。</div>`;
+  grid.innerHTML = html;
+}
+function resetList() { state.limit = PAGE; $("scroll").scrollTop = 0; }
+
+const openedPaths = new Set();   // 這次使用期間開過的檔案，重新整理清單後仍然打勾
+async function openFile(path, reveal, card) {
+  if (card) { card.classList.add("opening"); const m = card.querySelector(".m"); if (m) { m.dataset.old = m.innerHTML; m.textContent = "開啟中…"; } }
+  try {
+    const d = await api("/api/open", {path, reveal});
+    toast(d.did === "opened" ? "已開啟　" + base(path) : d.did === "program" ? "為了安全，程式類檔案不直接執行，已改在檔案總管顯示它的位置" : "已在檔案總管顯示　" + base(path));
+    if (d.did === "opened") { openedPaths.add(path); if (card) card.classList.add("opened"); }
+  } catch (e) {   // 例如檔案已被移走：立刻取消「開啟中」並重新整理清單
+    toast(e.message, true);
+    if (card) card.classList.remove("opening");
+    closeSheet();
+    if (e.folderOffline) state.project = "";
+    refresh(); return;
+  }
+  if (card) setTimeout(() => { card.classList.remove("opening"); const m = card.querySelector(".m"); if (m && m.dataset.old) m.innerHTML = m.dataset.old; }, 3000);
+}
+
+/* ---------- AI 助手 ---------- */
+async function loadTasks() {   // 找檔案畫面只留一顆「AI 對話」鈕：史萊姆的樣子＋幾件在等你
+  let d;
+  try { d = await api("/api/tasks"); } catch (e) { return; }
+  state.tasks = d.tasks;
+  noticeStates(d.tasks);
+  const top = ["failed", "waiting", "running", "done"].find(s => d.tasks.some(t => t.state === s)) || "idle";
+  const need = d.tasks.filter(t => t.state === "waiting" || t.state === "failed").length;
+  $("mascot").innerHTML = slime(top);
+  $("ai-count").innerHTML = need ? `<b>${need}</b>件等你` : "AI 對話";
+}
+function taskSheet(id) {
+  const t = state.tasks.find(x => x.id === id) || (state.threads || {})[id];
+  if (!t) return;
+  sheet(head(esc(t.title)) + `<div class="detail list s-${t.state}">
+    <p style="color:var(--s);font-weight:700;font-size:1.05rem">${esc(t.state_text)}・${ago(t.updated)}</p>
+    <p style="color:var(--text)">${esc(t.next || "")}</p>
+    ${t.where ? `<p>所在的 GitHub 專案：${esc(t.where)}</p>` : ""}
+    ${t.todos.length ? `<ul>${t.todos.map(x => `<li class="${x.status}">${esc(x.text)}</li>`).join("")}</ul>` : ""}
+    ${t.prompt ? `<p>你交代的：${esc(t.prompt)}</p>` : ""}${t.reply ? `<p>${esc(t.reply)}</p>` : ""}
+    ${t.url ? `<button class="big" data-url="${esc(t.url)}">在 GitHub 開啟</button>` : ""}</div>`);
+}
+
+/* ---------- 史萊姆：AI 助手的樣子。平常待在頁面上方，狀態改變時會跳到游標（或手指最後碰的位置）來找你 ---------- */
+function slime(state, id) {
+  return `<svg class="slime sl-${state} s-${state}" viewBox="0 0 64 60" ${id ? `data-slime="${esc(id)}"` : ""} aria-hidden="true">
+    <ellipse class="sl-shadow" cx="32" cy="55" rx="21" ry="3.5"/>
+    <g class="sl-body"><path class="sl-skin" d="M7 46 C7 22 20 8 32 8 C44 8 57 22 57 46 C57 53 49 54 32 54 C15 54 7 53 7 46Z"/>
+      <ellipse class="sl-shine" cx="21" cy="21" rx="6.5" ry="3.6" transform="rotate(-28 21 21)"/>
+      <g class="sl-eyes"><ellipse cx="24" cy="34" rx="3.3" ry="4.4"/><ellipse cx="40" cy="34" rx="3.3" ry="4.4"/></g>
+      <g class="sl-lids"><path d="M20 35 q4 -3 8 0"/><path d="M36 35 q4 -3 8 0"/></g>
+      <path class="sl-smile" d="M27 43 Q32 47 37 43"/><path class="sl-frown" d="M27 46 Q32 42 37 46"/>
+      <circle class="sl-drop" cx="50" cy="24" r="2.6"/></g>
+    <g class="sl-mark"><circle cx="52" cy="11" r="9"/><text x="52" y="15.5" text-anchor="middle">!</text></g>
+    <text class="sl-zzz" x="47" y="14">z</text><text class="sl-zzz z2" x="54" y="7">z</text></svg>`;
+}
+// 游標「現在」在哪裡：滑鼠在面板上移動就隨時更新；滑鼠移出面板（例如回到主螢幕）就標成不在這裡，
+// 由主螢幕上的桌面史萊姆去找你。手指沒有「懸停」，以手指正碰著或剛碰的位置為準。
+const pointer = {x: innerWidth / 2, y: innerHeight * .55, inside: false};
+function pointerHere(on) {   // 告訴桌面史萊姆：游標在面板上時由面板這隻去找你，牠不用跑過來
+  if (pointer.inside === on) return;
+  pointer.inside = on;
+  api("/api/pointer", {inside: on}).catch(() => {});
+}
+["pointermove", "pointerdown"].forEach(t => document.addEventListener(t, ev => { pointer.x = ev.clientX; pointer.y = ev.clientY; pointerHere(true); }, {passive: true}));
+document.documentElement.addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") pointerHere(false); });
+window.addEventListener("blur", () => pointerHere(false));
+const knownState = {};     // 每件事上次的狀態，用來發現「剛做完」「剛出錯」
+let stateSeeded = false;
+const runners = {};        // 正跑出來找你的史萊姆
+const CALL = {waiting: "做完了，等你看！", failed: "出錯了，需要你看一下。", done: "完成了！"};
+const knownPic = {};       // 每段對話上次看到的最新一張 AI 圖片
+const newestPic = t => [...(t.images || [])].reverse().find(x => x.role === "ai");
+function noticeStates(tasks) {
+  for (const t of tasks) {
+    const before = knownState[t.id], pic = newestPic(t), picBefore = knownPic[t.id];
+    knownState[t.id] = t.state; knownPic[t.id] = pic ? pic.id : "";
+    if (!stateSeeded) continue;   // 第一次載入只記錄，不打擾
+    const freshPic = pic && pic.id !== picBefore && pic.ts > (t.read_at || 0) ? pic : null;
+    if (freshPic) summon(t, freshPic);                                   // 有新圖：拿著圖跑來
+    else if (before && before !== t.state && CALL[t.state]) summon(t);   // 狀態變了：空手跑來
+  }
+  stateSeeded = true;
+}
+/* ---------- 圖片 ---------- */
+const picCache = {};
+function picURL(img) {   // 需要通行碼，所以用 fetch 取回再給 <img>
+  if (img.url) return Promise.resolve(img.url);
+  if (!picCache[img.id]) picCache[img.id] = fetch("/api/image?id=" + encodeURIComponent(img.id), {headers: {"X-Token": TOKEN}})
+    .then(r => { if (!r.ok) throw new Error("這張圖已經找不到了"); return r.blob(); }).then(b => URL.createObjectURL(b))
+    .catch(e => { delete picCache[img.id]; throw e; });
+  return picCache[img.id];
+}
+const findPic = (thread, id) => ((state.threads || {})[thread] && state.threads[thread].images || []).find(x => x.id === id)
+  || (runners[thread] && (runners[thread].task.images || []).find(x => x.id === id)) || {id};
+async function viewPic(thread, id) {   // 點一下：用電腦的看圖程式打開
+  try { await api("/api/open_image", {id}); toast("已用看圖程式打開"); markRead(thread, true); }
+  catch (e) { toast(e.message, true); }
+}
+// 按住：史萊姆把圖像道具一樣拋出來，在畫面中間放大；放開：牠再把圖撿回去
+let toss = null;
+function sparkle(x, y) {
+  const colors = ["#f4b860", "#7fd1ff", "#ff8fb1", "#a6e3a1"];
+  for (let i = 0; i < 10; i++) {
+    const s = document.createElement("i"), a = i / 10 * Math.PI * 2, d = 40 + Math.random() * 50;
+    s.className = "spark"; s.style.left = x + "px"; s.style.top = y + "px"; s.style.background = colors[i % 4];
+    s.style.setProperty("--dx", Math.cos(a) * d + "px"); s.style.setProperty("--dy", Math.sin(a) * d + "px");
+    document.body.appendChild(s); setTimeout(() => s.remove(), 800);
+  }
+}
+async function throwPic(src, thread, id) {
+  const from = (src.querySelector("img") || src).getBoundingClientRect();
+  let url;
+  try { url = await picURL(findPic(thread, id)); } catch (e) { toast(e.message, true); return; }
+  if (!toss || toss.src !== src) return;   // 圖還沒載入就放開了
+  const img = new Image(); img.src = url;
+  await img.decode().catch(() => {});
+  if (!toss || toss.src !== src) return;
+  const ratio = (img.naturalWidth || 4) / (img.naturalHeight || 3);
+  let w = innerWidth * .62, h = w / ratio;
+  if (h > innerHeight * .78) { h = innerHeight * .78; w = h * ratio; }
+  const box = document.createElement("div"), bg = document.createElement("div"), tip = document.createElement("div");
+  box.className = "toss"; bg.className = "toss-bg"; tip.className = "toss-tip"; tip.textContent = "放開，史萊姆就把圖撿回去";
+  Object.assign(box.style, {width: w + "px", height: h + "px", left: (innerWidth - w) / 2 + "px", top: (innerHeight - h) / 2 + "px"});
+  box.appendChild(img);
+  document.body.append(bg, box, tip);
+  requestAnimationFrame(() => bg.classList.add("show"));
+  const runner = src.closest(".runner");
+  if (runner) { runner.classList.add("empty", "throw"); setTimeout(() => runner.classList.remove("throw"), 450); }
+  else src.style.visibility = "hidden";
+  const fx = from.left + from.width / 2 - innerWidth / 2, fy = from.top + from.height / 2 - innerHeight / 2, fs = Math.max(.05, from.width / w);
+  box.animate([
+    {transform: `translate(${fx}px, ${fy}px) scale(${fs}) rotate(0deg)`},
+    {transform: `translate(${fx * .45}px, ${Math.min(fy, 0) * .45 - innerHeight * .28}px) scale(${(fs + 1) / 2}) rotate(220deg)`, offset: .5},
+    {transform: `translate(0, 0) scale(1.07) rotate(372deg)`, offset: .82},
+    {transform: `translate(0, 0) scale(1) rotate(360deg)`}], {duration: 700, easing: "cubic-bezier(.3, .7, .4, 1)", fill: "forwards"})
+    .finished.then(() => { if (toss && toss.box === box) sparkle(innerWidth / 2, (innerHeight - h) / 2); }).catch(() => {});
+  Object.assign(toss, {box, bg, tip, runner, fx, fy, fs, w, h});
+  markRead(thread, true);
+}
+function catchPic() {
+  const t = toss; toss = null;
+  if (!t || !t.box) return;
+  const to = (t.src.querySelector("img") || t.src).getBoundingClientRect();
+  const tx = to.left + to.width / 2 - innerWidth / 2, ty = to.top + to.height / 2 - innerHeight / 2, ts = Math.max(.05, to.width / t.w);
+  t.bg.classList.remove("show"); t.tip.remove();
+  t.box.animate([
+    {transform: "translate(0, 0) scale(1) rotate(0deg)"},
+    {transform: `translate(${tx * .5}px, ${Math.min(ty, 0) * .5 - innerHeight * .18}px) scale(${(ts + 1) / 2.4}) rotate(-160deg)`, offset: .5},
+    {transform: `translate(${tx}px, ${ty}px) scale(${ts}) rotate(-360deg)`}], {duration: 480, easing: "ease-in", fill: "forwards"})
+    .finished.catch(() => {}).then(() => {
+      t.box.remove(); t.bg.remove();
+      if (t.runner) { t.runner.classList.remove("empty"); t.runner.classList.add("catch"); setTimeout(() => t.runner.classList.remove("catch"), 400); }
+      else t.src.style.visibility = "";
+    });
+}
+document.addEventListener("pointerdown", ev => {
+  const src = ev.target.closest("[data-pic]");
+  if (!src || ev.button > 0) return;
+  const thread = src.dataset.picThread, id = src.dataset.pic, r = runners[thread];
+  if (r) r.holding = true;
+  toss = {src, thread, id, down: Date.now(), x: ev.clientX, y: ev.clientY};
+  toss.timer = setTimeout(() => { if (toss && toss.src === src) { toss.thrown = true; throwPic(src, thread, id); } }, 220);
+});
+["pointerup", "pointercancel"].forEach(type => document.addEventListener(type, ev => {
+  if (!toss) return;
+  const t = toss; clearTimeout(t.timer);
+  if (runners[t.thread]) runners[t.thread].holding = false;
+  if (t.thrown) { catchPic(); return; }
+  toss = null;
+  if (type !== "pointerup" || Math.hypot(ev.clientX - t.x, ev.clientY - t.y) >= 20) return;
+  const isRunner = t.src.classList.contains("runner");
+  if (isRunner && !ev.target.closest(".pic")) { goThread(t.thread); return; }   // 點史萊姆身體或泡泡：跳到那段對話
+  viewPic(t.thread, t.id);                                                       // 點圖：用看圖程式打開
+  if (isRunner) dismiss(t.thread);
+}));
+async function goThread(id) {   // 跳到某段對話（跑來的史萊姆、桌面史萊姆都用這個）
+  if (runners[id]) dismiss(id);
+  if (!document.body.classList.contains("talk")) setMode(true);
+  state.open = id; await loadTalk();
+}
+// 桌面史萊姆被點時，請面板直接跳到那段對話
+setInterval(async () => {
+  if (document.hidden) return;
+  try { const f = await api("/api/focus"); if (f.thread) goThread(f.thread); } catch (e) {}
+}, 1500);
+
+/* ---------- 已讀 ---------- */
+async function markRead(id, read) {
+  const t = (state.threads || {})[id];
+  if (read && t && !t.unread) return;
+  if (read && t && readMark[id] === undefined) readMark[id] = t.read_at;   // 記住原本看到哪裡，「以下是新訊息」的線才畫得出來
+  try {
+    const r = await api("/api/read", {thread: id, read});
+    if (t) { t.unread = r.unread; if (read) t.read_at = Date.now() / 1000; }
+    if (document.body.classList.contains("talk")) renderTalk();
+  } catch (e) { if (!read) toast(e.message, true); }
+}
+function homeOf(id) {   // 這隻史萊姆平常待的地方：對話畫面是它那一欄的上方，找檔案畫面是右上角
+  const el = document.querySelector(`.talk .slime[data-slime="${CSS.escape(id)}"]`) || document.querySelector("body:not(.talk) #mascot .slime") || document.querySelector(".slime");
+  const r = el ? el.getBoundingClientRect() : {left: innerWidth / 2, top: 8, width: 44, height: 40};
+  return {x: r.left + r.width / 2, y: r.top + r.height / 2, el};
+}
+function summon(t, pic) {
+  if (runners[t.id]) dismiss(t.id, true);
+  if (Object.keys(runners).length >= 3) return;   // 一次最多三隻，不要滿畫面都是
+  const home = homeOf(t.id), n = Object.keys(runners).length;
+  const el = document.createElement("button");
+  el.className = `runner s-${t.state} ${pic ? "has-pic" : ""}`; el.dataset.runner = t.id;
+  if (pic) { el.dataset.pic = pic.id; el.dataset.picThread = t.id; }
+  el.innerHTML = pic
+    ? `<span class="carry"><span class="pic"><img alt=""></span>${slime(t.state === "running" ? "done" : t.state)}</span>` +
+      `<span class="say"><b>${esc(t.title)}</b>帶了一張圖給你！<small>點圖：用看圖程式打開・點我：跳到這段對話・按住：丟給你看</small></span>`
+    : slime(t.state) + `<span class="say"><b>${esc(t.title)}</b>${CALL[t.state] || "有新訊息！"}<small>點我看這件事</small></span>`;
+  if (pic) picURL(pic).then(u => { const im = el.querySelector(".pic img"); if (im) im.src = u; }).catch(() => {});
+  el.style.left = home.x + "px"; el.style.top = home.y + "px";
+  document.body.appendChild(el);
+  if (home.el) home.el.classList.add("away");
+  const r = runners[t.id] = {el, task: t, timer: 0};
+  const go = () => {   // 跳到游標現在的位置旁邊，游標移動就跟著走；游標不在面板上就在原位下方等你
+    if (r.holding) return;   // 正把圖丟給你看：站著不動
+    const size = 64, home = homeOf(t.id);
+    // 游標已經在牠身邊（正要點牠）：停下來等你，不要一直往旁邊躲
+    if (pointer.inside && r.arrived && Math.hypot(pointer.x - parseFloat(el.style.left), pointer.y - parseFloat(el.style.top)) < 110) return;
+    const at = pointer.inside ? {x: pointer.x + 46 + n * 30, y: pointer.y + 34 + n * 26} : {x: home.x + n * 70, y: home.y + 80};
+    const x = Math.min(innerWidth - 150, Math.max(size, at.x)), y = Math.min(innerHeight - size, Math.max(size, at.y));
+    const dist = Math.hypot(x - parseFloat(el.style.left), y - parseFloat(el.style.top));
+    if (dist < 40 && r.arrived) return;
+    el.classList.toggle("hopping", dist > 120); el.style.setProperty("--hops", Math.max(2, Math.round(dist / 170)));
+    el.style.left = x + "px"; el.style.top = y + "px"; r.arrived = true;
+    clearTimeout(r.hopEnd); r.hopEnd = setTimeout(() => el.classList.remove("hopping"), 950);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(go));
+  r.follow = setInterval(go, 300);
+  r.timer = setTimeout(() => { if (!r.holding) dismiss(t.id); }, pic ? 45000 : 25000);   // 沒人理它，一陣子後自己回去
+}
+function dismiss(id, now) {
+  const r = runners[id];
+  if (!r) return;
+  clearInterval(r.follow); clearTimeout(r.timer); clearTimeout(r.hopEnd); delete runners[id];
+  const home = homeOf(id);
+  r.el.classList.add("leaving", "hopping"); r.el.style.left = home.x + "px"; r.el.style.top = home.y + "px";
+  setTimeout(() => { r.el.remove(); document.querySelectorAll(".slime.away").forEach(s => { if (!Object.keys(runners).length) s.classList.remove("away"); }); }, now ? 0 : 900);
+}
+
+/* ---------- AI 對話：一個專案一欄 ---------- */
+const picked = {};        // 每一欄目前看的是哪一段對話
+const readMark = {};      // 打開對話時「看到哪裡」：用來畫「以下是新訊息」那條線（打開後就標成已讀，線要留著）
+const seenLast = {};      // 每段對話上次畫到的最後一則，用來判斷要不要捲到最新
+// 助手的訊息常帶 Markdown 記號；這裡只顯示純文字，把最常見的記號拿掉比較好讀
+const tidy = s => s.replace(/^#{1,6}\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`\n]+)`/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
+function clock(ts) {
+  if (!(ts > 0)) return "";
+  const d = new Date(ts * 1000), today = new Date().toDateString() === d.toDateString();
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return today ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+function talkColumn(key, title, threads, extra) {
+  const cur = threads.find(t => t.id === picked[key]) || threads[0];
+  picked[key] = cur.id;
+  const [done, total] = cur.progress || [0, 0];
+  const local = cur.source !== "GitHub";
+  let prev = "", lineDone = false;
+  const seen = readMark[cur.id] !== undefined ? readMark[cur.id] : (cur.unread ? cur.read_at : Infinity);
+  const items = [...(cur.messages || []), ...(cur.images || []).map(x => ({...x, pic: true}))].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const lastText = items.map(m => !m.pic).lastIndexOf(true);
+  const msgs = items.map((m, i) => {
+    const line = !lineDone && m.role === "ai" && m.ts > seen ? (lineDone = true, `<div class="newline">以下是新訊息</div>`) : "";
+    const who = m.role !== prev ? `<div class="who ${m.role}">${m.role === "ai" ? "AI 助手" : "你"}</div>` : "";
+    prev = m.role;
+    if (m.pic) return line + who + `<button class="mpic ${m.role}" data-pic="${esc(m.id)}" data-pic-thread="${esc(cur.id)}"><img data-load="${esc(m.id)}" alt=""><small>${esc(m.name || "圖片")}・${clock(m.ts)}・點一下打開，按住放大</small></button>`;
+    const long = m.text.length > 260 && i < lastText;   // 較早的長訊息先收起來，點一下展開
+    return line + who + `<div class="msg ${m.role} ${long ? "clip" : ""}" ${long ? 'data-act="unclip"' : ""}>${esc(tidy(m.text))}<small>${clock(m.ts)}${m.sent ? "・從這裡送出" : ""}</small></div>`;
+  }).join("");
+  const empty = `<div class="tnote">${local ? "這段對話還沒有內容。" :
+    "這段對話在雲端進行，內容要到手機的 Claude App 看。<br>這裡只顯示它在 GitHub 留下的說明。"}</div>`;
+  return `<section class="tcol s-${cur.state}" data-col="${esc(key)}">
+    <div class="thead">
+      <button class="tstat s-${cur.state}" data-task="${esc(cur.id)}">${slime(cur.state, cur.id)}
+        <span class="tt"><h2>${title}</h2>
+          <div class="st">${esc(cur.state_text || "")}${total ? ` ${done}/${total}` : ""}${cur.doing && cur.state === "running" ? `<em>　正在：${esc(cur.doing)}</em>` : ""}</div>
+          ${total ? `<div class="prog"><b style="width:${Math.round(done / total * 100)}%"></b></div>` : ""}</span></button>
+      ${extra || ""}</div>
+    ${threads.length > 1 ? `<div class="tabs">${threads.map(t => `<button class="tab s-${t.state} ${t.id === cur.id ? "on" : ""}" data-thread="${esc(t.id)}" data-key="${esc(key)}">${esc(t.title)}</button>`).join("")}</div>` : ""}
+    <div class="msgs" data-thread-id="${esc(cur.id)}">${msgs || empty}</div>
+    ${cur.can_reply ? `<button class="rbar" data-reply="${esc(cur.id)}">回覆 AI 助手…<span>送出</span></button>`
+      : `<div class="rbar off">這段對話不能從這裡回覆，請到 GitHub 或 claude.ai</div>`}</section>`;
+}
+/* 回覆 AI 助手：副螢幕上不好打字，所以先給幾句常用的話，點了會填進去，可以再改 */
+const QUICK = ["好，照這樣繼續。", "請先暫停，等我確認。", "請說明目前的進度和遇到的問題。", "這部分請重做，原因是："];
+function replySheet(id) {
+  const t = (state.threads || {})[id];
+  if (!t) return;
+  const lastAi = [...(t.messages || [])].reverse().find(m => m.role === "ai");
+  const where = t.can_reply === "cloud"
+    ? "訊息會送進雲端的那段對話，助手會在雲端接著做。它的回覆這裡讀不到，請到手機的 Claude App 或 claude.ai 看；它更新 GitHub 上的成果時，這一欄會跟著更新。"
+    : "會在這台電腦上接續那段對話。助手回覆後，會出現在這一欄。";
+  if (!state.talk.cli) {
+    sheet(head("回覆 AI 助手") + `<div class="list"><p style="color:var(--text);font-size:1rem">這台電腦還沒有安裝 Claude Code，所以沒辦法從這裡送出回覆。</p>
+      <p>安裝並登入一次之後就可以用：<br>1. 到 claude.com/claude-code 下載安裝 Claude Code。<br>2. 開啟終端機（命令提示字元），輸入 <b style="color:var(--text)">claude auth login</b>，用你平常的 Claude 帳號登入。<br>3. 回到這裡重新點「回覆 AI 助手」。</p></div>`);
+    return;
+  }
+  sheet(head("回覆：" + esc(t.title)) + `<div class="list">
+    ${lastAi ? `<div class="msg ai" style="max-width:100%;max-height:6.5rem;overflow:hidden">${esc(tidy(lastAi.text).slice(0, 220))}</div>` : ""}
+    <div class="filters" style="flex-wrap:wrap">${QUICK.map(q => `<button class="f" data-quick="${esc(q)}" style="height:2.8rem;font-size:.92rem;font-weight:400">${esc(q)}</button>`).join("")}</div>
+    <textarea id="reply-text" maxlength="2000" placeholder="在這裡輸入要對 AI 助手說的話（可以先點上面的句子再修改）"></textarea>
+    <div class="list two"><button class="big main" data-act="send-reply" data-thread="${esc(id)}" style="justify-content:center">送出</button>
+      <button class="big" data-act="close" style="justify-content:center">取消</button></div>
+    <p style="margin:.2rem .3rem 0">${where}</p></div>`);
+  setTimeout(() => { const box = $("reply-text"); if (box) box.focus(); }, 350);
+}
+let talkSeq = 0;
+async function loadTalk() {
+  const seq = ++talkSeq;
+  let d;
+  try { d = await api("/api/conversations"); } catch (e) { return; }
+  if (seq !== talkSeq || !document.body.classList.contains("talk")) return;
+  state.talk = d;
+  state.threads = {};
+  const active = [...d.columns.flatMap(c => c.threads), ...d.loose];
+  [...active, ...d.columns.flatMap(c => c.shelved || []), ...(d.loose_shelved || [])].forEach(t => state.threads[t.id] = t);
+  noticeStates(active);   // 收起來的對話不通知
+  renderTalk();
+}
+
+/* AI 對話只有兩個畫面：總覽（每個專案一張卡）→ 點卡片進入那個專案的對話（← 回總覽）。
+   細節（子對話、整理舊對話）交給 Claude App；舊對話照樣自動收起來，這裡不另外管理。 */
+const RANK = {failed: 0, waiting: 1, running: 2, done: 3, idle: 4};
+const lead = c => [...c.threads].sort((x, y) => RANK[x.state] - RANK[y.state] || y.updated - x.updated)[0];
+function allThreads(d) {   // 每段 AI 對話一張卡；順序固定（依專案，再依開始的時間），不會因為誰剛有動靜就換位置
+  const out = [];
+  d.columns.forEach(c => c.threads.forEach(t => out.push({t, project: projName(c.name)[1], key: c.path})));
+  d.loose.forEach(t => out.push({t, project: "", key: "__loose"}));
+  return out.sort((x, y) => x.project.localeCompare(y.project) || (x.t.started || 0) - (y.t.started || 0));
+}
+function shelvedThreads(d) {
+  return [...d.columns.flatMap(c => (c.shelved || []).map(t => ({t, project: projName(c.name)[1]}))), ...(d.loose_shelved || []).map(t => ({t, project: ""}))];
+}
+const isShelved = id => !!state.talk && shelvedThreads(state.talk).some(x => x.t.id === id);
+function closedTile(d) {
+  const n = shelvedThreads(d).length;
+  return n ? `<button class="tcard closed" data-act="closed-list"><span>已關閉的對話</span><b>${n}</b><small>點這裡找回</small></button>` : "";
+}
+function closedSheet() {
+  const list = shelvedThreads(state.talk || {columns: []});
+  if (!list.length) return closeSheet();
+  sheet(head("已關閉的對話") + `<div class="list two">` + list.map(({t, project}) =>
+    `<button class="big" data-shelve="${esc(t.id)}" data-on=""><span>${esc(t.title)}<small>${project ? project + "・" : ""}點一下放回總覽</small></span></button>`).join("") + `</div>`);
+}
+function talkCard({t, project}) {
+  const [done, total] = t.progress || [0, 0];
+  const lastAi = [...(t.messages || [])].reverse().find(m => m.role === "ai");
+  const need = t.state === "failed" || t.state === "waiting";
+  return `<section class="tcard s-${t.state} ${need ? "need" : ""} ${t.unread ? "unread" : ""}">
+    <button class="tcard-body" data-open-thread="${esc(t.id)}">${slime(t.state, t.id)}
+      ${t.unread ? `<span class="newbadge">${t.unread} 則新訊息</span>` : ""}<b>${esc(t.title)}</b>${project ? `<small class="cproj">${project}</small>` : ""}<span class="cst">${esc(t.state_text || "")}</span>
+      ${total ? `<span class="prog"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ""}
+      <span class="csnip">${lastAi ? esc(tidy(lastAi.text).slice(0, 160)) : ""}</span></button>
+    ${t.can_reply ? `<button class="rbar" data-reply="${esc(t.id)}">回覆…<span>送出</span></button>` : ""}</section>`;
+}
+function renderTalk() {
+  const d = state.talk, box = $("talk-cols");
+  if (!d) return;
+  const all = allThreads(d), open = all.find(x => x.t.id === state.open);
+  if (state.open && !open) state.open = null;
+  $("talk-back").innerHTML = open ? `<span style="font-size:1.6rem;line-height:1">←</span>全部` : `${icon("folder")}找檔案`;
+  $("talk-back").dataset.act = open ? "talk-home" : "files";
+  // 記住捲到哪裡：使用者正在往上翻舊訊息時，更新不可以把他拉回底部
+  const keep = {};
+  box.querySelectorAll(".msgs").forEach(m => keep[m.dataset.threadId] = {top: m.scrollTop, atEnd: m.scrollHeight - m.scrollTop - m.clientHeight < 40});
+  let html;
+  if (open) html = talkColumn(open.key, esc(open.t.title) + (open.project ? `<small class="cproj">${open.project}</small>` : ""), [open.t],
+    open.key === "__loose" && d.projects.length && open.t.repo ? `<button class="f" data-act="link">這是哪個專案的？</button>` : "");
+  else if (all.length) html = all.map(talkCard).join("") + closedTile(d);
+  else html = `<section class="tcol"><div class="tnote">${d.error ? `<span style="color:var(--failed)">${esc(d.error)}</span>` :
+    d.github_configured ? "目前沒有進行中的 AI 對話。" : "還沒設定要看哪裡的 AI 助手。<br>在桌面上的史萊姆按右鍵 →「追蹤 AI 助手的 GitHub 專案」"}</div></section>`;
+  box.classList.toggle("overview", !open);
+  box.innerHTML = html;
+  box.querySelectorAll("img[data-load]").forEach(im => picURL(findPic(open ? open.t.id : "", im.dataset.load)).then(u => im.src = u).catch(() => im.alt = "（找不到這張圖）"));
+  $("allread").classList.toggle("show", !open && all.some(x => x.t.unread));
+  if (open && open.t.unread) { if (readMark[open.t.id] === undefined) readMark[open.t.id] = open.t.read_at; markRead(open.t.id, true); }
+  box.querySelectorAll(".msgs").forEach(m => {
+    const id = m.dataset.threadId, t = state.threads[id], k = keep[id];
+    const last = t && t.messages && t.messages.length ? t.messages.length + ":" + t.messages[t.messages.length - 1].ts : "";
+    m.scrollTop = k && !k.atEnd && seenLast[id] === last ? k.top : m.scrollHeight;   // 新的對話、或原本就在最底：顯示最新一則
+    seenLast[id] = last;
+  });
+}
+function setMode(talk) {
+  document.body.classList.toggle("talk", talk);
+  try { localStorage.setItem("mode", talk ? "talk" : "files"); } catch (e) {}
+  if (talk) { closeSheet(); state.open = null; $("talk-cols").innerHTML = `<section class="tcol"><div class="tnote">正在讀取對話…</div></section>`; loadTalk(); }
+  else refresh();
+}
+function linkSheet() {
+  const repos = [...new Set(state.talk.loose.filter(t => t.repo).map(t => t.repo))];
+  sheet(head("這些對話是哪個專案的？") + `<div class="list">
+    <p>選一個 GitHub 專案，再選它屬於哪個專案。之後它的對話就會顯示在那個專案的欄位裡。只是顯示方式，可以再改。</p>
+    ${repos.map(r => `<div class="list three"><p class="wide" style="margin:.2rem .3rem 0;color:var(--text);font-weight:700">${esc(r)}</p>${state.talk.projects.map(p =>
+      `<button class="big" data-link="${esc(r)}" data-project="${esc(p.path)}"><span class="clamp">${esc(projName(p.name)[1])}</span></button>`).join("")}</div>`).join("")}</div>`);
+}
+
+/* ---------- 彈出面板 ---------- */
+let changedAt = 0, lastTap = {x: -999, y: -999};
+const guard = () => { changedAt = Date.now(); };   // 畫面剛換過（面板開關、模式切換）
+function sheet(html) { $("sheet").innerHTML = html; $("sheet-bg").classList.add("show"); guard(); }
+function closeSheet() { if ($("sheet-bg").classList.contains("show")) guard(); $("sheet-bg").classList.remove("show"); }
+const head = t => `<h3><span>${t}</span><button class="round" data-act="close">${icon("x")}</button></h3>`;
+const cur = () => state.projects.find(p => p.path === state.project);
+function groupSheet(path) {
+  const f = state.files.find(x => x.path === path);
+  const title = {version: "同一份文件的所有版本（最新的在最上面）", series: "同一系列、不同日期的檔案（最新的在最上面）", batch: `同一天、同一個資料夾的照片（共 ${f.versions.length + 1 + (f.more || 0)} 張）`}[f.group];
+  const all = [f, ...f.versions].sort((a, b) => b.mtime - a.mtime);
+  const note = f.check ? `<p class="wide">「版號待確認」：最上面這份的修改時間最新，但檔名上的版號比別份舊。請確認哪一份才是你要的。</p>` : "";
+  sheet(head(title) + `<div class="list ${f.group === "batch" ? "two" : ""}">${note}${all.map((v, i) =>
+    fileCard({...v, versions: null, later: 0, oldpin: false, check: i === 0 && f.check}, {latest: i === 0 && f.group !== "batch", max: f.group === "batch" ? 36 : 96,
+      mark: f.later && v.path === f.path ? SINCE[state.since] + "的版本" : ""})).join("")}
+    ${f.more ? `<p class="wide">還有 ${f.more} 個更舊的沒有列出，請用「在檔案總管開啟」查看。</p>` : ""}</div>`);
+}
+function subsSheet() {   // 「篩選」：資料夾（可以一層層往下）與檔案類型，都收在這裡，平常不佔畫面
+  const d = state.last || {subs: [], kinds: {}};
+  const parts = state.sub ? state.sub.split(/[\\/]/) : [], sep = state.sub.includes("\\") ? "\\" : "/";
+  const crumbs = parts.map((p, i) => `<button class="f ${i === parts.length - 1 ? "on" : ""}" data-sub="${esc(parts.slice(0, i + 1).join(sep))}">${esc(p)}</button>`).join("<span>›</span>");
+  const folders = state.project ? `<p class="wide" style="margin:.2rem .3rem 0;color:var(--text);font-weight:700">只看哪個資料夾</p>
+    ${state.sub ? `<div class="wide filters" style="align-items:center;flex-wrap:wrap"><button class="f" data-sub="">全部資料夾</button><span>›</span>${crumbs}</div>` : ""}
+    ${state.subs.map(s => `<button class="big" data-sub="${esc(s.name)}">${icon("folder")}<span>${esc(base(s.name))}<small>${s.count} 份</small></span></button>`).join("")}` : "";
+  const kinds = Object.keys(KIND).filter(k => d.kinds[k] || state.kind === k);
+  sheet(head("篩選") + `<div class="list three">${folders}
+    <p class="wide" style="margin:.5rem .3rem 0;color:var(--text);font-weight:700">只看哪種檔案</p>
+    ${kinds.map(k => `<button class="big ${state.kind === k ? "main" : ""}" data-kind="${k}" style="--k:${KIND[k][1]}"><i class="dot" style="background:${KIND[k][1]}"></i><span>${KIND[k][0]}<small>${d.kinds[k] || 0} 份</small></span></button>`).join("")}</div>`);
+}
+function moreSheet() {
+  const c = cur();
+  sheet(head(c ? `「${esc(c.name)}」與設定` : "設定") + `<div class="list two">
+    ${c ? `<button class="big" data-act="folders">${icon("plus")}<span>這個專案還有其他資料夾<small>資料分散在別處時，加進來合併顯示</small></span></button>` : ""}
+    <button class="big" data-act="sources">${icon("folder")}<span>已加入的資料夾<small>查看、新增或移除（不會動到檔案）</small></span></button>
+    <button class="big" data-act="bigger">字放大</button><button class="big" data-act="smaller">字縮小</button>
+    <button class="big" data-act="full">${document.fullscreenElement ? "離開全螢幕" : "全螢幕"}</button>
+    ${state.hidden.length ? `<button class="big" data-act="hidden">已隱藏的專案（${state.hidden.length}）<small>　可以恢復</small></button>` : "<span></span>"}
+    ${c ? `<button class="big quiet wide" data-act="hide-ask">把「${esc(c.name)}」從清單隱藏（檔案不受影響，可恢復）</button>` : ""}</div>`);
+}
+async function sourcesSheet() {
+  const d = await api("/api/sources");
+  sheet(head("已加入的資料夾") + `<div class="list">
+    <div class="list two"><button class="big main" data-add="root">${icon("plus")}<span>加入一整批專案<small style="color:#5b4514">選一個總資料夾，裡面每個子資料夾＝一個專案</small></span></button>
+      <button class="big" data-add="single">${icon("plus")}<span>加入一個專案<small>選的資料夾本身就是一個專案</small></span></button></div>
+    ${d.sources.map(s => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(s.name)}　<small style="font-weight:400;color:var(--dim)">${s.batch ? "一整批專案" : "一個專案"}${s.missing ? "・<b style='color:var(--failed)'>目前讀不到</b>" : ""}</small></div><div class="m">${esc(s.path)}</div></span></div>
+      <button class="ver" data-source-ask="${esc(s.path)}">移除</button></div>`).join("") || `<p>還沒有加入任何資料夾。</p>`}
+    <p>「移除」只是不再顯示在這裡，資料夾和裡面的檔案都不會被動到；之後可以再加回來。</p></div>`);
+}
+function hiddenSheet() {
+  sheet(head("已隱藏的專案") + `<div class="list two">${state.hidden.map(p =>
+    `<button class="big" data-unhide="${esc(p.path)}"><span>${esc(p.name)}<small>點一下恢復顯示</small></span></button>`).join("")}</div>`);
+}
+async function foldersSheet() {
+  const c = cur();
+  const d = await api("/api/folders?project=" + encodeURIComponent(c.path));
+  const others = state.projects.filter(p => p.path !== c.path);
+  sheet(head(`「${esc(c.name)}」的資料夾`) + `<div class="list">
+    <p>同一個專案的資料若分散在好幾個地方，加進來就會合併顯示。只是設定，不會搬動檔案。</p>
+    <div class="list two"><button class="big main" data-act="add-folder">${icon("plus")}加入其他位置的資料夾</button>
+      ${others.length ? `<button class="big" data-act="merge-pick">${icon("plus")}把清單上另一個專案併進來…</button>` : "<span></span>"}</div>
+    ${d.folders.map(x => `<div class="file" style="min-height:4.2rem"><div class="open"><span class="t"><div class="n">${esc(base(x.path))}</div><div class="m">${esc(x.path)}</div></span></div>
+      ${x.missing ? `<span class="ver" style="color:var(--failed);border:0">目前讀不到</span>` : ""}
+      ${x.main ? `<span class="ver" style="color:var(--dim)">主資料夾</span>` : `<button class="ver" data-detach-ask="${esc(x.path)}" data-single="${x.single ? 1 : ""}">${x.single ? "移除" : "拆出"}</button>`}</div>`).join("")}</div>`);
+}
+function mergePickSheet() {
+  const c = cur();
+  sheet(head(`要把哪個專案併入「${esc(c.name)}」？`) + `<div class="list three">${state.projects.filter(p => p.path !== c.path).map(p =>
+    `<button class="big" data-merge-ask="${esc(p.path)}"><span class="clamp">${esc(p.name)}</span></button>`).join("")}</div>`);
+}
+function confirmSheet(text, yesLabel, attrs) {
+  sheet(head("請確認") + `<div class="list two"><p class="wide" style="font-size:1.05rem;color:var(--text)">${text}</p>
+    <button class="big main" ${attrs}>${yesLabel}</button><button class="big" data-act="close">取消</button></div>`);
+}
+async function addProject(asRoot) {
+  closeSheet(); toast("請在電腦主螢幕跳出的視窗選擇資料夾…");
+  try {
+    const d = await api("/api/add_project", {as_root: asRoot});
+    if (d.added) { toast("已加入"); await refresh(); } else toast("沒有選擇資料夾，所以沒有加入");
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- 長按檔案卡片：釘選到最上面、顯示位置 ---------- */
+function fileMenu(path) {
+  const f = [...state.files, ...state.files.flatMap(x => x.versions || [])].find(x => x.path === path);
+  if (!f) return;
+  sheet(head(esc(f.name)) + `<div class="list two">
+    <button class="big main" data-reveal="${esc(path)}">${icon("folder")}<span>在檔案總管顯示<small>舊版、同資料夾的其他檔案都在那裡</small></span></button>
+    <button class="big" data-pin="${esc(path)}" data-on="${f.pinned ? "" : "1"}">${f.pinned ? "取消釘選" : "釘選到最上面"}</button></div>`);
+}
+// 一段 AI 對話的選單：打開、回覆、在 Claude 開啟、關閉
+function threadMenu(id) {
+  const t = (state.threads || {})[id];
+  if (!t) return;
+  const away = isShelved(id);
+  sheet(head(esc(t.title)) + `<div class="list two">
+    <button class="big main" data-open-thread="${esc(id)}">打開這段對話</button>
+    ${t.can_reply ? `<button class="big" data-reply="${esc(id)}">回覆…</button>` : "<span></span>"}
+    ${t.unread ? `<button class="big" data-readmark="${esc(id)}" data-on="1">標成已讀</button>` : `<button class="big" data-readmark="${esc(id)}" data-on="">標成未讀<small>最後一則 AI 訊息算成新的</small></button>`}
+    ${t.url ? `<button class="big" data-url="${esc(t.url)}">在瀏覽器開啟<small>GitHub 上的成果</small></button>` : ""}
+    ${away ? `<button class="big" data-shelve="${esc(id)}" data-on="">放回總覽</button>`
+           : `<button class="big quiet" data-shelve="${esc(id)}" data-on="1">關閉這段對話<small>從總覽拿掉；之後有新動靜會自己回來</small></button>`}</div>`);
+}
+// 專案的選單：在檔案總管開啟、隱藏
+function projMenu(path) {
+  const p = state.projects.find(x => x.path === path);
+  if (!p) return;
+  sheet(head(esc(p.name)) + `<div class="list two">
+    <button class="big main" data-reveal="${esc(path)}">${icon("folder")}在檔案總管開啟</button>
+    <button class="big quiet" data-hide-ask="${esc(path)}">從清單隱藏<small>檔案不受影響，可恢復</small></button></div>`);
+}
+const CTX = '.file .open[data-open], [data-open-thread], .tcol [data-task], [data-runner]:not([data-pic]), .proj[data-proj]:not([data-proj=""])';
+function ctxMenu(el) {
+  closeSheet();
+  if ("open" in el.dataset) fileMenu(el.dataset.open);
+  else if ("proj" in el.dataset) projMenu(el.dataset.proj);
+  else threadMenu(el.dataset.openThread || el.dataset.task || el.dataset.runner);
+}
+let pressTimer, pressed = false;
+document.addEventListener("pointerdown", ev => {   // 觸控長按 = 右鍵
+  const el = ev.target.closest(CTX);
+  pressed = false; clearTimeout(pressTimer);
+  if (el && ev.pointerType !== "mouse") pressTimer = setTimeout(() => { pressed = true; ctxMenu(el); }, 550);
+});
+["pointerup", "pointercancel", "pointermove"].forEach(t => document.addEventListener(t, ev => {
+  if (t !== "pointermove" || Math.abs(ev.movementX) + Math.abs(ev.movementY) > 6) clearTimeout(pressTimer); }));
+document.addEventListener("contextmenu", ev => {   // 滑鼠右鍵（或系統把長按當成右鍵）
+  const el = ev.target.closest(CTX);
+  ev.preventDefault();   // 面板裡不跳出瀏覽器自己的選單
+  if (el) { clearTimeout(pressTimer); if (!pressed) { ctxMenu(el); if (ev.pointerType === "touch") pressed = true; } }   // 觸控之後還會有一下點擊，要吃掉
+});
+
+/* ---------- 事件 ---------- */
+async function refresh() {  // 第一次先取專案；之後先取檔案（會重新掃描），再更新專案列的「今天有動」
+  if (!state.ready) { await loadProjects(); state.ready = true; }
+  await loadFiles(); await loadProjects();
+}
+function setScale(delta) {
+  let s = 1;
+  try { s = parseFloat(localStorage.getItem("scale") || "1"); } catch (e) {}
+  s = Math.min(1.5, Math.max(.7, Math.round((s + delta) * 10) / 10));
+  try { localStorage.setItem("scale", s); } catch (e) {}
+  document.documentElement.style.setProperty("--scale", s);
+}
+function setPinMode(on) { if (state.pinMode !== on) guard(); state.pinMode = on; document.body.classList.toggle("pinmode", on); fades(); }
+function setSearch(on) {
+  $("bar").classList.toggle("searching", on);
+  const c = cur();
+  $("q").placeholder = c ? `在「${c.name}」裡找：輸入檔名或資料夾名稱` : "在全部專案裡找：輸入檔名或資料夾名稱";
+  if (on) $("q").focus(); else { $("q").value = ""; state.q = ""; }
+}
+const name = p => (state.projects.find(x => x.path === p) || {}).name || base(p);
+
+document.addEventListener("click", async ev => {
+  if (pressed) { pressed = false; ev.preventDefault(); return; }   // 剛才是長按，不當成點擊
+  if (ev.target.closest("[data-pic]")) return;   // 圖片（和拿著圖片的史萊姆）由按下／放開處理
+  // 連點防護：畫面在半秒內換過，而這一下又點在幾乎同一個位置 → 是同一次連點的第二下，不該落到新出現的東西上。
+  // 點在別的位置則照常處理（手快的人打開面板後立刻點裡面的按鈕不會被吃掉）。
+  const sameSpot = Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 56;
+  if (Date.now() - changedAt < 550 && sameSpot) return;
+  lastTap = {x: ev.clientX, y: ev.clientY};
+  const el = ev.target.closest("[data-readmark],[data-shelve],[data-hide-ask],[data-open-thread],[data-runner],[data-reply],[data-quick],[data-thread],[data-proj-files],[data-link],[data-pin],[data-source-ask],[data-source],[data-detach-ask],[data-unhide],[data-proj],[data-kind],[data-since],[data-sub],[data-open],[data-reveal],[data-ver],[data-task],[data-url],[data-act],[data-add],[data-merge],[data-merge-ask],[data-unmerge]");
+  if (!el) { if (ev.target.id === "sheet-bg") closeSheet(); return; }
+  const d = el.dataset;
+  try {
+    if ("readmark" in d) { closeSheet(); delete readMark[d.readmark]; await markRead(d.readmark, d.on === "1"); toast(d.on === "1" ? "已標成已讀" : "已標成未讀"); }
+    else if (d.act === "all-read") {
+      const ids = Object.values(state.threads || {}).filter(t => t.unread).map(t => t.id);
+      for (const id of ids) await api("/api/read", {thread: id, read: true}).catch(() => {});
+      ids.forEach(id => state.threads[id].unread = 0); renderTalk(); toast(`已把 ${ids.length} 段對話標成已讀`);
+    }
+    else if ("shelve" in d) {
+      const on = d.on === "1";
+      await api("/api/shelve", {thread: d.shelve, on});
+      if (on && state.open === d.shelve) state.open = null;
+      toast(on ? "已關閉這段對話；可在總覽最後的「已關閉的對話」找回" : "已放回總覽");
+      await loadTalk();
+      if (!on && $("sheet").textContent.startsWith("已關閉的對話")) closedSheet(); else closeSheet();
+    }
+    else if ("hideAsk" in d) { state.project = d.hideAsk; confirmSheet(`把「${esc(name(d.hideAsk))}」從清單隱藏？<br><small>檔案不受影響；之後可在「設定」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`); }
+    else if (d.act === "closed-list") closedSheet();
+    else if ("openThread" in d) { closeSheet(); if (!document.body.classList.contains("talk")) setMode(true); delete readMark[d.openThread]; state.open = d.openThread; renderTalk(); }
+    else if (d.act === "talk-home") { state.open = null; renderTalk(); }
+    else if ("runner" in d) goThread(d.runner);   // 點跑來的史萊姆：帶你到那件事的對話
+    else if ("reply" in d) replySheet(d.reply);
+    else if ("quick" in d) { const box = $("reply-text"); box.value = d.quick; box.focus(); }
+    else if (d.act === "send-reply") {
+      const box = $("reply-text"), text = box.value.trim();
+      if (!text) { toast("還沒有輸入內容", true); box.focus(); return; }
+      el.disabled = true; el.textContent = "送出中…";          // 送出期間不能再按，避免同一句話送兩次
+      try {
+        const r = await api("/api/reply", {thread: d.thread, text});
+        closeSheet(); delete seenLast[d.thread];
+        toast(r.via === "cloud" ? "已送進雲端的對話，助手會接著做" : "已送出，助手正在這台電腦上處理");
+        loadTalk();
+      } catch (e) { el.disabled = false; el.textContent = "送出"; toast(e.message, true); }
+    }
+    else if ("thread" in d) { picked[d.key] = d.thread; delete seenLast[d.thread]; loadTalk(); }
+    else if ("projFiles" in d) { Object.assign(state, {project: d.projFiles, kind: "", since: "", sub: "", q: "", last: null, files: []}); resetList(); setMode(false); }
+    else if ("link" in d) { await api("/api/link_repo", {repo: d.link, project: d.project}); closeSheet(); toast("已指定，這個 GitHub 專案的對話會顯示在那一欄"); loadTalk(); }
+    else if (d.act === "talk") setMode(true);
+    else if (d.act === "pet-toggle" && state.pet) { renderPet(await api("/api/pet", {visible: !state.pet.visible})); toast(state.pet.visible ? "桌面史萊姆出來了" : "桌面史萊姆收起來了，再按一次叫牠出來"); }
+    else if (d.act === "pet-size" && state.pet) { const i = state.pet.sizes.indexOf(state.pet.size) + Number(d.step); if (state.pet.sizes[i]) renderPet(await api("/api/pet", {size: state.pet.sizes[i]})); }
+    else if (d.act === "files") setMode(false);
+    else if (d.act === "link") linkSheet();
+    else if (d.act === "unclip") el.classList.remove("clip");
+    else if ("pin" in d) { const r = await api("/api/pin", {path: d.pin, on: d.on === "1"}); closeSheet(); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
+    else if ("proj" in d) {
+      if (d.proj === state.project && !(state.kind || state.since || state.sub || state.q)) return;   // 已經在這裡了，連點不重做
+      setSearch(false); setPinMode(false); Object.assign(state, {project: d.proj, kind: "", since: "", sub: "", last: null, files: []});
+      resetList(); renderProjects(); renderFilters();
+      $("files").innerHTML = `<div class="empty">正在讀取${d.proj ? "「" + esc(name(d.proj)) + "」的" : ""}檔案清單…</div>`;
+      await refresh();
+    }
+    else if ("kind" in d) { state.kind = state.kind === d.kind ? "" : d.kind; closeSheet(); resetList(); renderFilters(); await loadFiles(); }
+    else if ("since" in d) { state.since = state.since === d.since ? "" : d.since; resetList(); renderFilters(); await loadFiles(); }
+    else if ("sub" in d) { state.sub = d.sub; closeSheet(); resetList(); await loadFiles(); }
+    else if ("open" in d && state.pinMode) { setPinMode(false); closeSheet(); const r = await api("/api/pin", {path: d.open, on: !el.closest(".file").classList.contains("pinned")}); toast(r.on ? "已釘選到最上面" : "已取消釘選"); resetList(); await loadFiles(); }
+    else if ("open" in d) openFile(d.open, false, el.closest(".file"));   // 清單保持開啟，方便接著開另一版比較
+    else if ("reveal" in d) { closeSheet(); openFile(d.reveal, true); }
+    else if ("ver" in d) groupSheet(d.ver);
+    else if ("task" in d) taskSheet(d.task);
+    else if ("url" in d) { await api("/api/open_url", {url: d.url}); toast("已在瀏覽器開啟"); }
+    else if ("add" in d) addProject(d.add === "root");
+    else if ("mergeAsk" in d) confirmSheet(`把「${esc(name(d.mergeAsk))}」併入「${esc(cur().name)}」？<br><small>只改顯示方式，不會搬動檔案；之後可以再拆出。</small>`, "併入", `data-merge="${esc(d.mergeAsk)}"`);
+    else if ("merge" in d) { await api("/api/merge", {path: d.merge, into: state.project}); toast("已併入"); await refresh(); foldersSheet(); }
+    else if ("unmerge" in d) { const r = await api("/api/unmerge", {folder: d.unmerge}); toast(r.did === "removed" ? "已移除，檔案不受影響" : "已拆出，它回到左邊成為獨立的專案"); await refresh(); foldersSheet(); }
+    else if ("detachAsk" in d) confirmSheet(d.single
+      ? `把「${esc(base(d.detachAsk))}」從這個專案移除？<br><small>只是不再顯示，資料夾和檔案都不會被動到。</small>`
+      : `把「${esc(base(d.detachAsk))}」從這個專案拆出？<br><small>它會回到左邊的清單，成為獨立的專案。檔案不受影響。</small>`, d.single ? "移除" : "拆出", `data-unmerge="${esc(d.detachAsk)}"`);
+    else if ("sourceAsk" in d) confirmSheet(`不再顯示「${esc(base(d.sourceAsk))}」？<br><small>資料夾和裡面的檔案都不會被動到；之後可以再加回來。</small>`, "移除", `data-source="${esc(d.sourceAsk)}"`);
+    else if ("source" in d) { await api("/api/remove_source", {path: d.source}); toast("已移除，檔案不受影響"); state.project = ""; await refresh(); sourcesSheet(); }
+    else if ("unhide" in d) {
+      // 恢復後那一格留在原位、變成「已恢復 ✓」，不讓下一個專案補到手指底下：
+      // 連續點不同的專案每一下都算數，連點同一格也不會多恢復一個。
+      const path = d.unhide;
+      el.removeAttribute("data-unhide"); el.style.opacity = ".45";
+      const small = el.querySelector("small"); if (small) small.textContent = "已恢復 ✓";
+      await api("/api/hide_project", {path, on: false});
+      toast("已恢復顯示"); await refresh();
+      if (!state.hidden.length) setTimeout(() => { if (!document.querySelector("#sheet [data-unhide]")) closeSheet(); }, 700);
+    }
+    else if (d.act === "sources") sourcesSheet();
+    else if (d.act === "hidden") hiddenSheet();
+    else if (d.act === "more") moreSheet();
+    else if (d.act === "pin-mode") { setPinMode(true); closeSheet(); }
+    else if (d.act === "pin-cancel") setPinMode(false);
+    else if (d.act === "close") closeSheet();
+    else if (d.act === "search") { setSearch(false); resetList(); loadFiles(); }
+    else if (d.act === "search-open") { closeSheet(); setSearch(true); }
+    else if (d.act === "subs" || d.act === "filter") subsSheet();
+    else if (d.act === "clear-filter") { state.sub = ""; state.kind = ""; state.since = ""; resetList(); renderFilters(); await loadFiles(); }
+    else if (d.act === "clear-sub") { state.sub = ""; resetList(); await loadFiles(); }
+    else if (d.act === "load-more") { state.limit += PAGE; await loadFiles(); }
+    else if (d.act === "folders") foldersSheet();
+    else if (d.act === "merge-pick") mergePickSheet();
+    else if (d.act === "add-folder") { toast("請在電腦主螢幕跳出的視窗選擇資料夾…"); const r = await api("/api/add_folder", {project: state.project}); if (r.added) { toast("已加入"); await refresh(); foldersSheet(); } else toast("沒有選擇資料夾，所以沒有加入"); }
+    else if (d.act === "hide-ask") confirmSheet(`把「${esc(cur().name)}」從清單隱藏？<br><small>檔案不受影響；之後可在「⋯」裡恢復。</small>`, "隱藏", `data-act="hide-proj"`);
+    else if (d.act === "hide-proj") { await api("/api/hide_project", {path: state.project, on: true}); state.project = ""; closeSheet(); toast("已隱藏，可在「⋯」→「已隱藏的專案」恢復"); refresh(); }
+    else if (d.act === "smaller") setScale(-.1);
+    else if (d.act === "bigger") setScale(.1);
+    else if (d.act === "full") { closeSheet(); document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast("此環境無法切換全螢幕", true)); }
+  } catch (e) { toast(e.message, true); }
+});
+let qTimer;
+$("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $("q").value.trim(); resetList(); loadFiles(); }, 200); });
+
+function fades() {
+  const fl = $("filters"); fl.classList.toggle("more-x", fl.scrollWidth - fl.scrollLeft - fl.clientWidth > 8);   // 右邊還有鈕：邊緣淡出提示可以滑
+  document.querySelectorAll(".col > .scroll").forEach(el =>
+  el.parentElement.classList.toggle("below", el.scrollHeight - el.scrollTop - el.clientHeight > 3.2 * parseFloat(getComputedStyle(document.documentElement).fontSize))); }
+document.querySelectorAll(".col > .scroll").forEach(el => { el.addEventListener("scroll", fades, {passive: true}); new MutationObserver(fades).observe(el, {childList: true, subtree: true}); });
+window.addEventListener("resize", fades);
+window.addEventListener("resize", () => { if (document.body.classList.contains("talk")) renderTalk(); });   // 寬度變了，能展開幾欄也跟著變
+$("filters").addEventListener("scroll", fades, {passive: true});
+setScale(0);
+refresh().then(() => { if (state.projects.some(p => !p.count)) setTimeout(refresh, 1500); });
+loadTasks();
+setInterval(() => document.body.classList.contains("talk") ? loadTalk() : loadTasks(), 15000);
+try { if (localStorage.getItem("mode") === "talk") setMode(true); } catch (e) {}   // 回到上次停留的畫面
+setInterval(() => { if (document.body.classList.contains("offline")) api("/api/ping").catch(() => {}); }, 4000);
+const idle = () => !$("sheet-bg").classList.contains("show") && !state.q && $("scroll").scrollTop < 5 && state.limit === PAGE;
+setInterval(async () => {
+  if (idle()) return refresh();          // 使用者正在往下找的時候不重排清單…
+  try {                                  // …但仍然確認資料夾還讀得到：選中的專案不見了就回到總覽
+    const before = state.project; await loadProjects();
+    if (before && !state.project && !$("sheet-bg").classList.contains("show")) { resetList(); loadFiles(); }
+  } catch (e) {}
+}, 30000);
+window.addEventListener("focus", () => { if (idle()) refresh(); });
+</script>
+</body>
+</html>
