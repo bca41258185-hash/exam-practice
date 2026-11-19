@@ -85,19 +85,24 @@
       }
     } else if (sp.tail === 'fox') {   // 蓬鬆大尾巴，尾尖白色；境界越高尾巴越多，渡劫圓滿九尾
       const n = [1, 2, 3, 5, 8, 9][ev];
-      if (n === 1) {
-        ctx.save(); ctx.translate(-34, -22); ctx.rotate(-0.6 + wag * 0.03);
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-26, 4, -34, -16); ctx.quadraticCurveTo(-30, -32, -16, -30);
-        ctx.quadraticCurveTo(-8, -16, 4, -8); ctx.closePath();
-        ctx.fillStyle = sp.body; ctx.fill(); ctx.stroke();
-        ctx.save(); ctx.clip();
-        ellipse(ctx, -27, -26, 12, 10, '#FFF8EE', null);
-        ctx.restore();
-        ctx.stroke();
-        ctx.restore();
+      if (n <= 3) {   // 三尾以內：都長在身側，像小扇子一樣疊開
+        const range = 0.55 * (n - 1);
+        for (let j = n - 1; j >= 0; j--) {
+          const a = n > 1 ? -0.5 + (j / (n - 1) - 0.5) * range : -0.6;
+          ctx.save(); ctx.translate(n > 1 ? -31 : -34, -22); ctx.rotate(a + wag * 0.03 * (j % 2 ? -1 : 1));
+          ctx.strokeStyle = C.line; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-26, 4, -34, -16); ctx.quadraticCurveTo(-30, -32, -16, -30);
+          ctx.quadraticCurveTo(-8, -16, 4, -8); ctx.closePath();
+          ctx.fillStyle = sp.body; ctx.fill();
+          ctx.save(); ctx.clip();
+          ellipse(ctx, -27, -26, 12, 10, '#FFF8EE', null);
+          ctx.restore();
+          ctx.stroke();
+          ctx.restore();
+        }
       } else {
         // 多尾：以背後正中為圓心，像屏風一樣往左右兩邊對稱張開；先畫最外側，正中那條在最上層
-        const half = [0, 0, 1.0, 1.15, 1.3, 1.72, 1.82][n > 5 ? (n === 8 ? 5 : 6) : n], len = n > 5 ? 1.0 : 0.94;
+        const half = n === 5 ? 1.3 : n === 8 ? 1.72 : 1.82, len = n > 5 ? 1.0 : 0.94;
         const order = Array.from({ length: n }, (_, i) => i).sort((p, q) => Math.abs(q - (n - 1) / 2) - Math.abs(p - (n - 1) / 2));
         for (const i of order) {
           const a = (i / (n - 1) - 0.5) * 2 * half + Math.sin(wag * 0.5 + i) * 0.03;
