@@ -803,7 +803,7 @@ function leaveSaver() {   // 你回來了：告訴它慢慢散掉（它自己數
   const mins = Math.round((Date.now() - saverAt) / 60000);
   if (!BUSY.includes(state)) { set('happy', 1500); say(mins >= 1 ? `道友回來了，守了 ${mins} 分鐘` : '道友回來了', true); }
   const mine = saverWin;
-  setTimeout(() => { if (saverWin === mine) closeSaver(); }, 20000);   // 保險（只關這一次開的，不會誤關之後新開的）
+  setTimeout(() => { if (saverWin === mine && saverLeaving) closeSaver(); }, 20000);   // 保險（只關這一次開的；你在玩、取消散掉時不關）
 }
 function checkSaver(idle) {
   const open = saverWin && !saverWin.isDestroyed();
@@ -1661,6 +1661,11 @@ ipcMain.on('ult', (e) => { if (!fromComp(e)) startSkill('ult'); });
 ipcMain.on('wheel-pick', (_e, id) => wheelPick(String(id)));
 ipcMain.handle('saver-info', () => saverInfo());
 ipcMain.on('saver-exit', closeSaver);
+ipcMain.on('saver-play', () => {   // 你在玩螢幕保護裡的東西：多留 20 秒；如果已經在散，就叫它回來
+  if (!saverWin || saverWin.isDestroyed()) return;
+  saverHold = Date.now() + 20000;
+  if (saverLeaving) { saverLeaving = false; saverWin.webContents.send('saver-stay'); }
+});
 ipcMain.on('saver-off', () => { cfg.saver = 0; saveCfg(); closeSaver(); say('好，螢幕保護不自動開了（右鍵可再打開）', true); });
 ipcMain.on('saver-clickable', (_e, on) => { if (saverWin && !saverWin.isDestroyed()) saverWin.setIgnoreMouseEvents(!on, { forward: true }); });
 

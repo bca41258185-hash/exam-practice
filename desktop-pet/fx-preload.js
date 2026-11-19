@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('fx', {
   clickable: (on) => ipcRenderer.send('saver-clickable', !!on),
   onLeave: (fn) => ipcRenderer.on('saver-leave', () => fn()),
   exit: () => ipcRenderer.send('saver-exit'),
-  off: () => ipcRenderer.send('saver-off'),   // 「不要再自動開」：關掉閒置自動開，並收起這一次
+  off: () => ipcRenderer.send('saver-off'),
+  play: () => ipcRenderer.send('saver-play'),   // 正在玩（例如拿著龍珠）：先別收起
+  onStay: (fn) => ipcRenderer.on('saver-stay', () => fn()),   // 「不要再自動開」：關掉閒置自動開，並收起這一次
 });

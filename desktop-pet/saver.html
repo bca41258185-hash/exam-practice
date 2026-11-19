@@ -243,11 +243,77 @@
         this.clouds = Array.from({ length: nc }, (_, i) => ({ x: (i + 0.5) * W / nc, y: (60 + (i % 3) * 36) * K, s: (1.1 + (i % 2) * 0.35) * K, v: rnd(10, 22), storm: -9 }));
         things = Array.from({ length: count(110000, 8, 22) }, () => mk(rnd(-8, 8), rnd(-26, -10), rnd(9, 20)));
         this.swim = T + 5;
+        this.pearl = { x: W * 0.5, y: H * 0.64, held: false, vy: 0, home: { x: W * 0.5, y: H * 0.64 } };
+        this.chase = null;
+      },
+      // 追龍珠：龍頭朝龍珠轉（有轉向上限，所以會繞、會盤），身體沿著龍頭走過的路
+      startChase(T) {
+        if (this.chase) { this.chase.end = 0; return; }
+        const BL = Math.min(W * 0.62, 1250 * K), y = H * 0.5, path = [];
+        for (let i = 0; i <= 30; i++) path.push([-BL * 1.3 + i / 30 * BL * 1.2, y]);   // 從畫面左外側游進來
+        this.chase = { head: { x: path[path.length - 1][0], y, ang: 0 }, path, BL, speed: 0, lastBite: -9, end: 0, caught: false, since: T };
+      },
+      stepPearl(T, dt) {
+        const pl = this.pearl;
+        if (pl.held) { pl.x += (mouse.x - pl.x) * Math.min(1, dt * 18); pl.y += (mouse.y - pl.y) * Math.min(1, dt * 18); }
+        else if (this.chase && !this.chase.caught) { pl.vy = Math.min(150 * K, pl.vy + 90 * K * dt); pl.y = Math.min(H * 0.86, pl.y + pl.vy * dt); }   // 放開了：慢慢往下飄
+        else { pl.x += (pl.home.x - pl.x) * Math.min(1, dt * 2); pl.y += (pl.home.y + Math.sin(T * 1.6) * 10 * K - pl.y) * Math.min(1, dt * 2); }
+        const c = this.chase;
+        if (!c) return;
+        const h = c.head, gone = c.end && T > c.end;
+        const tx = gone ? W + c.BL * 1.5 : pl.x, ty = gone ? H * 0.35 : pl.y;   // 叼到之後往右上游走
+        const dx = tx - h.x, dy = ty - h.y, dist = Math.hypot(dx, dy);
+        let want = Math.atan2(dy, dx), diff = want - h.ang;
+        while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+        const turn = 3.4 * dt; h.ang += Math.max(-turn, Math.min(turn, diff));
+        const target = Math.min(1100 * K, 320 * K + dist * 1.6);
+        c.speed += (target - c.speed) * Math.min(1, dt * 3);
+        h.x += Math.cos(h.ang) * c.speed * dt; h.y += Math.sin(h.ang) * c.speed * dt;
+        const last = c.path[c.path.length - 1];
+        if (Math.hypot(h.x - last[0], h.y - last[1]) > 6 * K) c.path.push([h.x, h.y]);
+        let len = 0;   // 路太長就把尾巴那端剪掉
+        for (let i = c.path.length - 1; i > 0; i--) { len += Math.hypot(c.path[i][0] - c.path[i - 1][0], c.path[i][1] - c.path[i - 1][1]); if (len > c.BL * 1.5) { c.path.splice(0, i - 1); break; } }
+        if (!gone && dist < 40 * K) {
+          if (pl.held) { if (T - c.lastBite > 1.1) { c.lastBite = T; burst(pl.x, pl.y, '#FFE9A8'); this.roarAt = T; } }   // 追上了：咬一口、冒火花
+          else if (!c.caught) {   // 接住掉下來的龍珠
+            c.caught = true; c.end = T + 0.6; burst(pl.x, pl.y, '#FFE9A8', true); flash = T; this.roarAt = T;
+            pl.x = pl.home.x; pl.y = H + 60 * K; pl.vy = 0;
+          }
+        }
+        if (gone && h.x > W + c.BL * 1.2) { this.chase = null; this.swim = T + rnd(8, 14); }
+        if (!pl.held && !c.caught && T - c.since > 40) { c.end = T; }   // 保險：太久就收
+      },
+      drawPearl(T) {
+        const pl = this.pearl, r = 15 * K * (pl.held ? 1.15 : 1);
+        ctx.save();
+        const g = ctx.createRadialGradient(pl.x, pl.y, 1, pl.x, pl.y, r * 3.2);
+        g.addColorStop(0, 'rgba(255,236,190,0.85)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(pl.x, pl.y, r * 3.2, 0, 6.283); ctx.fill();
+        ctx.translate(pl.x, pl.y); ctx.rotate(T * 0.8);
+        const cols = ['#FFF5DE', '#FFE29A', '#F5B82E', '#FFF1C4', '#E9B44C', '#FFFAEC'];
+        for (let i = 0; i < 6; i++) {   // 多面寶珠：六塊三角面，深淺交錯
+          const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a0) * r, Math.sin(a0) * r); ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r); ctx.closePath();
+          ctx.fillStyle = cols[i]; ctx.fill();
+        }
+        ctx.strokeStyle = 'rgba(74,58,42,0.7)'; ctx.lineWidth = 1.5 * K; ctx.beginPath();
+        for (let i = 0; i <= 6; i++) { const a = i * Math.PI / 3; i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.stroke();
+        ctx.rotate(-T * 1.6); ctx.strokeStyle = 'rgba(245,184,46,0.6)'; ctx.lineWidth = 1.2 * K;   // 外圈旋轉的六芒星線框
+        for (const off of [0, Math.PI / 6]) { ctx.beginPath(); for (let i = 0; i <= 3; i++) { const a = off + i * Math.PI * 2 / 3; i ? ctx.lineTo(Math.cos(a) * r * 1.9, Math.sin(a) * r * 1.9) : ctx.moveTo(Math.cos(a) * r * 1.9, Math.sin(a) * r * 1.9); } ctx.stroke(); }
+        ctx.restore();
+        if (!pl.held && !this.chase) { ctx.save(); ctx.font = `600 ${Math.round(14 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.9)'; ctx.strokeStyle = 'rgba(74,58,42,0.6)'; ctx.lineWidth = 3; ctx.strokeText('點龍珠，讓青龍追你', pl.x, pl.y + r * 3); ctx.fillText('點龍珠，讓青龍追你', pl.x, pl.y + r * 3); ctx.restore(); }
+        if (this.roarAt && T - this.roarAt < 1) {
+          const p = T - this.roarAt; ctx.save(); ctx.globalAlpha *= 1 - p; ctx.font = `bold ${Math.round((26 + p * 20) * K)}px "DFKai-SB","KaiTi",serif`; ctx.textAlign = 'center';
+          ctx.fillStyle = '#E8FFF6'; ctx.strokeStyle = 'rgba(30,70,74,0.8)'; ctx.lineWidth = 4; const hx = this.chase ? this.chase.head.x : pl.x, hy = (this.chase ? this.chase.head.y : pl.y) - 50 * K;
+          ctx.strokeText('吼——！', hx, hy); ctx.fillText('吼——！', hx, hy); ctx.restore();
+        }
       },
       step(T, dt) {
         for (const c of this.clouds) { c.x += c.v * K * dt; if (c.x > W + 140 * c.s) c.x = -140 * c.s; }
         for (const o of things) if (drift(o, T, dt, 700, 0)) reenter(o, T);
         if (T > this.swim + 14) this.swim = T + rnd(8, 16);
+        this.stepPearl(T, dt);
+        if (this.pearl.held && T - (this.played || 0) > 2.5) { this.played = T; if (api.play) api.play(); }   // 玩龍珠時請主程序先別收起螢幕保護
       },
       draw(T) {
         // 雲下面的雨（平常疏疏的，打雷後一陣大雨）
@@ -262,6 +328,15 @@
         }
         for (const o of things) if (T >= o.at) orb(o);
         // 青龍偶爾從雲裡浮現：慢慢往上飄、淡入淡出（插畫還沒載好就用程式畫的小龍游過去）
+        if (this.chase && window.LOONG_SWIM) {
+          const c = this.chase, route = window.makeRoute(c.path);
+          window.drawSwimFx(ctx, route, route.total, c.BL, { t: T, v: c.speed, layer: 'back', n: 26, alpha: 0.8 });
+          window.drawShardSwim(ctx, route, route.total, c.BL, { t: T * 0.9, amp: 0.035, glint: 0.7 });
+          window.drawSwimFx(ctx, route, route.total, c.BL, { t: T, layer: 'front', pearl: false });
+          this.drawPearl(T);
+          return;
+        }
+        this.drawPearl(T);
         const p = (T - this.swim) / 12;
         const img = window.DRAGON_IMG;
         if (p >= 0 && p <= 1 && img && img.complete && img.naturalWidth) {
@@ -281,8 +356,15 @@
           window.drawLoong(ctx, pts, 1.05 * K, T, { sg: 1 });
         }
       },
-      hit(x, y) { const c = this.clouds.find((q) => Math.abs(x - q.x) < 100 * q.s && Math.abs(y - q.y) < 46 * q.s); if (c) return c; return things.find((o) => near(o, x, y)) || null; },
-      click(h, T) { if (this.clouds.includes(h)) { h.storm = T; flash = T; } else { burst(h.x, h.y, '#BFEFFF'); reenter(h, T + rnd(1.5, 4)); } },   // 點雲：打雷、下一陣大雨
+      hit(x, y) { const pl = this.pearl; if (pl && Math.hypot(x - pl.x, y - pl.y) < 36 * K) return 'pearl'; const c = this.clouds.find((q) => Math.abs(x - q.x) < 100 * q.s && Math.abs(y - q.y) < 46 * q.s); if (c) return c; return things.find((o) => near(o, x, y)) || null; },
+      click(h, T) {
+        if (h === 'pearl') {   // 拿起來／放開龍珠
+          const pl = this.pearl;
+          if (!pl.held) { pl.held = true; pl.vy = 0; leaveAt = 0; this.startChase(T); this.played = 0; burst(pl.x, pl.y, GOLD); }
+          else { pl.held = false; pl.vy = 0; if (this.chase) this.chase.caught = false; }
+          return;
+        }
+        if (this.clouds.includes(h)) { h.storm = T; flash = T; } else { burst(h.x, h.y, '#BFEFFF'); reenter(h, T + rnd(1.5, 4)); } },   // 點雲：打雷、下一陣大雨
     },
   };
 
@@ -313,7 +395,8 @@
   document.getElementById('off').addEventListener('click', (e) => { e.stopPropagation(); if (api.off) api.off(); else api.exit(); });
   addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
   addEventListener('mousedown', (e) => { if (!S) return; const T = now(), h = S.hit(e.clientX, e.clientY, T); if (h) S.click(h, T); });
-  api.onLeave(() => { if (!leaveAt) leaveAt = now(); });
+  api.onLeave(() => { if (S && S.pearl && S.pearl.held) return; if (!leaveAt) leaveAt = now(); });
+  if (api.onStay) api.onStay(() => { leaveAt = 0; });
   window.saverReady = api.info().then((d) => { sp = SCENES[(d.outfit || {}).species] ? d.outfit.species : 'cat'; born = now(); SCENES[sp].init(born); S = SCENES[sp]; })
     .catch((e) => { console.error(e); api.exit(); });   // 起不來就收掉，不要留一層空的透明視窗
   // 測試用：看現在演哪一套、戳一下那一套的招牌物件
