@@ -15,7 +15,7 @@ const FPS = 30, out = path.join(__dirname, 'out');
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
   await p.goto(`http://127.0.0.1:${srv.address().port}/build/trailer/trailer.html`);
   await p.evaluate(() => document.fonts.ready);
-  await p.waitForFunction(() => { const a = document.getElementById('fxf').contentWindow, b = document.getElementById('svf').contentWindow; return a && a.fxPreview && b && b.saverManual; });
+  await p.waitForFunction(() => { const a = document.getElementById('fxf').contentWindow, b = document.getElementById('svf').contentWindow; return a && a.fxPreview && a.DRAGON_READY && b && b.saverManual && b.DRAGON_READY; });
   const grab = (t, q) => p.evaluate(([t, q]) => { render(t); return document.getElementById('c').toDataURL('image/jpeg', q).split(',')[1]; }, [t, q]);
   const [mode, arg] = process.argv.slice(2);
   if (mode === 'shots') {

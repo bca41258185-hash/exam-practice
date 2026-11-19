@@ -10,6 +10,12 @@
 <canvas id="c"></canvas>
 <script src="draw.js"></script>
 <script>
+  window.DRAGON_IMG = new Image();
+  window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+  window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+  window.DRAGON_IMG.src = 'assets/dragon/qinglong-512.png';
+</script>
+<script>
 // 螢幕保護：不換畫面，只是在你的桌面上飄出東西來。透明、滑鼠穿透，桌面照常看得到。
 // 五個角色各有一套（SCENES）：飄的東西、怎麼動、隔一陣子發生什麼、點了有什麼反應都不一樣。
 //   靈貓「守山夜」    螢火蟲會被游標吸引；角落掛著師父的鈴鐺，隔一陣子響一聲；螢幕下緣走過一排貓掌印
@@ -242,9 +248,14 @@
           ctx.save(); ctx.globalAlpha *= 0.9; cloudShape(c.x, c.y, c.s, heavy > 0.05 ? '#7E8CA3' : '#C9D6E2'); ctx.restore();
         }
         for (const o of things) if (T >= o.at) orb(o);
-        // 小龍游過去
+        // 青龍偶爾從雲裡浮現：慢慢往上飄、淡入淡出（插畫還沒載好就用程式畫的小龍游過去）
         const p = (T - this.swim) / 9;
-        if (p >= 0 && p <= 1.35) {
+        const img = window.DRAGON_IMG;
+        if (p >= 0 && p <= 1 && img && img.complete && img.naturalWidth) {
+          if (this.swimX == null || this.swimAt !== this.swim) { this.swimAt = this.swim; this.swimX = W * (Math.random() < 0.5 ? 0.22 : 0.78); }
+          const h = H * 0.62, w = h * img.naturalWidth / img.naturalHeight, y = H * 0.5 + (0.5 - p) * 90 * K;
+          ctx.save(); ctx.globalAlpha *= Math.sin(p * Math.PI) * 0.85; ctx.drawImage(img, this.swimX - w / 2, y - h / 2, w, h); ctx.restore();
+        } else if (p >= 0 && p <= 1.35 && !(img && img.naturalWidth)) {
           const pts = [];
           for (let i = 0; i < 48; i++) { const q = p - i * 0.0062; pts.push([-120 * K + q * (W + 240 * K), H * 0.42 + Math.sin(q * 11) * 80 * K]); }
           window.drawLoong(ctx, pts, 1.05 * K, T, { sg: 1 });

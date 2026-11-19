@@ -10,6 +10,13 @@
 <canvas id="c"></canvas>
 <script src="draw.js"></script>
 <script>
+  // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
+  window.DRAGON_IMG = new Image();
+  window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+  window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+  window.DRAGON_IMG.src = 'assets/dragon/qinglong.png';
+</script>
+<script>
 // 技能的全螢幕特效。主程序送來 { move, dur, dir, scale, species, robe, x, y, ground }，
 // x、y 是角色身體中心在這個視窗裡的位置。這個視窗蓋滿螢幕、透明、滑鼠穿透。
 /* global drawPet */
@@ -150,15 +157,39 @@
       ctx.restore();
     },
     // 小青龍．龍吟：一條大青龍從牠身上竄出來，在整個螢幕盤旋一圈，往天上飛走
+    // 小青龍．龍吟：一條畫好的青龍（assets/dragon/qinglong.png）從牠身邊的雲裡浮現，呼吸、發光，最後往上飛走
+    // 圖還沒載好時，退回程式畫的龍
     dragonrise(u, A, k, D) {
-      // 往螢幕比較寬的那一側斜斜盤升，最後飛出畫面；水平方向一路往前，龍頭才不會倒過來
+      const img = window.DRAGON_IMG;
+      if (!img || !img.complete || !img.naturalWidth) return FX.dragonriseVector(u, A, k, D);
+      const inT = 0.9, outT = 0.9, pin = clamp(u / inT), pout = clamp((u - (D - outT)) / outT);
+      const ease = (x) => 1 - Math.pow(1 - x, 3);
+      const h = Math.min(H * 0.9, 1100 * k), w = h * img.naturalWidth / img.naturalHeight;
+      const cx = P.x + (W / 2 - P.x) * 0.55, cy0 = H * 0.5;
+      const cy = cy0 + (1 - ease(pin)) * H * 0.35 - pout * pout * H * 0.6 + Math.sin(u * 1.6) * 10 * k;
+      const sc = (0.55 + 0.45 * ease(pin)) * (1 + 0.015 * Math.sin(u * 2.2)) * (1 + pout * 0.08);
+      const al = A * Math.min(1, pin * 1.4) * (1 - pout);
+      // 背後一團金光
+      ctx.save(); ctx.globalAlpha = al * 0.8;
+      const g = ctx.createRadialGradient(cx, cy - h * 0.18, 10, cx, cy - h * 0.18, h * 0.6);
+      g.addColorStop(0, 'rgba(255,226,150,0.55)'); g.addColorStop(0.5, 'rgba(255,214,120,0.18)'); g.addColorStop(1, 'rgba(255,214,120,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+      // 龍
+      ctx.save(); ctx.globalAlpha = al; ctx.translate(cx, cy); ctx.rotate(Math.sin(u * 1.1) * 0.02); ctx.scale(sc, sc);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h); ctx.restore();
+      // 身邊飄的金光與花瓣
+      const r = rng(71);
+      for (let i = 0; i < 40; i++) {
+        const a0 = r() * 6.283, rr = h * (0.25 + r() * 0.35), q = (u * (0.2 + r() * 0.3) + r()) % 1;
+        spark(cx + Math.cos(a0) * rr * 0.6, cy + Math.sin(a0) * rr - q * 120 * k, (4 + r() * 6) * k, al * Math.sin(q * Math.PI) * 0.9, i % 3 ? GOLD : '#FFB38A');
+      }
+    },
+    dragonriseVector(u, A, k, D) {
       const sx = P.x < W / 2 ? 1 : -1, span = Math.max(P.x, W - P.x) + 300 * k;
       const path = (q) => [P.x + sx * q * span, P.y - 20 * k - q * (P.y + 260 * k) + Math.sin(q * Math.PI * 4) * 110 * k * Math.min(1, q * 4)];
       const head = (u / (D - 0.2)) * 1.3, pts = [];
       for (let i = 0; i < 64; i++) { const q = head - i * 0.0068; if (q < 0) break; pts.push(path(q)); }
       if (pts.length >= 6) { ctx.save(); ctx.globalAlpha *= A; window.drawLoong(ctx, pts, 1.9 * k, u, { sg: sx, pearl: true }); ctx.restore(); }
-      const r = rng(71);
-      for (let i = 0; i < 34; i++) { const q = clamp(head - 0.05 - r() * 0.45); if (q <= 0) continue; const [x, y] = path(q); spark(x + (r() - 0.5) * 140 * k, y + (r() - 0.5) * 140 * k, (5 + r() * 7) * k, A * 0.7, i % 2 ? QI : GOLD); }
     },
   };
 

@@ -332,7 +332,7 @@
     gold: { body: '#F2C14E', dark: '#B4741A', belly: '#FFF1CC', fin: '#D9342B', mane: '#D9342B', line: '#5A2E0E', horn: '#FFF6DA', iris: '#E8432E', scale: '#B4741A', scute: '#D9A441' },
     ink: { body: '#3A434C', dark: '#0E1318', belly: '#DCD5C1', fin: '#11161C', mane: '#11161C', line: '#0B0E12', horn: '#DCD5C1', iris: '#F5B82E', scale: '#C9C2AE', scute: '#8C8676' },
   };
-  root.LOONG_STYLE = 'real';
+  root.LOONG_STYLE = 'cloud';   // 和 assets/dragon 的插畫同一套配色
   function drawLoong(ctx, pts, s, t, o) {
     o = o || {};
     const n = pts.length; if (n < 6) return;
