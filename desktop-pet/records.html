@@ -137,6 +137,9 @@
 <h2>修煉成果</h2>
 <div class="grid" id="grid"></div>
 
+<h2>本命技能</h2>
+<ol id="skills"></ol>
+
 <h2>九重境界</h2>
 <ol id="realms"></ol>
 
@@ -162,6 +165,9 @@
         week: [320, 610, 0, 0, 540, 780, 412].map((v, i) => ({ date: '2026-11-' + (13 + i), xp: v, min: v })),
         caps: [{ name: '專注工作', used: 260, max: 480 }, { name: '切磋與小遊戲', used: 32, max: 60 }, { name: '摸頭', used: 30, max: 30 }, { name: '靈丹', used: 30, max: 90 }],
         late: false,
+        skills: [{ kind: '絕技', name: '鈴音鎮魂', desc: '搖響師父的鈴鐺，音波一圈圈盪開；心魔在場時直接震散', need: '金丹', got: true },
+          { kind: '奧義', name: '九命貓影', desc: '化出三道貓影繞身疾走', need: '合體', got: done },
+          { kind: '天賦', name: '守山', desc: '你離開時牠閉關的修為上限 120 → 200', need: '', got: true }],
         cur: done ? 6000 : NEED[realm], next: done ? 6000 : NEED[realm + 1],
         realms: NAMES.map((name, i) => ({ name, need: NEED[i], unlock: UNL[i], got: xp >= NEED[i] })),
         stats: done ? { days: 64, streak: 12, bestStreak: 20, todayMin: 312, totalMin: 18420, todosDone: 150, allDone: 41, breaks: 220, gazes: 380, dodges: 27, strikes: 96, demons: 14 }
@@ -281,6 +287,17 @@
     const grid = $('grid'); grid.textContent = '';
     tiles.forEach(([label, parts]) => {
       const t = el('div', 'tile'); t.append(numParts(parts), el('div', 'l', label)); grid.appendChild(t);
+    });
+
+    // 本命技能：絕技、奧義、天賦
+    const sk = $('skills'); sk.textContent = '';
+    (Array.isArray(r.skills) ? r.skills : []).forEach((x) => {
+      const li = el('li', x.got ? 'got' : 'lock');
+      li.appendChild(el('div', 'mk', String(x.kind || '').slice(0, 1)));
+      const bd = el('div', 'bd'); const nm = el('div', 'nm', String(x.name || '')); nm.appendChild(el('span', 'nd', String(x.kind || '')));
+      bd.append(nm, el('div', 'ul', String(x.desc || ''))); li.appendChild(bd);
+      if (!x.got) li.appendChild(el('div', 'tag', String(x.need || '') + '解鎖'));
+      sk.appendChild(li);
     });
 
     // 3. 九重境界

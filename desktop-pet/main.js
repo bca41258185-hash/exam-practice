@@ -74,7 +74,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -124,6 +124,7 @@ function startDrink() {
   set('drink', 4200);
   const w = Q.pick(Q.WATER);
   sayLines(['道友也喝口水吧', ...Q.verseLines(w)], 2600);
+  if (cfg.species === 'dragon') setTimeout(() => { gain(5, 'skill'); xpNotes.push(['行雲布雨', '陪你喝水，修為 +5']); }, 4300);   // 小青龍的天賦
 }
 function startGaze() {
   lastHealth = Date.now(); lastTouch = now();
@@ -148,7 +149,7 @@ function checkXp(idle) {
     flushXpNotes();
   } else {
     awaySec += 10;
-    if (awaySec >= 120 && awayGained < 120) { awaySec -= 120; awayGained += 1; gain(1, 'retreat'); }   // 每兩分鐘 +1，最多 120
+    if (awaySec >= 120 && awayGained < awayCap()) { awaySec -= 120; awayGained += 1; gain(1, 'retreat'); }   // 每兩分鐘 +1，最多 120
   }
 }
 function checkHealth(idle) {
@@ -187,7 +188,7 @@ function checkStretch() {
     return;
   }
   if (praise && idle < 5 && !['drag', 'fall', 'tribulation'].includes(state)) {
-    praise = false; gain(15, 'rest'); stat('breaks'); set('happy', 1600); sayLines(['休息得好！修為 +15', Q.pick(Q.CHEER)]);
+    praise = false; gain(restGain(), 'rest'); stat('breaks'); set('happy', 1600); sayLines([`休息得好！修為 +${restGain()}`, Q.pick(Q.CHEER)]);
     return;
   }
   if (!cfg.stretch) return;
@@ -261,7 +262,7 @@ const GAME_CAP = 60, WORK_CAP = 480;
 // 渡劫圓滿之後，多出來的修為化為功德；每 1500 功德飛升一重天，共九重
 const HEAVEN_STEP = 1500, HEAVEN_MAX = 9, NUM = '一二三四五六七八九';
 const SRC = { work: '專注工作', todo: '今日三件事', rest: '起身休息', eye: '護眼遠眺', pet: '摸頭', pill: '靈丹', retreat: '閉關',
-  game: '切磋與小遊戲', omen: '心魔與祥瑞', thunder: '天雷', bonus: '連續修煉', other: '其他' };
+  game: '切磋與小遊戲', skill: '本命技能', omen: '心魔與祥瑞', thunder: '天雷', bonus: '連續修煉', other: '其他' };
 let xpNotes = [], ascend = false;   // 等牠有空時要說的話（每則是幾行泡泡）；飛升了還沒慶祝
 function realmOf(xp) { let i = 0; while (i + 1 < NEED.length && xp >= NEED[i + 1]) i++; return i; }
 function stageOf(xp) {
@@ -283,7 +284,7 @@ function gain(n, src) {
   n = Math.max(0, Number(n) || 0);
   const d = daily();
   if (src === 'game') {
-    n = Math.min(n, GAME_CAP - (d.xp.game || 0));
+    n = Math.min(n, gameCap() - (d.xp.game || 0));
     if (n <= 0) { if (!d.gameTold) { d.gameTold = true; xpNotes.push(['今日切磋修為已滿', '再玩純屬娛樂～']); } return 0; }
   }
   if (!n) return 0;
@@ -645,10 +646,53 @@ ipcMain.on('game-result', (_e, r) => {
   }
 });
 
+// ---- 本命技能：每個角色各有絕技（金丹解鎖）、奧義（合體解鎖）、天賦（一直有效）
+// sig / ult = [繪圖用的招式代號, 名稱, 喊的話, 說明]；trait = [名稱, 說明]
+const SKILL_REALM = { sig: 2, ult: 6 };
+const SKILLS = {
+  cat: { sig: ['bellwave', '鈴音鎮魂', '鈴音鎮魂！', '搖響師父的鈴鐺，音波一圈圈盪開；心魔在場時直接震散'],
+    ult: ['shadows', '九命貓影', '九命貓影！', '化出三道貓影繞身疾走'],
+    trait: ['守山', '你離開時牠閉關的修為上限 120 → 200'] },
+  fox: { sig: ['foxfire', '狐火', '狐火，去！', '尾尖點起五團青藍狐火，繞身一圈後射出'],
+    ult: ['morph', '千面幻化', '看我七十二變！', '一陣煙，變成別的同門，再變回來'],
+    trait: ['幻術', '切磋與小遊戲的每日修為上限 60 → 90'] },
+  rabbit: { sig: ['pound', '玉杵搗藥', '搗藥搗藥～', '拿出杵臼搗藥，搗出一顆顆小丹丸'],
+    ult: ['moonlight', '月華', '月華如練！', '頭上升起滿月，月光灑落'],
+    trait: ['月宮靈藥', '靈丹每天 3 顆 → 4 顆'] },
+  panda: { sig: ['wok', '掌勺', '大師兄開飯囉！', '架起丹爐顛勺，火光與食材齊飛'],
+    ult: ['taiji', '太極推手', '兩儀，推！', '一輪黑白太極在身前轉開，往前推出'],
+    trait: ['大師兄的飯', '起身休息回來的修為 +15 → +25'] },
+  dragon: { sig: ['rain', '喚雨', '下雨囉～', '頭上聚起一朵雲，下一陣小雨'],
+    ult: ['dragonrise', '龍吟', '吼——！', '一道青龍虛影盤旋升天'],
+    trait: ['行雲布雨', '喝水提醒時陪你喝完，修為 +5'] },
+};
+function can2(kind) { return realm() >= SKILL_REALM[kind]; }
+function skills() { return SKILLS[cfg.species] || SKILLS.cat; }
+function awayCap() { return cfg.species === 'cat' ? 200 : 120; }
+function gameCap() { return cfg.species === 'fox' ? 90 : GAME_CAP; }
+function pillMax() { return cfg.species === 'rabbit' ? 4 : 3; }
+function restGain() { return cfg.species === 'panda' ? 25 : 15; }
+let morph = '';   // 狐仙千面幻化：暫時變成的角色
+function startSkill(kind) {
+  const sk = skills()[kind], need = SKILL_REALM[kind];
+  if (realm() < need) return say(`${sk[1]}要到${REALMS[need]}才會喔`, true);
+  if (BUSY.includes(state) || spar || ['sleep', 'taichi', 'drink', 'gaze', 'strike', 'eat', 'warn', 'struck'].includes(state)) return;
+  lastTouch = now(); stat('strikes'); strikeMove = sk[0];
+  if (sk[0] === 'bellwave' && demon) { demon.hp = 1; say(sk[2], true); return hitDemon(false); }   // 鈴音震散心魔
+  set('strike', kind === 'ult' ? 2600 : 1900); say(sk[2], true);
+  if (sk[0] === 'morph') {
+    const others = Object.keys(SKILLS).filter((k) => k !== cfg.species);
+    setTimeout(() => { morph = others[Math.floor(Math.random() * others.length)]; pushState(); }, 350);
+    setTimeout(() => { morph = ''; pushState(); }, 1900);
+  }
+  if (kind === 'ult' && !daily().ultDone) { daily().ultDone = true; const g = gain(10, 'skill'); setTimeout(() => xpNotes.push(['今日首次施展奧義', `修為 +${g}`]), 0); }
+}
+
 // ---- 雙擊出招（化神）
 let strikeMove = '', lastClickAt = 0;
 const MOVES = { palm: '降龍十八掌！', circle: '太極生兩儀～', bell: '金鐘罩！', flick: '彈指神通！' };
 function startStrike() {
+  if (Math.random() < 0.5) return startSkill('sig');   // 一半機率使出自己的絕技
   const keys = Object.keys(MOVES);
   strikeMove = keys[Math.floor(Math.random() * keys.length)];
   stat('strikes'); lastTouch = now();
@@ -881,11 +925,13 @@ function records() {
     week,
     caps: [
       { name: '專注工作', used: Math.min(WORK_CAP, Math.round(d.xp.work || 0)), max: WORK_CAP },
-      { name: '切磋與小遊戲', used: Math.min(GAME_CAP, Math.round(d.xp.game || 0)), max: GAME_CAP },
+      { name: '切磋與小遊戲', used: Math.min(gameCap(), Math.round(d.xp.game || 0)), max: gameCap() },
       { name: '摸頭', used: d.clicks || 0, max: 30 },
-      { name: '靈丹', used: (d.pills || 0) * 30, max: 90 },
+      { name: '靈丹', used: (d.pills || 0) * 30, max: pillMax() * 30 },
     ],
     late: curfewOn(),
+    skills: ['sig', 'ult'].map((k) => ({ kind: k === 'sig' ? '絕技' : '奧義', name: skills()[k][1], desc: skills()[k][3], need: REALMS[SKILL_REALM[k]], got: r >= SKILL_REALM[k] }))
+      .concat([{ kind: '天賦', name: skills().trait[0], desc: skills().trait[1], need: '', got: true }]),
     stats: { days: st.days || 1, streak: st.streak || 1, bestStreak: st.bestStreak || st.streak || 1, todayMin: d.min, totalMin: st.totalMin || 0, todosDone: st.todosDone || 0, allDone: st.allDone || 0,
       breaks: st.breaks || 0, gazes: st.gazes || 0, dodges: st.dodges || 0, strikes: st.strikes || 0, demons: st.demons || 0 },
     sources: [
@@ -970,7 +1016,7 @@ function nextLeap() {   // 朝游標跳一大步：落點在游標旁邊，一�
 function feed() {
   lastTouch = now();
   if (['drag', 'fall', 'tribulation'].includes(state)) return;
-  if (daily().pills >= 3) return say('今天的三顆靈丹吃完了，明天再來', true);
+  if (daily().pills >= pillMax()) return say(`今天的${'零一二三四'[pillMax()]}顆靈丹吃完了，明天再來`, true);
   if (now() - lastPill < 30000) return say('丹毒未消，等等再吃', true);
   lastPill = now(); daily().pills += 1;
   set('eat', 3200);
@@ -1123,7 +1169,7 @@ function tick() {
         cfg.seenRealm = realm(); cfg.seenDone = isDone();
         saveCfg(); set('happy', 1800);
         if (isDone()) sayLines(['渡劫圓滿！', ...(cfg.evolve === false ? [] : ['頭後生出光輪了']), '此後修為化為功德', '功德滿了就飛升', ...Q.verseLines(Q.pick(Q.VERSE))]);
-        else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...(EVOLVE[realm()] && cfg.evolve !== false ? ['外觀也進化了！', ...chunks(EVOLVE[realm()][cfg.species] || '')] : []), ...Q.verseLines(Q.pick(Q.VERSE))]);
+        else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...(realm() === SKILL_REALM.sig ? [`學會絕技：${skills().sig[1]}`] : realm() === SKILL_REALM.ult ? [`領悟奧義：${skills().ult[1]}`] : []), ...(EVOLVE[realm()] && cfg.evolve !== false ? ['外觀也進化了！', ...chunks(EVOLVE[realm()][cfg.species] || '')] : []), ...Q.verseLines(Q.pick(Q.VERSE))]);
         refreshUi();
       }
       else if (state === 'peek') { set('walk', 2500); }
@@ -1251,7 +1297,16 @@ function menu() {
       })),
     },
     { type: 'separator' },
-    { label: `餵靈丹（修為 +30，今天還有 ${3 - daily().pills} 顆）`, click: feed },
+    { label: `餵靈丹（修為 +30，今天還有 ${Math.max(0, pillMax() - daily().pills)} 顆）`, click: feed },
+    {
+      label: '本命技能', submenu: [
+        { label: `絕技：${skills().sig[1]}${can2('sig') ? '' : `（${REALMS[SKILL_REALM.sig]}解鎖）`}`, enabled: can2('sig'), click: () => startSkill('sig') },
+        { label: `奧義：${skills().ult[1]}${can2('ult') ? '' : `（${REALMS[SKILL_REALM.ult]}解鎖）`}`, enabled: can2('ult'), click: () => startSkill('ult') },
+        { type: 'separator' },
+        { label: `天賦：${skills().trait[0]}`, enabled: false },
+        { label: skills().trait[1], enabled: false },
+      ],
+    },
     { label: '打坐修煉', click: () => set('sleep', 120000) },
     { label: lockLabel('御劍飛行', 'roll'), enabled: can('roll'), click: () => onRoll(dir) },
     { label: lockLabel('來追我', 'chase'), enabled: can('chase'), click: () => { lastTouch = now(); startChase(); } },
@@ -1415,4 +1470,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { set, say, feed, gain, startSkill, gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };

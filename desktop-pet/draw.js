@@ -370,6 +370,11 @@
     if (strike === 'palm') { rot = 0.12; sx = 1.06; }
     if (strike === 'circle') rot = Math.sin(st * 4) * 0.25;
     if (strike === 'flick') sy = 1 + Math.sin(st * 20) * 0.03;
+    if (strike === 'bellwave') rot = Math.sin(st * 18) * 0.07;
+    if (strike === 'pound' || strike === 'wok') { sy = 1 + Math.abs(Math.sin(st * 9)) * 0.05; rot = 0.06; }
+    if (strike === 'rain' || strike === 'moonlight') sy = 1.03;
+    if (strike === 'taiji') { rot = 0.1; sx = 1.05; }
+    if (strike === 'dragonrise' || strike === 'shadows') lift = Math.abs(Math.sin(st * 6)) * 5;
     if (vanish) { const p = Math.min(1, st / 0.38); sx = sy = Math.max(0.02, 1 - p); rot = p * 4; }
     if (appear) { const p = Math.min(1, st / 0.35); sx = sy = Math.max(0.02, p); }
     if (warn) { sx = 1 + Math.sin(t * 30) * 0.02; }
@@ -798,6 +803,99 @@
       const p = (st * 2.2) % 1;
       spark(ctx, 100 + dir * (30 + p * 70), 140, 6, 1 - p * 0.6, C.qi);
       ellipse(ctx, 100 + dir * (30 + p * 70), 140, 3, 3, '#FFFFFF');
+    }
+    // ── 本命技能（每個角色各自的絕技與奧義）──
+    if (strike === 'bellwave') {   // 靈貓．鈴音鎮魂：鈴鐺在頭上搖，金色音波一圈圈盪開
+      for (let i = 0; i < 3; i++) {
+        const p = (st * 1.1 + i / 3) % 1;
+        ctx.save(); ctx.globalAlpha = (1 - p) * 0.9; ctx.strokeStyle = C.gold; ctx.lineWidth = 4 - p * 2.5;
+        ctx.beginPath(); ctx.ellipse(100, 150 - lift, 24 + p * 72, 20 + p * 60, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      ctx.save(); ctx.translate(100, top - 4); ctx.rotate(Math.sin(st * 18) * 0.5); ctx.lineWidth = 2; ctx.strokeStyle = C.line;
+      ellipse(ctx, 0, 6, 8, 8, C.gold, C.line); ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(6, 6); ctx.moveTo(0, 6); ctx.lineTo(0, 13); ctx.stroke();
+      ctx.restore();
+    }
+    if (strike === 'shadows') {   // 靈貓．九命貓影：三道半透明的貓影繞著牠疾走
+      for (let i = 0; i < 3; i++) {
+        const a = st * 5 + i * Math.PI * 2 / 3, x = 100 + Math.cos(a) * 62, y = 176 + Math.sin(a) * 8;
+        ctx.save(); ctx.globalAlpha = 0.5; ctx.translate(x, y); ctx.scale(0.46, 0.46); ctx.translate(-100, -186);
+        drawPet(ctx, { state: 'chase', dir: Math.sin(a) > 0 ? -1 : 1, t: t + i, st, outfit: { species: fit.species, hat: 'none', robe: fit.robe, gear: 'none', realm: 0 }, look: { x: 0, y: 0 }, mini: true });
+        ctx.restore();
+      }
+    }
+    if (strike === 'foxfire') {   // 狐仙．狐火：五團青藍狐火繞身，然後射出去
+      const out = Math.max(0, st - 1.1);
+      for (let i = 0; i < 5; i++) {
+        const a = st * 4 + i * Math.PI * 2 / 5, r = 54 + out * 150, x = 100 + Math.cos(a) * r, y = 146 - lift + Math.sin(a) * r * 0.5, fl = 1 + Math.sin(t * 20 + i) * 0.15;
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - out * 1.6); ctx.shadowColor = '#6FD3FF'; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#4FB6FF'; ctx.beginPath(); ctx.moveTo(x, y - 13 * fl); ctx.quadraticCurveTo(x + 9, y - 2, x, y + 7); ctx.quadraticCurveTo(x - 9, y - 2, x, y - 13 * fl); ctx.fill();
+        ctx.fillStyle = '#E6FBFF'; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.quadraticCurveTo(x + 4, y + 1, x, y + 5); ctx.quadraticCurveTo(x - 4, y + 1, x, y - 5); ctx.fill();
+        ctx.restore();
+      }
+    }
+    if (strike === 'morph') {   // 狐仙．千面幻化：變身前後各一陣煙
+      for (const t0 of [0.2, 1.75]) {
+        const p = (st - t0) / 0.6;
+        if (p > 0 && p < 1) for (let i = 0; i < 7; i++) {
+          const a = i * 0.9 + t0;
+          ctx.save(); ctx.globalAlpha = (1 - p) * 0.92; ellipse(ctx, 100 + Math.cos(a) * (14 + p * 46), 150 + Math.sin(a) * (10 + p * 34), 20 - p * 6, 18 - p * 6, '#FFFFFF', null); ctx.restore();
+        }
+      }
+    }
+    if (strike === 'pound') {   // 玉兔．玉杵搗藥：杵上下搗，小丹丸一顆顆跳出來
+      const bx = 100 + dir * 50, hit = Math.abs(Math.sin(st * 9));
+      ctx.save(); ctx.lineWidth = 2.4; ctx.strokeStyle = C.line;
+      ctx.fillStyle = '#F4EFE2'; ctx.beginPath(); ctx.roundRect(bx - 4, 132 - hit * 20, 8, 34, 4); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#C9CDD6'; ctx.beginPath(); ctx.moveTo(bx - 18, 164); ctx.quadraticCurveTo(bx - 16, 186, bx, 186); ctx.quadraticCurveTo(bx + 16, 186, bx + 18, 164); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      for (let i = 0; i < 3; i++) { const p = (st * 1.4 + i / 3) % 1; ellipse(ctx, bx + dir * (6 + p * 26) * (i % 2 ? 1 : -0.6), 160 - Math.sin(p * Math.PI) * 34, 4, 4, C.gold, C.line); }
+    }
+    if (strike === 'moonlight') {   // 玉兔．月華：頭上一輪滿月，月光灑下來
+      const p = Math.min(1, st / 0.6), a = Math.min(1, st / 0.5) * Math.max(0, Math.min(1, (2.6 - st) / 0.5));
+      ctx.save(); ctx.globalAlpha = a * 0.3; ctx.fillStyle = '#FFF4C4';
+      ctx.beginPath(); ctx.moveTo(84, 44); ctx.lineTo(116, 44); ctx.lineTo(158, 188); ctx.lineTo(42, 188); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = a; ctx.shadowColor = '#FFF4C4'; ctx.shadowBlur = 20;
+      ellipse(ctx, 100, 60 - p * 26, 22, 22, '#FFF4C4', null); ctx.shadowBlur = 0;
+      ellipse(ctx, 93, 30, 5, 5, 'rgba(214,190,140,0.55)', null); ellipse(ctx, 106, 40, 3.5, 3.5, 'rgba(214,190,140,0.55)', null);
+      ctx.restore();
+      for (let i = 0; i < 6; i++) { const q = (st * 0.6 + i / 6) % 1; spark(ctx, 62 + i * 15 + Math.sin(q * 6 + i) * 6, 60 + q * 120, 4, a * (1 - q), '#FFF4C4'); }
+    }
+    if (strike === 'wok') {   // 熊貓．掌勺：顛勺，火光與食材齊飛
+      const bx = 100 + dir * 52, toss = Math.abs(Math.sin(st * 6)) * 12;
+      for (let i = 0; i < 4; i++) { const p = (st * 2 + i / 4) % 1; spark(ctx, bx + (i - 1.5) * 9, 186 - p * 22, 6 * (1 - p * 0.6), 1 - p, i % 2 ? '#FF8A4C' : C.gold); }
+      ctx.save(); ctx.lineWidth = 2.6; ctx.strokeStyle = C.line; ctx.fillStyle = '#4A4650';
+      ctx.beginPath(); ctx.moveTo(bx - 22, 158 - toss); ctx.quadraticCurveTo(bx, 182 - toss, bx + 22, 158 - toss); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx - dir * 22, 158 - toss); ctx.lineTo(bx - dir * 36, 152 - toss); ctx.lineWidth = 5; ctx.stroke();
+      ctx.restore();
+      for (let i = 0; i < 5; i++) { const p = (st * 1.5 + i / 5) % 1; ellipse(ctx, bx + (i - 2) * 8, 152 - toss - Math.sin(p * Math.PI) * 40, 3.6, 3.6, ['#7CC878', '#E5484D', C.gold, '#FFFFFF', '#7CC878'][i], C.line); }
+    }
+    if (strike === 'taiji') {   // 熊貓．太極推手：一輪黑白太極在身前轉開，往前推出
+      const p = Math.min(1, st / 0.5), push = Math.max(0, st - 1.4), r = 8 + p * 22 + push * 10;
+      ctx.save(); ctx.translate(100 + dir * (62 + push * 60), 150); ctx.rotate(st * 5); ctx.globalAlpha = Math.max(0, 0.92 - push * 0.9); ctx.lineWidth = 2.4;
+      ellipse(ctx, 0, 0, r, r, '#FFFFFF', C.line);
+      ctx.fillStyle = '#3B3640'; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2); ctx.arc(0, r / 2, r / 2, Math.PI / 2, -Math.PI / 2, true); ctx.arc(0, -r / 2, r / 2, Math.PI / 2, -Math.PI / 2); ctx.fill();
+      ellipse(ctx, 0, -r / 2, r / 7, r / 7, '#FFFFFF', null); ellipse(ctx, 0, r / 2, r / 7, r / 7, '#3B3640', null);
+      ctx.restore();
+    }
+    if (strike === 'rain') {   // 小青龍．喚雨：頭上一朵雲，下一陣小雨
+      const cy = Math.max(20, top - 20), a = Math.min(1, st / 0.3);
+      ctx.save(); ctx.strokeStyle = '#7FD4FF'; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.globalAlpha = a;
+      for (let i = 0; i < 9; i++) { const p = (st * 1.7 + i * 0.37) % 1, x = 62 + i * 9.5, y = cy + 14 + p * (176 - cy); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 8); ctx.stroke(); }
+      ctx.lineWidth = 2.4;
+      for (const [dx, r] of [[-22, 13], [-4, 17], [16, 14], [30, 10]]) ellipse(ctx, 100 + dx, cy - (r - 10) * 0.5, r, r * 0.8, '#9AA9BD', null);
+      ctx.fillStyle = '#9AA9BD'; ctx.fillRect(74, cy - 2, 60, 10);
+      ctx.restore();
+    }
+    if (strike === 'dragonrise') {   // 小青龍．龍吟：一道青龍虛影盤旋升天
+      for (let i = 16; i >= 0; i--) {
+        const p = st * 0.55 - i * 0.035;
+        if (p < 0 || p > 1.1) continue;
+        const x = 100 + Math.sin(p * 9) * (52 - p * 22), y = 190 - p * 190, r = i === 0 ? 11 : 9 - i * 0.4;
+        ctx.save(); ctx.globalAlpha = Math.min(1, (1.1 - p) * 4) * 0.9; ctx.lineWidth = 2;
+        ellipse(ctx, x, y, r, r, i % 2 ? '#9BE3B8' : '#7ED6A5', C.line);
+        if (i === 0) { ctx.fillStyle = C.gold; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + s * 4, y - 8); ctx.lineTo(x + s * 9, y - 22); ctx.lineTo(x + s * 9, y - 7); ctx.closePath(); ctx.fill(); ctx.stroke(); } ellipse(ctx, x - 4, y - 1, 1.8, 1.8, C.line, null); ellipse(ctx, x + 4, y - 1, 1.8, 1.8, C.line, null); }
+        ctx.restore();
+      }
     }
     if (appear) {   // 出現時地上一圈結界
       ctx.save(); ctx.globalAlpha = 1 - Math.min(1, st / 0.65); ctx.strokeStyle = C.qi; ctx.lineWidth = 3;
