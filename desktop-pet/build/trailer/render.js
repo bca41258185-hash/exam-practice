@@ -18,7 +18,16 @@ const FPS = 30, out = path.join(__dirname, 'out');
   await p.waitForFunction(() => { const a = document.getElementById('fxf').contentWindow, b = document.getElementById('svf').contentWindow; return a && a.fxPreview && a.DRAGON_READY && b && b.saverManual && b.DRAGON_READY; });
   const grab = (t, q) => p.evaluate(([t, q]) => { render(t); return document.getElementById('c').toDataURL('image/jpeg', q).split(',')[1]; }, [t, q]);
   const [mode, arg] = process.argv.slice(2);
-  if (mode === 'shots') {
+  if (mode === 'range') {   // node render.js range 開始秒 結束秒 輸出檔.mp4 ：只算其中一段（配樂也剪同一段）
+    const [, a0, a1, outFile] = process.argv.slice(2), t0 = Number(a0), t1 = Number(a1);
+    for (let u = Math.max(0, t0 - 4); u < t0; u += 0.1) await p.evaluate((u) => render(u), u);   // 先往前演幾秒，連續的段落才對
+    const tmp = path.join(out, 'range.mp4');
+    const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-crf', '19', '-pix_fmt', 'yuv420p', tmp], { stdio: ['pipe', 'inherit', 'inherit'] });
+    for (let i = 0; i < Math.round((t1 - t0) * FPS); i++) { const buf = Buffer.from(await grab(t0 + i / FPS, 0.95), 'base64'); if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r)); }
+    ff.stdin.end(); await new Promise((r) => ff.on('close', r));
+    const music = path.join(out, 'music.wav'), args = fs.existsSync(music) ? ['-i', tmp, '-ss', String(t0), '-t', String(t1 - t0), '-i', music, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-shortest'] : ['-i', tmp, '-c', 'copy'];
+    await new Promise((r) => spawn('ffmpeg', ['-y', '-loglevel', 'error', ...args, '-movflags', '+faststart', outFile], { stdio: 'inherit' }).on('close', r));
+  } else if (mode === 'shots') {
     for (const t of arg.split(',').map(Number)) { for (let u = Math.max(0, t - 4); u < t; u += 0.1) await p.evaluate((u) => render(u), u);   // 有些段落要連續演才對（螢幕保護），先往前倒帶四秒
       fs.writeFileSync(path.join(out, `shot-${t.toFixed(2).padStart(6, '0')}.jpg`), Buffer.from(await grab(t, 0.8), 'base64')); }
   } else {

@@ -2,7 +2,7 @@
 
 每片三角形的頂點記成 (s, d)：s 是沿著身體的位置（0 尾巴、1 龍頭），d 是離身體中線多遠（以身長為單位，往下為正）。
 程式再把這些點貼到一條會波動的曲線上，身體就能真的扭動著游。
-用法：python3 make-swim.py [碎片大小倍數，預設 1.5]
+用法：python3 make-swim.py [碎片大小倍數，預設 1.5] [身體拉長倍數，預設 2.6]
 """
 import json, os, sys
 import numpy as np
@@ -15,6 +15,21 @@ K = float(sys.argv[1]) if len(sys.argv) > 1 else 1.5
 rng = np.random.default_rng(5)
 a = np.asarray(Image.open(os.path.join(HERE, 'geo-swim-original.png')).convert('RGB')).astype(np.float32)
 H, W, _ = a.shape
+# 先把原圖的身體拉長（頭、尾鰭、四肢那幾段不動），再切碎片：拉長的地方碎片大小才會跟別處一致
+E = float(sys.argv[2]) if len(sys.argv) > 2 else 2.6
+ZONES = [(0.13, 0.22), (0.36, 0.63), (0.79, 0.83)]   # 以龍身 0 尾～1 頭計
+cols0 = np.nonzero((np.sqrt(((a - a[5, 5]) ** 2).sum(2)) > 30).any(0))[0]; bx0, bx1 = cols0.min(), cols0.max()
+def dens(x):
+    sx = (x - bx0) / (bx1 - bx0)
+    for z0, z1 in ZONES:
+        if z0 < sx < z1: f = min(sx - z0, z1 - sx) / 0.02; return 1 + (E - 1) * min(1, f)
+    return 1.0
+cum = np.concatenate([[0], np.cumsum([dens(x + 0.5) for x in range(W)])])
+W2 = int(np.ceil(cum[-1])); src = np.interp(np.arange(W2) + 0.5, cum, np.arange(W + 1))
+xi = np.clip(src.astype(int), 0, W - 1); fx = np.clip(src - xi, 0, 1)[None, :, None]
+a = a[:, xi] * (1 - fx) + a[:, np.clip(xi + 1, 0, W - 1)] * fx
+H, W, _ = a.shape
+print('拉長後寬度', W)
 bg = np.median(np.concatenate([a[:30, :30].reshape(-1, 3), a[:30, -30:].reshape(-1, 3), a[-30:, :30].reshape(-1, 3), a[-30:, -30:].reshape(-1, 3)]), axis=0)
 near = np.sqrt(((a - bg) ** 2).sum(2)) < 30
 lab, _ = ndimage.label(near)
@@ -113,9 +128,9 @@ with open(os.path.join(ROOT, 'loong-swim.js'), 'w', encoding='utf8') as f:
     f.write('(function (root) { root.LOONG_SWIM = ' + json.dumps(out, separators=(',', ':')) + '; })(typeof window !== "undefined" ? window : globalThis);\n')
 # 預覽：把 (s, d) 貼回一條直線，看看拼起來對不對
 pal = ['#12505E', '#1C7C86', '#2E9E9A', '#5CBFB0', '#9ED8C8', '#F3EAD3', '#E2A83A']
-img = Image.new('RGB', (1600, 520), (255, 255, 255)); dr = ImageDraw.Draw(img)
+img = Image.new('RGB', (1800, 420), (255, 255, 255)); dr = ImageDraw.Draw(img)
 for k in range(0, len(flat), 7):
-    q = np.array([[60 + flat[k + 2 * j] * 1480, 260 + flat[k + 2 * j + 1] * 1480] for j in range(3)]); c = q.mean(0)
+    q = np.array([[40 + flat[k + 2 * j] * 1720, 210 + flat[k + 2 * j + 1] * 1720] for j in range(3)]); c = q.mean(0)
     dr.polygon([tuple(c + (p - c) * max(0, 1 - 2.5 / (np.linalg.norm(p - c) + 1e-6))) for p in q], fill=pal[flat[k + 6]])
 img.save(os.path.join(ROOT, 'build', 'loong-swim-flat.png'))
 print('三角形', len(keep), '身長(px)', BL)

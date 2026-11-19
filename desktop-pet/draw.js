@@ -612,17 +612,26 @@
     return { total, at };
   }
   root.makeRoute = makeRoute;
-  // drawShardSwim(ctx, 路線, 龍頭走到哪(像素), 身長(像素), { t, amp(擺幅，身長的比例), mirror(往左游時 true), scatter, palette })
+  // 拉長龍身：只拉長身體那幾段（尾鰭到後腳、後腳到前腳、前腳到頭），頭、尾鰭、四肢維持原比例
+  const SWIM_STRETCH = [[0.13, 0.22], [0.36, 0.63], [0.79, 0.83]];
+  function swimDensity(s, E) { for (const [a, b] of SWIM_STRETCH) if (s > a && s < b) { const f = Math.min(s - a, b - s) / 0.02; return 1 + (E - 1) * Math.min(1, f); } return 1; }
+  // drawShardSwim(ctx, 路線, 龍頭走到哪(像素), 原圖身長(像素，決定粗細), { t, amp, mirror, scatter, palette, longer(身體拉長倍數，預設 2.6) })
+  // 回傳畫出來的實際全長（像素）
+  function swimLength(BL, E) { let L = 0; for (let i = 0; i < 200; i++) L += swimDensity((i + 0.5) / 200, E) / 200; return L * BL; }
+  root.swimLength = swimLength;
   // 身體每一點都在路線上落後龍頭一段，再加一道從頭傳到尾的波，尾巴擺得最大
   function drawShardSwim(ctx, route, qh, BL, o) {
     const D = root.LOONG_SWIM; if (!D) return false;
     o = o || {};
     const pal = SHARD_PALETTES[o.palette || root.SHARD_PALETTE] || SHARD_PALETTES.qingci, tr = D.tris, t = o.t || 0;
     const amp = o.amp == null ? 0.05 : o.amp, scat = Math.max(0, Math.min(1, o.scatter || 0)), up = o.mirror ? -1 : 1, gap = BL * 0.0016;
-    const N = 64, S = [], T = [];
+    const E = o.longer == null ? 1 : o.longer, N = 96, S = [], T = [], cum = [0];
+    for (let i = 1; i <= N; i++) cum.push(cum[i - 1] + swimDensity((i - 0.5) / N, E) / N * BL);
+    const Ltot = cum[N];
     for (let i = 0; i <= N; i++) {
-      const s = i / N, q = qh - (1 - s) * BL, p = route.at(q), p2 = route.at(q + 2), dx = p2[0] - p[0], dy = p2[1] - p[1], l = Math.hypot(dx, dy) || 1;
-      const nx = -dy / l * up, ny = dx / l * up, w = amp * BL * Math.sin((1 - s) * 7.5 - t * 5.5) * (0.12 + 0.88 * (1 - s));
+      const s = i / N, back = Ltot - cum[i], q = qh - back, p = route.at(q), p2 = route.at(q + 2), dx = p2[0] - p[0], dy = p2[1] - p[1], l = Math.hypot(dx, dy) || 1;
+      const g = back / Ltot;   // 離龍頭多遠（0 頭～1 尾）
+      const nx = -dy / l * up, ny = dx / l * up, w = amp * BL * Math.sin(g * 11 - t * 5.5) * (0.12 + 0.88 * g);
       S.push([p[0] + nx * w, p[1] + ny * w]);
     }
     for (let i = 0; i <= N; i++) { const a = S[Math.max(0, i - 1)], b = S[Math.min(N, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; T.push([-dy / l * up, dx / l * up]); }
