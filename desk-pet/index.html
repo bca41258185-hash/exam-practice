@@ -71,7 +71,8 @@ section { padding-block: 72px 8px; }
 .stage { position: relative; aspect-ratio: 1 / 0.92; max-width: 100%; border-radius: 14px; overflow: hidden;
   background: radial-gradient(ellipse at 50% 30%, #24585a 0%, #163a3e 55%, #0f2b2f 100%); border: 1px solid var(--line); }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; touch-action: manipulation; }
-.stage .say { position: absolute; left: 14px; bottom: 12px; right: 14px; font-size: 13px; color: var(--ink-soft); pointer-events: none; }
+.stage-col { display: grid; gap: 10px; min-width: 0; }
+.say { font-size: 14px; color: var(--ink-soft); min-height: 3.4em; }
 .panel { display: grid; gap: 18px; min-width: 0; }
 .group { display: grid; gap: 8px; }
 .group > span { font-size: 13px; letter-spacing: 0.2em; color: var(--ink-soft); }
@@ -161,7 +162,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
     </div>
     <p class="meta">Windows 10／11 · 不用連網 · 不擋你工作</p>
   </div>
-  <p class="hint">點一下雲上的靈寵</p>
+  <p class="hint">點一下雲上的靈寵 · 有一隻是狐仙變的？</p>
 </header>
 
 <div class="wrap">
@@ -194,7 +195,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
       <p class="lede">這裡用的就是程式裡畫角色的同一套程式碼。換角色、換裝、拉境界，再叫牠出招看看。</p>
     </div>
     <div class="play">
-      <div class="stage"><canvas id="stage" aria-label="試玩中的靈寵，點牠會有反應"></canvas><p class="say" id="say">點牠一下，或按右邊的招式</p></div>
+      <div class="stage-col"><div class="stage"><canvas id="stage" aria-label="試玩中的靈寵，點牠會有反應"></canvas></div><p class="say" id="say" aria-live="polite">點牠一下，或按右邊的招式</p></div>
       <div class="panel">
         <div class="group"><span>角色</span><div class="chips" id="species"></div></div>
         <div class="group realm-row">
@@ -3166,7 +3167,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   // ---------------- 開頭夜空 ----------------
   const sky = document.getElementById('sky'), sx = sky.getContext('2d');
   let W = 0, H = 0, DPR = 1, stars = [], fires = [], mouse = null;
-  const pets = SPECIES.map(([sp], i) => ({ sp, i, state: 'idle', t0: 0, until: 0, bubble: null, ph: Math.random() * 6 }));
+  const pets = SPECIES.map(([sp], i) => ({ sp, i, state: 'idle', t0: 0, until: 0, bubble: null, ph: Math.random() * 6, as: '', asUntil: 0, puff: 0, nextTrick: now() + 6 + Math.random() * 6 }));
   function resize() {
     const r = sky.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
     W = r.width; H = r.height; sky.width = Math.round(W * DPR); sky.height = Math.round(H * DPR);
@@ -3220,10 +3221,16 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
       cloud(sx, L.x, L.y + 6 * L.s + bob * 0.4, L.s);
       if (p.until && T > p.until) { p.state = 'idle'; p.until = 0; }
       if (p.bubble && T - p.bubble.at > 3) p.bubble = null;
+      if (p.sp === 'fox') {   // 狐仙在雲上也會偷偷變身騙你
+        if (!p.as && T > p.nextTrick && p.state === 'idle') { p.as = pick(['cat', 'rabbit', 'panda', 'dragon']); p.asUntil = T + 12 + Math.random() * 6; p.puff = T; }
+        if (p.as && T > p.asUntil) { p.as = ''; p.puff = T; p.nextTrick = T + 14 + Math.random() * 10; }
+      }
       const look = mouse ? { x: (mouse.x - L.x) / L.s, y: (mouse.y - (L.y - 38 * L.s)) / L.s } : { x: 0, y: 0 };
       sx.save(); sx.translate(L.x - 100 * L.s, L.y - 188 * L.s + bob); sx.scale(L.s, L.s);
-      drawPet(sx, { state: p.state, dir: L.x < W / 2 ? 1 : -1, t: T + p.i * 0.37, st: T - p.t0, look, outfit: { species: p.sp, ...LOOK[p.sp], realm: 6, evo: 3 }, bubble: p.bubble && { text: p.bubble.text, age: T - p.bubble.at } });
+      drawPet(sx, { state: p.state, dir: L.x < W / 2 ? 1 : -1, t: T + p.i * 0.37, st: T - p.t0, look, outfit: { species: p.as || p.sp, fake: p.as ? 'fox' : undefined, ...LOOK[p.sp], realm: 6, evo: 3 }, bubble: p.bubble && { text: p.bubble.text, age: T - p.bubble.at } });
       sx.restore();
+      if (p.puff && T - p.puff < 0.7) { const q = (T - p.puff) / 0.7; sx.save(); sx.globalAlpha = 1 - q; sx.fillStyle = '#f3f6ef';
+        for (let i = 0; i < 9; i++) { const a = i * 0.7; sx.beginPath(); sx.arc(L.x + Math.cos(a) * (16 + q * 50) * L.s, L.y - 60 * L.s + Math.sin(a) * (10 + q * 30) * L.s, (11 - q * 5) * L.s, 0, 6.283); sx.fill(); } sx.restore(); }
     }
   }
   function skyHit(x, y) { for (const L of petLayout()) if (Math.abs(x - L.x) < 70 * L.s && y > L.y - 150 * L.s && y < L.y + 30 * L.s) return L.p; return null; }
@@ -3232,6 +3239,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   sky.addEventListener('click', (e) => {
     const r = sky.getBoundingClientRect(), p = skyHit(e.clientX - r.left, e.clientY - r.top); if (!p) return;
     const T = now(), roll = Math.random();
+    if (p.as) { p.as = ''; p.puff = T; p.nextTrick = T + 14 + Math.random() * 10; p.state = 'happy'; p.t0 = T; p.until = T + 1.4; p.bubble = { text: pick(['被你看穿了！', '尾巴又露出來了……', '嘻嘻，有騙到你嗎？']), at: T }; return; }
     p.state = roll < 0.18 ? 'laugh' : roll < 0.36 ? 'spin' : 'happy'; p.t0 = T; p.until = T + (p.state === 'laugh' ? 2.4 : 1.4);
     p.bubble = { text: p.state === 'laugh' ? '哈哈哈，笑穴！' : pick(LINES[p.sp]), at: T };
   });
@@ -3243,7 +3251,11 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
     ['摸頭', 'happy', 1.4, 0], ['笑穴', 'laugh', 2.4, 0], ['打坐', 'sleep', 5, 0], ['打太極', 'taichi', 5, 0],
     ['御劍飛行', 'roll', 5, 2], ['比劍', 'sword', 4, 0], ['比法術', 'spell', 4, 0], ['喝口水', 'drink', 4, 0],
     ['求一卦', 'divine', 4, 0], ['轉暈了', 'dizzy', 2.6, 0], ['絕技', 'sig', 3.2, 2], ['奧義', 'ult', 4.2, 6],
+    ['偷偷變身', 'disguise', 25, 0, 'fox'], ['修煉狐火', 'foxtrain', 15, 0, 'fox'], ['御劍穿火', 'foxride', 6, 2, 'fox'],
   ];
+  const FOX_MOVES = ['gather', 'cast', 'spin', 'juggle', 'meditate'];
+  const FOX_MOVE_SAY = { gather: '狐火，聚！', cast: '狐火，散！', spin: '九尾，開！', juggle: '看我拋火～', meditate: '吐納……' };
+  const CAUGHT = ['被你看穿了！', '尾巴又露出來了……', '嘻嘻，剛剛有騙到你嗎？', '下次一定變得更像！'];
   const SAY = { happy: () => pick(LINES[cur.sp]), laugh: () => '哈哈哈，別點那裡！', sleep: () => '吐納……', taichi: () => '起來動一動吧', roll: () => '御劍追你！', sword: () => '看劍！', spell: () => '符來！', drink: () => '道友也喝口水吧', divine: () => '天機……', dizzy: () => '天旋地轉～' };
   function chips(el, list, key, onPick) {
     el.innerHTML = '';
@@ -3260,7 +3272,8 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   }
   function buildActs() {
     const el = document.getElementById('acts'); el.innerHTML = '';
-    for (const [name, key, , need] of ACTS) {
+    for (const [name, key, , need, only] of ACTS) {
+      if (only && only !== cur.sp) continue;
       const label = key === 'sig' ? `絕技：${SK[cur.sp][0][1]}` : key === 'ult' ? `奧義：${SK[cur.sp][1][1]}` : name;
       const b = document.createElement('button'); b.type = 'button'; b.className = 'chip act' + (cur.realm < need ? ' locked' : ''); b.textContent = label;
       b.addEventListener('click', () => act(key)); el.appendChild(b);
@@ -3268,30 +3281,55 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   }
   function act(key, text) {
     const a = ACTS.find((x) => x[1] === key) || ACTS[0], T = now();
+    if (key !== 'disguise') cur.disguise = null;
+    if (key === 'disguise') {
+      const others = SPECIES.map((x) => x[0]).filter((x) => x !== 'fox');
+      cur.disguise = { as: pick(others), until: T + 25 }; cur.state = 'idle'; cur.t0 = T; cur.until = 0; cur.move = ''; cur.bubble = null; puff(T);
+      sayEl.textContent = '狐仙變成別的同門了。可是尾巴藏不住、睫毛也還在，看出來了就點她一下。在桌面上她大約每分鐘偷偷變一次。'; return;
+    }
+    if (key === 'foxtrain') { cur.state = 'foxtrain'; cur.t0 = T; cur.until = T + a[2]; cur.fm = 0; cur.fmAt = T; cur.move = ''; cur.bubble = { text: FOX_MOVE_SAY[FOX_MOVES[0]], at: T };
+      sayEl.textContent = '螢幕保護時狐仙不睡覺，一招一招修煉狐火：聚火、放火、轉尾、拋火、打坐。'; return; }
+    if (key === 'foxride' && cur.realm >= a[3]) { cur.state = 'foxride'; cur.t0 = T; cur.until = T + a[2]; cur.move = ''; cur.bubble = { text: pick(['御劍穿火！', '踏劍遊火海～']), at: T };
+      sayEl.textContent = '螢幕保護時，狐仙會踩著飛劍在滿螢幕的狐火之間繞一大圈，飛過的地方火被撥開。'; return; }
     if (cur.realm < a[3]) { cur.bubble = { text: `要到${REALMS[a[3]]}才會喔`, at: T }; sayEl.textContent = `「${a[0] === '絕技' || a[0] === '奧義' ? a[0] : a[0]}」要修到${REALMS[a[3]]}才會，往右拉境界試試。`; return; }
     cur.t0 = T; cur.until = T + a[2];
     if (key === 'sig' || key === 'ult') { const s = SK[cur.sp][key === 'sig' ? 0 : 1]; cur.state = 'strike'; cur.move = s[0]; cur.bubble = { text: s[1] + '！', at: T }; sayEl.textContent = `${key === 'sig' ? '絕技' : '奧義'}「${s[1]}」。在桌面上是雙擊${key === 'ult' ? '改成滑鼠中鍵' : ''}施展。`; return; }
     cur.state = key; cur.move = ''; cur.bubble = { text: text || SAY[key](), at: T };
     sayEl.textContent = { happy: '在桌面上點一下就是摸頭，修為 +2。', laugh: '每位都藏一個笑穴，點到會笑到打滾。', sleep: '你離開座位時牠會自己閉關修煉。', taichi: '坐太久了，牠打一套太極叫你起來。', roll: '在桌面上滾滾輪，牠就御劍追著游標飛。', sword: '在牠身上來回揮滑鼠就是比劍，手上會換成劍。', spell: '快速連點五下就是比法術，手上換成黃符。', drink: '每用電腦一小時，牠喝一口，提醒你喝水。', divine: '每天一卦，搖三枚銅錢起易經卦象。', dizzy: '甩太大力，牠會轉暈。' }[key] || '';
   }
+  let puffAt = -9; function puff(T) { puffAt = T; }
+  const stageFires = Array.from({ length: 9 }, (_, i) => ({ x: 20 + (i * 37) % 170, ph: i * 0.7 }));
   function drawStage(T) {
     const r = stage.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1);
     if (stage.width !== Math.round(r.width * d)) { stage.width = Math.round(r.width * d); stage.height = Math.round(r.height * d); }
-    const k = Math.min(r.width / 200, r.height / 200) * 0.95;
+    const k = Math.min(r.width / 200, (r.height - 12) / 200) * 0.95;
     cx.setTransform(d, 0, 0, d, 0, 0); cx.clearRect(0, 0, r.width, r.height);
     if (cur.until && T > cur.until) { cur.state = 'idle'; cur.until = 0; cur.move = ''; }
+    if (cur.disguise && T > cur.disguise.until) { cur.disguise = null; puff(T); cur.bubble = { text: '玩夠了，變回來囉', at: T }; }
+    if (cur.state === 'foxtrain' && T - cur.fmAt > 3) { cur.fm = (cur.fm + 1) % FOX_MOVES.length; cur.fmAt = T; cur.t0 = T; cur.bubble = { text: FOX_MOVE_SAY[FOX_MOVES[cur.fm]], at: T }; }
     if (cur.bubble && T - cur.bubble.at > 3) cur.bubble = null;
-    const fly = cur.state === 'roll', ox = r.width / 2 - 100 * k, oy = r.height - 200 * k - 6 + (fly ? -30 * k + Math.sin(T * 3) * 6 * k : 0);
+    const fly = cur.state === 'roll' || cur.state === 'foxride', ox = r.width / 2 - 100 * k, oy = r.height - 14 - 192 * k + (fly ? -30 * k + Math.sin(T * 3) * 6 * k : 0);
     cx.fillStyle = 'rgba(0,0,0,0.22)'; cx.beginPath(); cx.ellipse(r.width / 2, oy + 189 * k + (fly ? 30 * k : 0), (fly ? 34 : 46) * k, 7 * k, 0, 0, 6.283); cx.fill();
     cx.save(); cx.translate(ox, oy); cx.scale(k, k);
-    const realm = Math.min(8, cur.realm), done = cur.realm >= 9;
-    drawPet(cx, { state: cur.state, dir: 1, t: T, st: T - cur.t0, look: cur.look, outfit: { species: cur.sp, hat: cur.hat, robe: cur.robe, gear: cur.gear, realm, done, move: cur.move }, bubble: cur.bubble && { text: cur.bubble.text, age: T - cur.bubble.at } });
+    const realm = Math.min(8, cur.realm), done = cur.realm >= 9, ride = cur.state === 'foxride';
     cx.restore();
+    if (ride) {   // 穿火：周圍的狐火繞著飛、被撥開
+      for (const f of stageFires) { const a = f.ph * 4 + T * 0.7, R = (62 + f.x * 0.2 + 14 * Math.sin(T * 3 + f.ph)) * k; flame(cx, r.width / 2 + Math.cos(a) * R, oy + 120 * k + Math.sin(a) * R * 0.5, 5 * k, 0.85); }
+    }
+    cx.save(); cx.translate(ox, oy); cx.scale(k, k);
+    const fake = cur.disguise ? cur.disguise.as : '';
+    drawPet(cx, { state: cur.state, dir: ride ? (Math.sin(T * 0.8) > 0 ? 1 : -1) : 1, t: T, st: T - cur.t0, look: cur.look, outfit: { species: fake || cur.sp, fake: fake ? 'fox' : undefined, hat: cur.hat, robe: cur.robe, gear: cur.gear, realm, done, move: cur.move, foxmove: cur.state === 'foxtrain' ? FOX_MOVES[cur.fm] : undefined }, bubble: cur.bubble && { text: cur.bubble.text, age: T - cur.bubble.at } });
+    cx.restore();
+    if (T - puffAt < 0.7) { const q = (T - puffAt) / 0.7; cx.save(); cx.globalAlpha = 1 - q; cx.fillStyle = '#f3f6ef';
+      for (let i = 0; i < 9; i++) { const a = i * 0.7; cx.beginPath(); cx.arc(r.width / 2 + Math.cos(a) * (20 + q * 70) * k, oy + 120 * k + Math.sin(a) * (14 + q * 40) * k, (14 - q * 6) * k, 0, 6.283); cx.fill(); } cx.restore(); }
     stage._k = k; stage._o = { x: ox, y: oy };
   }
   stage.addEventListener('pointermove', (e) => { const r = stage.getBoundingClientRect(), k = stage._k || 1; cur.look = { x: (e.clientX - r.left - stage._o.x) / k - 100, y: (e.clientY - r.top - stage._o.y) / k - 150 }; });
   stage.addEventListener('pointerleave', () => { cur.look = { x: 0, y: 0 }; });
-  stage.addEventListener('click', () => act(Math.random() < 0.15 ? 'laugh' : 'happy'));
+  stage.addEventListener('click', () => {
+    if (cur.disguise) { cur.disguise = null; puff(now()); act('happy', pick(CAUGHT)); sayEl.textContent = '識破了！在桌面上點變身中的狐仙，她也會現原形。'; return; }
+    act(Math.random() < 0.15 ? 'laugh' : 'happy');
+  });
   const realmEl = document.getElementById('realm'), realmName = document.getElementById('realmName');
   const XP = ['0', '150', '500', '1,000', '1,600', '2,300', '3,100', '4,000', '5,000', '6,000'];
   function showRealm() { realmName.innerHTML = `${REALMS[cur.realm]}<small>修為 ${XP[cur.realm]}</small>`; }
