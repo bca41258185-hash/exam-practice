@@ -74,7 +74,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -242,6 +242,13 @@ const OLD_NEED = [0, 100, 400, 1200, 3000, 7000, 15000, 30000, 60000];   // 舊�
 // 每個境界解鎖的功夫與特效（角色、裝扮一直都開放；工作工具永遠不鎖）
 const UNLOCK = ['點、拖、甩、吟詩', '腳下靈氣圈、來追我', '金丹微光、御劍飛行', '壁虎遊牆功、元嬰小分身',
   '雙擊出招', '畫圈縮地成寸', '召喚同門', '腳踏祥雲、大乘語錄', '天雷閃避'];
+// 外觀進化：到這些境界時樣子會變（draw.js 依境界畫），突破時順便說一句各角色變了什麼
+const EVOLVE = {
+  2: { cat: '掛上師父的鈴鐺', fox: '長出第二條尾巴', rabbit: '耳尖染金', panda: '衣領滾金邊', dragon: '龍角長大了' },
+  4: { cat: '修出第二條尾巴', fox: '三尾了', rabbit: '眉心一彎金月', panda: '戴上太極佩', dragon: '龍角分叉了' },
+  6: { cat: '尾尖燃起靈火', fox: '五尾，披帛飄飄', rabbit: '身後升起彎月', panda: '眼圈鑲金', dragon: '披帛飄飄' },
+  8: { cat: '三尾，眉心金蓮', fox: '八尾齊開', rabbit: '眉心金月更亮', panda: '眉心金蓮', dragon: '龍珠回來了' },
+};
 const ABILITY = { chase: 1, roll: 2, climb: 3, strike: 4, blink: 5, companion: 6, thunder: 8 };
 function realm() { return realmOf(cfg.xp); }
 function can(a) { return realm() >= ABILITY[a]; }
@@ -1115,8 +1122,8 @@ function tick() {
       else if (state === 'tribulation') {
         cfg.seenRealm = realm(); cfg.seenDone = isDone();
         saveCfg(); set('happy', 1800);
-        if (isDone()) sayLines(['渡劫圓滿！', '此後修為化為功德', '功德滿了就飛升', ...Q.verseLines(Q.pick(Q.VERSE))]);
-        else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...Q.verseLines(Q.pick(Q.VERSE))]);
+        if (isDone()) sayLines(['渡劫圓滿！', ...(cfg.evolve === false ? [] : ['頭後生出光輪了']), '此後修為化為功德', '功德滿了就飛升', ...Q.verseLines(Q.pick(Q.VERSE))]);
+        else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...(EVOLVE[realm()] && cfg.evolve !== false ? ['外觀也進化了！', ...chunks(EVOLVE[realm()][cfg.species] || '')] : []), ...Q.verseLines(Q.pick(Q.VERSE))]);
         refreshUi();
       }
       else if (state === 'peek') { set('walk', 2500); }
@@ -1276,6 +1283,7 @@ function menu() {
         })),
       })),
     },
+    { label: '外觀隨境界進化', type: 'checkbox', checked: cfg.evolve !== false, click: (m) => { cfg.evolve = m.checked; saveCfg(); pushState(); say(m.checked ? '現出真身！' : '變回小時候的樣子', true); } },
     { label: '鬥法音效', type: 'checkbox', checked: cfg.sound !== false, click: (m) => { cfg.sound = m.checked; saveCfg(); } },
     { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
