@@ -43,6 +43,8 @@
   const api = window.fx || { info: async () => ({ outfit: { species: location.hash.slice(1) || 'cat' } }), exit: () => console.log('exit'), clickable: () => {}, onLeave: () => {} };
   let W = 0, H = 0, K = 1, sp = 'cat', S = null, things = [], bursts = [], mouse = { x: -9999, y: -9999 }, leaveAt = 0, born = 0, hot = false, flash = -9;
   const LINGER = 14, FADE = 4, GOLD = '#F5B82E', LINE = '#4A3A2A';
+  let INFO = {}, lastPlay = 0;
+  function play() { leaveAt = 0; if (now() - lastPlay > 2.5) { lastPlay = now(); if (api.play) api.play(); } }   // 正在玩：螢幕保護先別散
   function size() { W = innerWidth; H = innerHeight; K = Math.max(0.7, Math.min(1.5, H / 1080)); cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
   addEventListener('resize', size); size();
   let clock = null;   // 預告片算圖時由外面指定時間（saverDraw），平常是 null
@@ -91,7 +93,7 @@
   function blade(o, T, leaf) {   // 花瓣或竹葉
     ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(T * (0.7 + o.spin * 0.6) + o.ph); ctx.globalAlpha *= 0.92;
     const l = o.r * (leaf ? 2.2 : 1.6), w = l * (leaf ? 0.26 : 0.42);
-    ctx.fillStyle = leaf ? '#7CC878' : '#F5C95A'; ctx.strokeStyle = leaf ? '#3E7A45' : '#C9901A'; ctx.lineWidth = 1.4 * K;
+    ctx.fillStyle = leaf ? '#7CC878' : o.gold ? '#FFD45A' : '#F5C95A'; ctx.strokeStyle = leaf ? '#3E7A45' : '#C9901A'; ctx.lineWidth = 1.4 * K;
     ctx.beginPath(); ctx.moveTo(-l / 2, 0); ctx.quadraticCurveTo(0, -w, l / 2, 0); ctx.quadraticCurveTo(0, w, -l / 2, 0); ctx.fill(); ctx.stroke();
     if (leaf) { ctx.beginPath(); ctx.moveTo(-l / 2, 0); ctx.lineTo(l / 2, 0); ctx.stroke(); }
     ctx.restore();
@@ -106,14 +108,75 @@
     // ── 靈貓「守山夜」──
     cat: {
       name: '守山夜',
-      init(T) { things = Array.from({ length: count(70000, 12, 34) }, () => mk(rnd(-14, 14), rnd(-10, 10), rnd(5, 9))); this.ring = T + 5; this.rings = []; this.paws = T + 4; this.bright = -9; },
+      init(T) { things = Array.from({ length: count(70000, 12, 34) }, () => mk(rnd(-14, 14), rnd(-10, 10), rnd(5, 9))); this.ring = T + 5; this.rings = []; this.paws = T + 4; this.bright = -9;
+        this.jar = 0; this.jarAt = -9; this.pounce = -9; this.claws = []; this.stars = []; this.rise = null; this.born = T; },
+      // 抓螢火蟲：把螢火蟲（會跟著游標）趕到靈貓身邊，牠一撲就收進身邊的燈籠；收滿 12 隻，燈籠飄上天變成一顆星
+      lantern() { if (!petPos) return null; const side = petPos.x > W - 220 * K ? -1 : 1; return { x: petPos.x + side * 78 * K, y: petPos.y + 2 * K }; },
+      catchStep(T, dt) {
+        if (!petPos) return;
+        const cx = petPos.x, cy = petPos.y - 36 * K, L = this.lantern();
+        for (const o of things) {
+          if (o.caught) {   // 被撲到：沿弧線飛進燈籠
+            const p = clamp((T - o.caught) / 0.65), sx = o.cx, sy = o.cy, mx = (sx + L.x) / 2, my = Math.min(sy, L.y) - 70 * K;
+            o.x = (1 - p) * (1 - p) * sx + 2 * (1 - p) * p * mx + p * p * L.x; o.y = (1 - p) * (1 - p) * sy + 2 * (1 - p) * p * my + p * p * (L.y - 18 * K);
+            if (p >= 1) { o.caught = 0; o.r = 0; this.jar += 1; this.jarAt = T; burst(L.x, L.y - 18 * K, '#D6FFAA'); reenter(o, T + rnd(2, 5)); o.r = rnd(5, 9) * K;
+              if (this.jar >= 12 && !this.rise) { this.rise = { at: T, x: L.x, y: L.y }; api.report && api.report({ kind: 'catjar' }); } }
+            continue;
+          }
+          if (T < o.at || this.rise) continue;
+          const dd = Math.hypot(o.x - cx, o.y - cy);
+          if (dd < 240 * K && dd > 1) { o.px += (cx - o.x) / dd * 90 * K * dt; o.py += (cy - o.y) / dd * 90 * K * dt; }   // 靈貓盯著看：附近的螢火蟲慢慢被吸過來
+          if (T - this.pounce < 0.9) continue;
+          if (dd < 130 * K) {   // 靠夠近了：撲！
+            this.pounce = T; o.caught = T; o.cx = o.x; o.cy = o.y;
+            this.claws.push({ x: o.x, y: o.y, at: T, d: o.x < cx ? -1 : 1 });
+            api.report && api.report({ kind: 'catch', x: o.x, y: o.y });
+            break;
+          }
+        }
+        this.claws = this.claws.filter((c) => T - c.at < 0.6);
+        if (this.rise && T - this.rise.at > 3.2) { this.stars.push({ x: this.rise.x, y: H * rnd(0.08, 0.3), at: T }); this.rise = null; this.jar = 0; }
+        if (this.stars.length > 9) this.stars.shift();
+      },
+      drawCatch(T) {
+        for (const s of this.stars) { const tw = 0.6 + 0.4 * Math.sin(T * 2 + s.x); ctx.save(); ctx.globalAlpha *= clamp((T - s.at) / 1) * tw; ctx.fillStyle = '#FFF3B0'; ctx.translate(s.x, s.y);
+          ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = (i % 2 ? 3 : 11) * K; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+        for (const c of this.claws) {   // 三道金色爪痕
+          const p = (T - c.at) / 0.6; ctx.save(); ctx.globalAlpha *= 1 - p; ctx.strokeStyle = '#FFE08A'; ctx.lineCap = 'round'; ctx.lineWidth = (5 - p * 3) * K;
+          for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(c.x - c.d * 30 * K + i * 12 * K, c.y - 34 * K); ctx.quadraticCurveTo(c.x + i * 14 * K, c.y, c.x + c.d * 26 * K + i * 12 * K, c.y + 30 * K); ctx.stroke(); }
+          ctx.restore();
+        }
+        const L = this.rise ? { x: this.rise.x, y: this.rise.y - Math.pow(clamp((T - this.rise.at) / 3.2), 1.6) * (this.rise.y - H * 0.2) } : this.lantern();
+        if (!L) return;
+        const n = this.rise ? 12 : this.jar, lit = n / 12, pulse = clamp(1 - (T - this.jarAt) / 0.5);
+        const g = ctx.createRadialGradient(L.x, L.y - 18 * K, 4, L.x, L.y - 18 * K, (40 + lit * 80) * K);
+        g.addColorStop(0, `rgba(214,255,170,${0.15 + lit * 0.5 + pulse * 0.3})`); g.addColorStop(1, 'rgba(214,255,170,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(L.x, L.y - 18 * K, (40 + lit * 80) * K, 0, 6.283); ctx.fill();
+        ctx.save(); ctx.translate(L.x, L.y - 18 * K); ctx.rotate(Math.sin(T * 1.6) * 0.06); ctx.scale(1.45, 1.45);
+        ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 2 * K; ctx.beginPath(); ctx.moveTo(0, -24 * K); ctx.lineTo(0, -36 * K); ctx.stroke();   // 提把
+        ctx.fillStyle = '#7A4A2A'; ctx.fillRect(-12 * K, -26 * K, 24 * K, 5 * K); ctx.fillRect(-12 * K, 20 * K, 24 * K, 5 * K);
+        ctx.fillStyle = `rgba(${Math.round(250 - lit * 30)},${Math.round(236 + lit * 19)},${Math.round(200 - lit * 40)},0.92)`;
+        ctx.beginPath(); ctx.ellipse(0, 0, 18 * K, 22 * K, 0, 0, 6.283); ctx.fill(); ctx.strokeStyle = 'rgba(122,74,42,0.6)'; ctx.lineWidth = 1.2 * K;
+        for (const dx of [-9, 0, 9]) { ctx.beginPath(); ctx.ellipse(0, 0, Math.abs(dx) * K + 0.5, 22 * K, 0, 0, 6.283); ctx.stroke(); }
+        for (let i = 0; i < n; i++) { const a = T * (1 + i * 0.13) + i * 2.1; ctx.fillStyle = 'rgba(240,255,200,0.95)'; ctx.beginPath(); ctx.arc(Math.cos(a) * 9 * K, Math.sin(a * 1.3) * 12 * K, 2.2 * K, 0, 6.283); ctx.fill(); }
+        // 肉球印記
+        ctx.fillStyle = 'rgba(229,120,140,0.75)'; ctx.beginPath(); ctx.ellipse(0, 4 * K, 4.5 * K, 3.6 * K, 0, 0, 6.283); ctx.fill();
+        for (const [dx, dy] of [[-5, -3], [-1.8, -6], [1.8, -6], [5, -3]]) { ctx.beginPath(); ctx.arc(dx * K, dy * K, 1.5 * K, 0, 6.283); ctx.fill(); }
+        ctx.restore();
+        if (!this.rise) { ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+          const t = `螢火 ${n} / 12`; ctx.strokeText(t, L.x, L.y + 26 * K); ctx.fillText(t, L.x, L.y + 26 * K); ctx.restore(); }
+        if (T - this.born < 10 && !this.jar) { ctx.save(); ctx.globalAlpha *= clamp((10 - (T - this.born)) / 2); ctx.font = `600 ${Math.round(16 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 4; const t = '螢火蟲會跟著游標，把牠們趕到靈貓身邊';
+          ctx.strokeText(t, W / 2, H * 0.12); ctx.fillText(t, W / 2, H * 0.12); ctx.restore(); }
+      },
       bell() { return { x: W - 130 * K, y: 96 * K, r: 22 * K }; },
       ringBell(T) { this.rings.push(T); this.ring = T + rnd(10, 16); this.bright = T; },
       step(T, dt) {
         if (T > this.ring) this.ringBell(T);
         this.rings = this.rings.filter((t) => T - t < 3);
         if (T > this.paws + 24) this.paws = T;
-        for (const o of things) if (drift(o, T, dt, -260, 140)) reenter(o, T);   // 螢火蟲會湊過來繞著游標
+        for (const o of things) if (!o.caught && drift(o, T, dt, -260, 140)) reenter(o, T);   // 螢火蟲會湊過來繞著游標
+        this.catchStep(T, dt);
       },
       draw(T) {
         const b = this.bell(), dtb = T - this.bright, sw = Math.sin(T * 1.3) * 0.12 + (dtb < 1.2 ? Math.sin(dtb * 26) * 0.35 * (1 - dtb / 1.2) : 0);
@@ -133,7 +196,8 @@
           ctx.restore();
         }
         const boost = clamp(1 - dtb / 2) * 0.6;
-        for (const o of things) if (T >= o.at) firefly(o, T, boost);
+        for (const o of things) if (T >= o.at && o.r > 0) firefly(o, T, boost);
+        this.drawCatch(T);
       },
       hit(x, y) { const b = this.bell(); if (Math.hypot(x - b.x, y - b.y) < b.r * 1.6) return 'bell'; return things.find((o) => near(o, x, y)) || null; },
       click(h, T) { if (h === 'bell') { this.ringBell(T); burst(this.bell().x, this.bell().y, GOLD, true); } else { burst(h.x, h.y, '#B8F5A0'); reenter(h, T + rnd(1.5, 4)); } },
@@ -234,28 +298,208 @@
     // ── 玉兔「月宮桂落」──
     rabbit: {
       name: '月宮桂落',
-      init(T) { things = Array.from({ length: count(60000, 14, 40) }, () => mk(rnd(-18, 6), rnd(22, 46), rnd(6, 10))); this.t0 = T; this.shower = -9; },
-      moon(T) { const p = ((T - this.t0) / 120 + 0.25) % 1; return { x: W * (0.08 + 0.84 * p), y: H * 0.2 - Math.sin(p * Math.PI) * H * 0.1, r: 44 * K }; },
+      init(T) { things = Array.from({ length: count(60000, 14, 40) }, () => mk(rnd(-18, 6), rnd(22, 46), rnd(6, 10))); this.t0 = T; this.shower = -9; this.man = null; this.drag = null; this.cat = ''; this.born = T;
+        this.tree = INFO.tree || null; this.treeHit = -9; this.rain = -9; this.watered = 0;
+        this.beat = null; this.pills = []; this.combo = 0; this.best = 0; this.judge = null;
+        const spots = [[0.14, 0.42, 'cloud'], [0.5, 0.34, 'cloud'], [0.82, 0.46, 'cloud'], [0.36, 0.93, 'grass'], [0.68, 0.94, 'grass']];
+        this.bunnies = spots.map(([fx, fy, kind], i) => ({ fx, fy, kind, i, found: 0, shake: 0, peek: rnd(3, 12) }));
+        this.allFound = 0;
+      },
+      // ── 種月桂：點地面種一顆桂子，每次螢幕保護長大一點（主程序記在存檔），點樹澆水；長滿就開花、下金色桂花雨
+      treePos() { return { x: W * (this.tree ? this.tree.x : 0.5), y: H - 26 * K }; },
+      drawTree(T) {
+        if (!this.tree) {   // 還沒種：地上一行小字
+          if (T - this.born > 2) { ctx.save(); ctx.globalAlpha *= 0.85; ctx.font = `600 ${Math.round(14 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+            ctx.strokeText('點地面，種一顆月桂', W * 0.5, H - 40 * K); ctx.fillText('點地面，種一顆月桂', W * 0.5, H - 40 * K); ctx.restore(); }
+          return;
+        }
+        const g = Math.max(0.06, Math.min(1, this.tree.grow)), bloom = g >= 1, b = this.treePos(), sway = Math.sin(T * 0.9) * 0.03 + (T - this.treeHit < 0.6 ? Math.sin((T - this.treeHit) * 30) * 0.05 * (1 - (T - this.treeHit) / 0.6) : 0);
+        const L0 = (36 + g * 120) * K, depth = 2 + Math.round(g * 4);
+        let seed = 7; const rr = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        const tips = [];
+        const branch = (x, y, a, len, d, w) => {
+          const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+          ctx.strokeStyle = '#6B4A2E'; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke();
+          if (d <= 0) { tips.push([x2, y2]); return; }
+          const n = 2 + (rr() < 0.35 ? 1 : 0);
+          for (let i = 0; i < n; i++) branch(x2, y2, a + (i - (n - 1) / 2) * 0.55 + (rr() - 0.5) * 0.3 + sway * (depth - d + 1), len * (0.68 + rr() * 0.12), d - 1, Math.max(1, w * 0.68));
+        };
+        ctx.save();
+        ctx.fillStyle = 'rgba(70,110,80,0.5)'; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4 * K, (18 + g * 40) * K, 6 * K, 0, 0, 6.283); ctx.fill();   // 小土丘
+        branch(b.x, b.y, -Math.PI / 2 + sway, L0, depth, (3 + g * 9) * K);
+        for (const [x, y] of tips) {   // 葉叢；開花時點點金黃
+          ctx.fillStyle = 'rgba(58,120,84,0.9)'; ctx.beginPath(); ctx.arc(x, y, (5 + g * 9) * K, 0, 6.283); ctx.fill();
+          ctx.fillStyle = 'rgba(92,160,110,0.9)'; ctx.beginPath(); ctx.arc(x - 3 * K, y - 3 * K, (3 + g * 5) * K, 0, 6.283); ctx.fill();
+          if (bloom) for (let j = 0; j < 4; j++) { const a = j * 1.7 + x; ctx.fillStyle = j % 2 ? '#FFD45A' : '#F5B82E'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 7 * K, y + Math.sin(a) * 6 * K, 2.2 * K, 0, 6.283); ctx.fill(); }
+        }
+        ctx.restore();
+        const label = bloom ? '月桂開花了（點樹下桂花雨）' : `月桂 ${Math.round(g * 100)}%`;
+        ctx.save(); ctx.font = `600 ${Math.round(12 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.9)'; ctx.strokeStyle = 'rgba(40,40,40,0.5)'; ctx.lineWidth = 3;
+        ctx.strokeText(label, b.x, b.y + 18 * K); ctx.fillText(label, b.x, b.y + 18 * K); ctx.restore();
+        this.treeTop = { x: b.x, y: b.y - L0 * 1.6, r: L0 * 1.1 };
+      },
+      clickTree(T) {
+        const b = this.treePos(); this.treeHit = T; play();
+        if (this.tree.grow >= 1) {   // 開花：一陣金色桂花雨
+          this.rain = T; flash = T;
+          for (let i = 0; i < 60 && things.length < 160; i++) things.push(mk(rnd(-60, 60), rnd(60, 140), rnd(7, 11), { x: rnd(0, W), y: rnd(-H * 0.3, 0), ttl: T + 12, gold: true }));
+          api.report && api.report({ kind: 'tree', op: 'rain' });
+        } else if (this.watered < 5) {   // 澆水：每次螢幕保護最多澆五下
+          this.watered += 1; this.tree.grow = Math.min(1, this.tree.grow + 0.02);
+          for (let i = 0; i < 6; i++) burst(b.x + rnd(-30, 30) * K, b.y - rnd(20, 80) * K, '#8FDCFF');
+          api.report && api.report({ kind: 'tree', op: 'water' });
+        } else burst(b.x, b.y - 40 * K, '#B8F5A0');
+      },
+      // ── 搗藥打拍子：點杵臼開始，月光圈一圈圈縮過來，剛好縮到杵臼時點下去
+      mortar() { const tx = this.tree ? this.tree.x : 0.5, fx = tx > 0.5 ? 0.2 : 0.8; return { x: W * fx, y: H - 54 * K, r: 30 * K }; },
+      ringPeriod() { return Math.max(0.75, 1.3 - this.combo * 0.04); },
+      tapMortar(T) {
+        const m = this.mortar(); play();
+        if (!this.beat) { this.beat = { start: T + 0.4, last: T }; this.combo = 0; return; }   // 第一下：開始
+        const per = this.ringPeriod(), ph = ((T - this.beat.start) / per) % 1, off = Math.min(ph, 1 - ph) * per;   // 離最近一次「到點」多遠
+        this.beat.last = T;
+        if (off < 0.14) {
+          this.combo += 1; this.best = Math.max(this.best, this.combo);
+          this.judge = { t: T, text: off < 0.06 ? '完美！咚！' : '咚！', good: true };
+          this.pills.push({ x: m.x, y: m.y - 20 * K, vx: rnd(-90, 90) * K, vy: -rnd(260, 360) * K, at: T, big: this.combo % 10 === 0 });
+          if (this.combo % 10 === 0) { burst(m.x, m.y - 30 * K, GOLD, true); api.report && api.report({ kind: 'pound', combo: this.combo }); }
+        } else { this.judge = { t: T, text: '差一點', good: false }; this.combo = 0; }
+      },
+      drawMortar(T, dt) {
+        const m = this.mortar();
+        if (this.beat && T - this.beat.last > 6) { this.beat = null; this.combo = 0; }   // 太久沒點：收工
+        // 月光圈
+        if (this.beat && T > this.beat.start) {
+          const per = this.ringPeriod(), ph = ((T - this.beat.start) / per) % 1, R = m.r + (1 - ph) * 120 * K;
+          ctx.save(); ctx.globalAlpha *= 0.35 + ph * 0.6; ctx.strokeStyle = '#FFF4C4'; ctx.lineWidth = (2 + ph * 4) * K; ctx.beginPath(); ctx.arc(m.x, m.y - 10 * K, R, 0, 6.283); ctx.stroke(); ctx.restore();
+          ctx.save(); ctx.globalAlpha *= 0.5; ctx.strokeStyle = '#F5B82E'; ctx.setLineDash([4 * K, 5 * K]); ctx.lineWidth = 2 * K; ctx.beginPath(); ctx.arc(m.x, m.y - 10 * K, m.r, 0, 6.283); ctx.stroke(); ctx.restore();
+        }
+        // 杵臼
+        const hitA = this.judge && T - this.judge.t < 0.18 ? 1 - (T - this.judge.t) / 0.18 : 0;
+        ctx.save(); ctx.translate(m.x, m.y);
+        ctx.fillStyle = '#C9B48A'; ctx.strokeStyle = '#6B5A44'; ctx.lineWidth = 2 * K;
+        ctx.beginPath(); ctx.moveTo(-26 * K, -14 * K); ctx.lineTo(26 * K, -14 * K); ctx.lineTo(18 * K, 14 * K); ctx.lineTo(-18 * K, 14 * K); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#8A7552'; ctx.beginPath(); ctx.ellipse(0, -14 * K, 26 * K, 6 * K, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+        ctx.save(); ctx.translate(8 * K, -30 * K + hitA * 14 * K); ctx.rotate(0.35); ctx.fillStyle = '#E8DCC0'; ctx.fillRect(-4 * K, -30 * K, 8 * K, 40 * K); ctx.strokeRect(-4 * K, -30 * K, 8 * K, 40 * K); ctx.restore();
+        ctx.restore();
+        // 跳出來的丹丸
+        this.pills = this.pills.filter((p) => T - p.at < 1.6);
+        for (const p of this.pills) { p.vy += 700 * K * dt; p.x += p.vx * dt; p.y += p.vy * dt; const r = (p.big ? 11 : 6) * K;
+          ctx.save(); ctx.globalAlpha *= Math.min(1, (1.6 - (T - p.at)) / 0.4); const g = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, 1, p.x, p.y, r);
+          g.addColorStop(0, p.big ? '#FFF6D0' : '#FFE0E8'); g.addColorStop(1, p.big ? '#F5B82E' : '#E58AA0'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.283); ctx.fill(); ctx.restore(); }
+        // 字
+        const tip = this.beat ? (this.combo ? `連搗 ${this.combo}` : '圈縮到杵臼時點下去') : '點杵臼，一起搗藥';
+        ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+        ctx.strokeText(tip, m.x, m.y + 32 * K); ctx.fillText(tip, m.x, m.y + 32 * K);
+        if (this.judge && T - this.judge.t < 0.7) { const q = (T - this.judge.t) / 0.7; ctx.globalAlpha *= 1 - q; ctx.font = `bold ${Math.round(22 * K)}px "DFKai-SB","KaiTi",serif`; ctx.fillStyle = this.judge.good ? '#FFE08A' : '#D8E0E6';
+          ctx.strokeText(this.judge.text, m.x, m.y - 70 * K - q * 20 * K); ctx.fillText(this.judge.text, m.x, m.y - 70 * K - q * 20 * K); }
+        ctx.restore();
+      },
+      // ── 找小月兔：五隻躲在雲後、草叢裡；游標靠近，藏身處會抖；點一下就找到
+      bunnyAt(b) { return { x: W * b.fx, y: H * b.fy }; },
+      drawBunny(x, y, s, T, wave) {
+        ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+        ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 1.6;
+        for (const dx of [-5, 5]) { ctx.save(); ctx.translate(dx, -18); ctx.rotate(dx * 0.03 + (wave ? Math.sin(T * 8 + dx) * 0.15 : 0)); ctx.beginPath(); ctx.ellipse(0, -8, 3.6, 10, 0, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#FFC9D4'; ctx.beginPath(); ctx.ellipse(0, -8, 1.6, 7, 0, 0, 6.283); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 12, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4A3A2A'; ctx.beginPath(); ctx.arc(-5, -1, 1.6, 0, 6.283); ctx.arc(5, -1, 1.6, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#FFB4A8'; ctx.beginPath(); ctx.arc(-8, 3, 2.2, 0, 6.283); ctx.arc(8, 3, 2.2, 0, 6.283); ctx.fill();
+        ctx.restore();
+      },
+      drawBunnies(T) {
+        let lined = 0;
+        for (const b of this.bunnies) {
+          const p = this.bunnyAt(b), near = Math.hypot(mouse.x - p.x, mouse.y - p.y) < 90 * K && !b.found;
+          if (near) b.shake = T;
+          const sh = T - b.shake < 0.3 ? Math.sin(T * 50) * 3 * K : 0;
+          if (b.found) {   // 找到了：跳到下面排排站揮手
+            const tx = W * 0.5 + (b.order - 2) * 46 * K, ty = H - 120 * K, q = Math.min(1, (T - b.found) / 0.9);
+            const x = p.x + (tx - p.x) * q, y = p.y + (ty - p.y) * q - Math.sin(q * Math.PI) * 80 * K;
+            this.drawBunny(x, y, 1.15 * K, T, q >= 1); lined += 1;
+          } else {
+            const peek = ((T + b.peek) % 9) < 1.2;   // 偶爾探出耳朵
+            if (peek) { ctx.save(); ctx.beginPath(); ctx.rect(p.x - 40 * K, p.y - 60 * K, 80 * K, 46 * K); ctx.clip(); this.drawBunny(p.x + 8 * K, p.y - 6 * K, 1 * K, T, false); ctx.restore(); }
+          }
+          if (!b.found) {   // 藏身處：雲或草叢
+            ctx.save(); ctx.translate(p.x + sh, p.y);
+            if (b.kind === 'cloud') { ctx.fillStyle = 'rgba(236,244,250,0.92)'; for (const [dx, dy, r] of [[-30, 4, 20], [-8, -8, 26], [18, -2, 22], [36, 6, 15], [0, 8, 26]]) { ctx.beginPath(); ctx.arc(dx * K, dy * K, r * K, 0, 6.283); ctx.fill(); } }
+            else { ctx.fillStyle = '#4E8A5C'; for (let i = -4; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(i * 7 * K - 5 * K, 14 * K); ctx.quadraticCurveTo(i * 9 * K, -20 * K - Math.abs(i) * -2 * K, i * 7 * K + 5 * K, 14 * K); ctx.fill(); } }
+            ctx.restore();
+          }
+        }
+        if (lined && T - this.born < 600) { ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+          const t = lined >= 5 ? '五隻小月兔全找到了！' : `找到小月兔 ${lined} / 5`; ctx.strokeText(t, W * 0.5, H - 160 * K); ctx.fillText(t, W * 0.5, H - 160 * K); ctx.restore(); }
+      },
+      findBunny(b, T) {
+        if (b.found) return;
+        b.found = T; b.order = this.bunnies.filter((x) => x.found).length - 1; play();
+        const p = this.bunnyAt(b); burst(p.x, p.y, '#FFFFFF');
+        if (this.bunnies.every((x) => x.found)) { this.allFound = T; burst(W * 0.5, H - 140 * K, GOLD, true); api.report && api.report({ kind: 'bunnies' }); }
+      },
+      // 月亮的位置決定月相：左邊新月 → 中間滿月 → 右邊又變細。可以拖著月亮走（拖過之後就停在你放的地方）
+      moon(T) {
+        const p = this.man != null ? this.man : ((T - this.t0) / 120 + 0.25) % 1;
+        return { x: W * (0.08 + 0.84 * p), y: H * 0.2 - Math.sin(p * Math.PI) * H * 0.1, r: (this.drag ? 50 : 44) * K, p };
+      },
+      phaseName(p) { return p < 0.07 || p > 0.93 ? '新月' : p < 0.22 ? '眉月' : p < 0.38 ? '上弦月' : p < 0.62 ? '滿月' : p < 0.78 ? '下弦月' : '殘月'; },
+      phaseCat(p) { return p < 0.07 || p > 0.93 ? 'new' : p > 0.4 && p < 0.6 ? 'full' : p >= 0.22 && p <= 0.78 ? 'half' : 'thin'; },
+      release(T) {
+        if (!this.drag) return;
+        const moved = this.drag.moved; this.drag = null;
+        if (!moved) { const m = this.moon(T); this.shower = T; burst(m.x, m.y, '#FFF4C4', true); for (let i = 0; i < 26 && things.length < 110; i++) things.push(mk(rnd(-70, 70), rnd(40, 110), rnd(6, 10), { x: m.x + rnd(-m.r, m.r), y: m.y + rnd(-m.r * 0.4, m.r), ttl: T + 14 })); return; }
+        const c = this.phaseCat(this.man);   // 放手：玉兔看月亮變了就有反應
+        if (c !== this.cat) { this.cat = c; api.report && api.report({ kind: 'moonphase', phase: c }); }
+        if (c === 'full') burst(this.moon(T).x, this.moon(T).y, '#FFF4C4', true);
+      },
+      // 畫月相：先畫暗的整顆，再畫亮的部分（右半或左半＋一個橢圓的明暗線）
+      litPath(m) {
+        const a = m.p, k = Math.cos(a * 2 * Math.PI), s = a < 0.5 ? 1 : -1;
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r, -Math.PI / 2, Math.PI / 2, s < 0);
+        ctx.ellipse(m.x, m.y, Math.max(0.01, m.r * Math.abs(k)), m.r, 0, Math.PI / 2, -Math.PI / 2, s > 0 ? k > 0 : k <= 0);
+        ctx.closePath();
+      },
       step(T, dt) {
         things = things.filter((o) => !o.ttl || T < o.ttl);   // 點月亮灑下來的那一陣，落完就沒了
+        if (this.drag) {   // 拖月亮：跟著游標左右走（高度照弧線）
+          const p = clamp((mouse.x / W - 0.08) / 0.84);
+          if (Math.abs(mouse.x - this.drag.x0) > 8 * K) this.drag.moved = true;
+          if (this.drag.moved) this.man = p;
+          if (T - (this.played || 0) > 2.5) { this.played = T; if (api.play) api.play(); }   // 拖著的時候螢幕保護別散
+        }
         for (const o of things) if (drift(o, T, dt, 120, 900) && !o.ttl) reenter(o, T);   // 游標一攪，桂花繞著打轉
       },
       draw(T) {
         const m = this.moon(T), glow = 1 + clamp(1 - (T - this.shower) / 1.5) * 0.6;
         const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.8, m.x, m.y, m.r * 3 * glow); g.addColorStop(0, 'rgba(255,244,196,0.38)'); g.addColorStop(1, 'rgba(255,244,196,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 3 * glow, 0, 6.283); ctx.fill();
-        ctx.save(); ctx.globalAlpha *= 0.94; ctx.fillStyle = '#FFF4C4'; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.283); ctx.fill();
-        // 月亮上搗藥的小兔子剪影
+        ctx.save(); ctx.fillStyle = 'rgba(255,244,196,0.16)'; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.283); ctx.fill();   // 暗的那一面
+        ctx.globalAlpha *= 0.94; ctx.fillStyle = '#FFF4C4'; this.litPath(m); ctx.fill(); this.litPath(m); ctx.clip();
+        // 月亮上搗藥的小兔子剪影（只在亮的那一面看得到）
         ctx.fillStyle = 'rgba(190,165,115,0.75)'; ctx.beginPath(); ctx.ellipse(m.x - m.r * 0.05, m.y + m.r * 0.22, m.r * 0.26, m.r * 0.2, 0, 0, 6.283); ctx.fill();
         ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.18, m.y - m.r * 0.02, m.r * 0.15, m.r * 0.13, 0, 0, 6.283); ctx.fill();
         ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.13, m.y - m.r * 0.26, m.r * 0.045, m.r * 0.16, -0.2, 0, 6.283); ctx.fill();
         ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.25, m.y - m.r * 0.25, m.r * 0.045, m.r * 0.16, 0.2, 0, 6.283); ctx.fill();
         ctx.restore();
+        this.drawTree(T); this.drawBunnies(T); this.drawMortar(T, 1 / 60);
         for (const o of things) if (T >= o.at) blade(o, T, false);
+        const label = this.drag && this.drag.moved ? this.phaseName(m.p) : T - this.born < 8 ? '拖動月亮，看月亮圓缺' : '';
+        if (label) { ctx.save(); ctx.globalAlpha *= this.drag ? 1 : clamp((10 - (T - this.born)) / 2); ctx.font = `600 ${Math.round((this.drag ? 20 : 15) * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 4; ctx.strokeText(label, m.x, m.y + m.r + 30 * K); ctx.fillText(label, m.x, m.y + m.r + 30 * K); ctx.restore(); }
       },
-      hit(x, y, T) { const m = this.moon(T); if (Math.hypot(x - m.x, y - m.y) < m.r * 1.15) return 'moon'; return things.find((o) => near(o, x, y)) || null; },
+      hit(x, y, T) {
+        if (this.drag) return 'moon'; const m = this.moon(T); if (Math.hypot(x - m.x, y - m.y) < m.r * 1.15) return 'moon';
+        const mo = this.mortar(); if (Math.hypot(x - mo.x, y - (mo.y - 14 * K)) < 46 * K) return 'mortar';
+        for (const b of this.bunnies) { if (b.found) continue; const p = this.bunnyAt(b); if (Math.hypot(x - p.x, y - p.y) < 44 * K) return b; }
+        if (this.tree) { const tp = this.treePos(), top = this.treeTop; if ((Math.abs(x - tp.x) < 24 * K && y > tp.y - 120 * K && y < tp.y + 10 * K) || (top && Math.hypot(x - top.x, y - top.y) < top.r)) return 'tree'; }
+        else if (y > H - 90 * K && T - this.born > 2) return 'ground';
+        return things.find((o) => near(o, x, y)) || null;
+      },
       click(h, T) {
-        if (h === 'moon') { const m = this.moon(T); this.shower = T; burst(m.x, m.y, '#FFF4C4', true); for (let i = 0; i < 26 && things.length < 110; i++) things.push(mk(rnd(-70, 70), rnd(40, 110), rnd(6, 10), { x: m.x + rnd(-m.r, m.r), y: m.y + rnd(-m.r * 0.4, m.r), ttl: T + 14 })); }
+        if (h === 'moon') { this.drag = { x0: mouse.x, moved: false }; leaveAt = 0; if (this.man == null) this.man = this.moon(T).p; return; }   // 按住拖月亮；沒拖就放開＝灑一陣桂花
+        if (h === 'mortar') return this.tapMortar(T);
+        if (h === 'tree') return this.clickTree(T);
+        if (h === 'ground') { this.tree = { x: clamp(mouse.x / W, 0.1, 0.9), grow: 0.06 }; play(); burst(mouse.x, H - 30 * K, '#B8F5A0', true); api.report && api.report({ kind: 'tree', op: 'plant', x: this.tree.x }); return; }
+        if (h && h.fx != null) return this.findBunny(h, T);
         else if (h.ttl) { burst(h.x, h.y, '#F5C95A'); h.ttl = T; }
         else { burst(h.x, h.y, '#F5C95A'); reenter(h, T + rnd(1, 3)); }
       },
@@ -664,13 +908,15 @@
   document.getElementById('off').addEventListener('click', (e) => { e.stopPropagation(); if (api.off) api.off(); else api.exit(); });
   addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
   addEventListener('mousedown', (e) => { if (!S) return; const T = now(); const ob = orbOver(e.clientX, e.clientY); if (ob) { burst(ob.x, ob.y, '#FFFFFF'); orbs = orbs.filter((o) => o !== ob); return; } if (villainOver(e.clientX, e.clientY)) { villainHit(1, T); return; } const h = S.hit(e.clientX, e.clientY, T); if (h) S.click(h, T); });
-  api.onLeave(() => { if (S && S.pearl && S.pearl.held) return; if (!leaveAt) leaveAt = now(); });
+  addEventListener('mouseup', () => { if (S && S.release) S.release(now()); });
+  api.onLeave(() => { if (S && ((S.pearl && S.pearl.held) || S.drag)) return; if (!leaveAt) leaveAt = now(); });
   if (api.onStay) api.onStay(() => { leaveAt = 0; });
   // ?mode=villain：平時（不是螢幕保護）黑風怪來找麻煩，畫面上只有牠，打完或牠跑了就自己關掉
   const MODE_V = new URLSearchParams(location.search).get('mode') === 'villain';
   if (MODE_V) { const b = document.getElementById('bar'); if (b) b.style.display = 'none'; }
   const BLANK = { name: '', init() {}, step() {}, draw() {}, hit() { return null; }, click() {} };
   window.saverReady = api.info().then((d) => {
+    INFO = d || {};
     sp = SCENES[(d.outfit || {}).species] ? d.outfit.species : 'cat'; born = now();
     if (MODE_V) { S = BLANK; nextVillain = now() + 0.4; return; }
     SCENES[sp].init(born); S = SCENES[sp];
@@ -693,7 +939,7 @@
   window.saverPet = (x, y, dir) => { petPos = { x, y, dir }; };
   window.saverFoe = () => villain && { x: villain.x, y: villain.y, hp: villain.hp, state: villain.state, type: villain.type };   // 測試用   // 測試／預告片：指定靈寵位置
   window.saverVillain = (bossId) => { villainStart(clock || now(), bossId); return !!villain; };
-  window.saverScene = () => S; window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
+  window.saverScene = () => S; window.saverThings = () => things; window.saverUp = () => { if (S && S.release) S.release(clock || 0); }; window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
   requestAnimationFrame(frame);
 })();
 </script>

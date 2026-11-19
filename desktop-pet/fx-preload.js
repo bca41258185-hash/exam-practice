@@ -16,5 +16,9 @@ contextBridge.exposeInMainWorld('fx', {
   play: () => ipcRenderer.send('saver-play'),
   report: (o) => ipcRenderer.send('saver-report', o),   // 告訴主程序：哪顆包子能吃、反派在哪
   onCmd: (fn) => ipcRenderer.on('saver-cmd', (_e, c) => fn(c)),   // 主程序說：吃掉這顆包子、反派被打了一下   // 正在玩（例如拿著龍珠）：先別收起
-  onStay: (fn) => ipcRenderer.on('saver-stay', () => fn()),   // 「不要再自動開」：關掉閒置自動開，並收起這一次
+  onStay: (fn) => ipcRenderer.on('saver-stay', () => fn()),
+  // 比劍擂台：主程序送破綻過來；點了哪個（沒點中是 null）；右鍵或按鈕結束
+  onArena: (fn) => ipcRenderer.on('arena-cmd', (_e, c) => fn(c)),
+  arenaClick: (o) => ipcRenderer.send('arena-click', o),
+  arenaEnd: () => ipcRenderer.send('arena-end'),   // 「不要再自動開」：關掉閒置自動開，並收起這一次
 });

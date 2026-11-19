@@ -87,15 +87,26 @@ function encourage(force) {   // 一句勵志詩詞（附作者），或一句�
   if (Math.random() < 0.6) sayLines(Q.verseLines(Q.pick(Q.VERSE)));
   else say(Q.pick(Q.CHEER), force);
 }
+// 每位靈寵負責一個朝代：小青龍先秦兩漢、熊貓魏晉南北朝、靈貓唐詩、狐仙宋詞、玉兔元曲與明清
+const ERA_SAY = {
+  dragon: ['這首比我還老呢', '來首先秦古歌', '詩經裡的句子～'],
+  panda: ['魏晉風骨，聽好', '大師兄念首古詩', '竹林裡學來的'],
+  cat: ['來首唐詩～', '守山時常背這首', '唐詩最好背了'],
+  fox: ['聽我唱一闋宋詞', '這闋詞我最喜歡', '宋詞要慢慢念'],
+  rabbit: ['月宮傳來一支曲', '人間的曲子真好聽', '來段元曲～'],
+};
+function myPoems() { const a = POEMS.filter((p) => p.sp === cfg.species); return a.length ? a : POEMS; }
 function recite(force) {
   if (!cfg.talk && !force) return;
   stopPoem();
-  let i = Math.floor(Math.random() * POEMS.length);
-  if (i === lastPoem) i = (i + 1) % POEMS.length;   // 不連續唸同一首
-  lastPoem = i;
-  const p = POEMS[i], m = p.by.match(/^(.*?)(《.*》)$/);
+  const list = myPoems();
+  let i = Math.floor(Math.random() * list.length);
+  if (list[i].by === lastPoem) i = (i + 1) % list.length;   // 不連續唸同一首
+  lastPoem = list[i].by;
+  const p = list[i], m = p.by.match(/^(.*?)(《.*》)$/);
   const tail = p.by.length <= 10 || !m ? ['——' + p.by] : ['——' + m[1], m[2]];   // 出處太長就分兩次說
-  sayLines([...p.lines, ...tail]);
+  const intro = Math.random() < 0.35 && ERA_SAY[cfg.species] ? [Q.pick(ERA_SAY[cfg.species])] : [];
+  sayLines([...intro, ...p.lines, ...tail]);
 }
 function sayLines(parts, gap) {   // 泡泡一次一行，依序說完；其他話插進來就停
   stopPoem();
@@ -344,6 +355,7 @@ function touchGain() {   // 摸頭、點牠：每次 +1，每天最多 30
 
 // ---- 行為 ----
 function decide() {
+  if (comp && comp.act) return set('idle', 800);   // 跟同門一起做事時：站在原地配合
   if (poemTimer) return set('idle', 1500);   // 話還沒說完（吟詩、提醒、早安）：先站著說完，不跑去追人
   const l = limits(), c = screen.getCursorScreenPoint();
   const idleFor = now() - lastTouch;
@@ -461,14 +473,49 @@ function sparInfo() {
   return { kind: spar.kind, hits: spar.hits, need: SPAR[spar.kind].need, hearts: spar.hearts, blocks: spar.blocks,
     counter: !!spar.counter, hurt: spar.hurtAt, blockAt: spar.blockAt, sound: cfg.sound !== false, flying: spar.flying, running: spar.running, vx: Math.round(spar.vx || 0), vy: Math.round(spar.vy || 0), blinkAt: spar.blinkAt || 0, combo: spar.combo, maxCombo: spar.maxCombo, crits: spar.crits };
 }
+// 比劍擂台：比劍時蓋一層幾乎透明的布在整個螢幕上（在靈寵下面）。點偏了只會點在布上，不會點到桌面；
+// 靈寵身邊每隔一下冒出金色「破綻」，點中是重擊（+3），點在別處算落空、連擊歸零。右鍵或「結束」按鈕可以提早收。
+let arenaWin = null, arenaId = 0;
+function openArena() {
+  if (arenaWin && !arenaWin.isDestroyed()) return;
+  const w = W(), a = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).workArea;
+  const mine = arenaWin = new BrowserWindow({
+    x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
+    hasShadow: false, focusable: false, alwaysOnTop: true, backgroundColor: '#00000000', show: false,
+    webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  mine.setAlwaysOnTop(true, 'floating');
+  mine.loadFile(path.join(__dirname, 'arena.html'));
+  if (win && !win.isDestroyed()) win.setAlwaysOnTop(true, 'floating');   // 就算沒勾「永遠在最上層」，比劍時牠也要在擂台上面
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); petsTop(); });
+  mine.on('closed', () => { if (arenaWin === mine) arenaWin = null; if (win && !win.isDestroyed()) win.setAlwaysOnTop(cfg.top, 'floating'); });
+  setTimeout(() => { if (arenaWin === mine && !mine.isDestroyed()) mine.close(); }, SPAR_MS + 4000);   // 保險：一定收掉
+}
+function closeArena() { if (arenaWin && !arenaWin.isDestroyed()) arenaWin.close(); arenaWin = null; }
+function spawnTarget(t) {   // 在靈寵身邊冒一個破綻
+  if (!arenaWin || arenaWin.isDestroyed()) return;
+  const b = arenaWin.getBounds(), k = cfg.scale, w = W();
+  const cx = pos.x + w / 2 - b.x, cy = pos.y + w * 0.6 - b.y, a = Math.random() * Math.PI * 2, d = rnd(110, 220) * k;
+  const x = Math.max(60, Math.min(b.width - 60, cx + Math.cos(a) * d)), y = Math.max(80, Math.min(b.height - 60, cy + Math.sin(a) * d * 0.7));
+  arenaWin.webContents.send('arena-cmd', { kind: 'target', id: ++arenaId, x, y, r: 34 * Math.max(0.9, k), life: Math.max(1.1, 1.8 - spar.hits * 0.012) });
+  spar.nextTarget = t + rnd(700, 1200);
+}
+ipcMain.on('arena-click', (_e, o) => {
+  if (!spar || now() > spar.until) return;
+  if (o && o.id) { sparAct(2); if (Math.random() < 0.3) say(Q.pick(['被看穿了！', '好眼力！', '這招厲害！']), true); }
+  else { spar.combo = 0; spar.misses = (spar.misses || 0) + 1; if (Math.random() < 0.25) say(Q.pick(['落空了～', '這邊啦！', '太慢了！']), true); pushState(); }
+});
+ipcMain.on('arena-end', () => { if (spar) { spar.until = now(); endSpar(); } });
 function startSpar(kind) {
+  kind = 'sword';   // 比法術已取消，只剩比劍
   const t = now();
-  spar = { kind, hits: 0, hearts: 3, blocks: 0, until: t + SPAR_MS, counter: null, nextCounter: t + rnd(1600, 2400), hurtAt: 0, blockAt: 0, target: null, nextMove: t + 900, flying: false, running: false, combo: 0, maxCombo: 0, crits: 0, lastAct: 0 };
-  lastTouch = t;
+  spar = { kind, hits: 0, hearts: 3, blocks: 0, until: t + SPAR_MS, counter: null, nextCounter: t + rnd(1600, 2400), hurtAt: 0, blockAt: 0, target: null, nextMove: t + 900, flying: false, running: false, combo: 0, maxCombo: 0, crits: 0, lastAct: 0, nextTarget: t + 1200, misses: 0 };
+  lastTouch = t; openArena();
   set(SPAR[kind].state, SPAR_MS); say(SPAR[kind].start, true);
 }
-function sparAct() {   // 你出手一次（法術：點一下；劍：揮一下）
+function sparAct(bonus) {   // 你出手一次（揮一下劍；點中破綻多加 bonus）
   const t = now();
+  if (bonus) spar.hits += bonus;
   spar.combo = t - spar.lastAct < 1000 ? spar.combo + 1 : 1;   // 一秒內接著出手才算連擊
   spar.lastAct = t; spar.maxCombo = Math.max(spar.maxCombo, spar.combo);
   if (Math.random() < 0.1 + Math.min(0.15, spar.combo * 0.005)) { spar.crits += 1; spar.hits += 2; }   // 暴擊：連擊越高越容易
@@ -487,6 +534,7 @@ function sparAct() {   // 你出手一次（法術：點一下；劍：揮一下
 function sparTick(t) {
   if (!spar) return;
   if (t > spar.until) return endSpar();
+  if (t > spar.nextTarget && spar.until - t > 1200) spawnTarget(t);
   if (!spar.counter && t > spar.nextCounter && spar.until - t > 900) {
     spar.counter = { at: t }; say(SPAR[spar.kind].counter, true); pushState();
   } else if (spar.counter && t - spar.counter.at > COUNTER_MS) {   // 沒擋到
@@ -500,7 +548,7 @@ function sparTick(t) {
 function endSpar() {
   if (!spar) return;
   const { kind, hits, hearts, blocks, maxCombo, crits } = spar, need = SPAR[kind].need;
-  spar = null;
+  spar = null; closeArena();
   const win = hearts > 0 && hits >= need;
   const airborne = pos.y < limits().ground - 5;
   const xp = win ? Math.min(15, 3 + Math.floor(hits / 6) + blocks + Math.floor(maxCombo / 10)) : Math.min(5, Math.floor(hits / 8) + blocks);
@@ -710,25 +758,34 @@ function playFx(move, dur) {
   const go = () => {
     if (!fxWin || fxWin.isDestroyed()) return;
     fxWin.showInactive(); fxWin.webContents.send('fx-play', arg);
-    if (win && !win.isDestroyed()) win.moveTop();   // 角色本人留在特效上面
+    petsTop();   // 角色本人留在特效上面
     fxOn = true; pushState();
     clearTimeout(fxTimer);
     fxTimer = setTimeout(() => { fxOn = false; pushState(); if (fxWin && !fxWin.isDestroyed()) fxWin.hide(); }, dur + 400);
   };
   try {
-    if (fxWin && !fxWin.isDestroyed()) { fxWin.setBounds({ x: a.x, y: a.y, width: a.width, height: a.height }); return go(); }
-    fxWin = new BrowserWindow({
+    if (fxWin && !fxWin.isDestroyed() && fxReady) { fxWin.setBounds({ x: a.x, y: a.y, width: a.width, height: a.height }); return go(); }
+    if (fxWin && !fxWin.isDestroyed()) { setTimeout(go, 800); return; }   // 還在載入：等一下再演
+    makeFxWin(a);
+    fxWin.once('ready-to-show', () => setTimeout(go, 350));   // 剛開好的視窗馬上送會被吃掉，等一下再送
+  } catch { fxOn = false; }   // 開不了就算了，小視窗裡還有原本的特效
+}
+// 特效視窗：程式開好幾秒後先在背景準備好，第一次出招才不會沒有特效
+let fxReady = false;
+function makeFxWin(a) {
+  a = a || screen.getPrimaryDisplay().workArea;
+  fxWin = new BrowserWindow({
       x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
       hasShadow: false, focusable: false, alwaysOnTop: true, backgroundColor: '#00000000', show: false,
       webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
     });
-    fxWin.setAlwaysOnTop(true, 'floating');
-    fxWin.setIgnoreMouseEvents(true);
-    fxWin.loadFile(path.join(__dirname, 'fx.html'));
-    fxWin.once('ready-to-show', go);
-    fxWin.on('closed', () => { fxWin = null; fxOn = false; });
-  } catch { fxOn = false; }   // 開不了就算了，小視窗裡還有原本的特效
+  fxWin.setAlwaysOnTop(true, 'floating');
+  fxWin.setIgnoreMouseEvents(true);
+  fxWin.loadFile(path.join(__dirname, 'fx.html'));
+  fxWin.webContents.once('did-finish-load', () => setTimeout(() => { fxReady = true; }, 400));
+  fxWin.on('closed', () => { fxWin = null; fxOn = false; fxReady = false; });
 }
+function warmFx() { if (cfg.fullFx !== false && (!fxWin || fxWin.isDestroyed())) try { makeFxWin(); } catch {} }
 
 // ---- 快捷輪盤：按住牠不放半秒，周圍浮出一圈常用功能，點一下就用（不必再開右鍵選單）
 let wheelWin = null;
@@ -783,6 +840,8 @@ let saverWin = null, saverAt = 0, saverHold = 0, saverLeaving = false;
 function openSaver(manual) {
   if (saverWin && !saverWin.isDestroyed()) return;
   if (!manual && (spar || lockAt)) return;
+  const tr = cfg.moonTree;   // 月桂：每次螢幕保護（相隔 20 分鐘以上）長大 15%
+  if (tr && tr.grow < 1 && Date.now() - (tr.last || 0) > 20 * 60000) { tr.grow = Math.min(1, tr.grow + 0.15); tr.last = Date.now(); saveCfg(); }
   const w = W(), a = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).workArea;
   const mine = saverWin = new BrowserWindow({
     x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
@@ -792,7 +851,7 @@ function openSaver(manual) {
   mine.setAlwaysOnTop(true, 'floating');
   mine.setIgnoreMouseEvents(true, { forward: true });
   mine.loadFile(path.join(__dirname, 'saver.html'));
-  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); petsTop(); });
   mine.on('closed', () => {
     if (saverWin === mine) { saverWin = null; saverBun = null; saverVillain = null; }
     if (state === 'foxtrain') set('idle', 1200);
@@ -862,7 +921,7 @@ function openVillain(bossId) {   // 平時叫出黑風怪（或 BOSS）；螢幕
   mine.setIgnoreMouseEvents(true, { forward: true });
   mine.loadFile(path.join(__dirname, 'saver.html'), { query: bossId ? { mode: 'villain', boss: bossId } : { mode: 'villain' } });
   if (bossId) setTimeout(() => { if (!BUSY.includes(state)) { stopPoem(); say(Q.pick(['好重的魔氣…', 'BOSS 來了！', '是心魔的大將！']), true); } }, 1200);
-  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); petsTop(); });
   mine.on('closed', () => { if (villWin === mine) { villWin = null; saverVillain = null; } });
   setTimeout(() => { if (villWin === mine && !mine.isDestroyed()) mine.close(); }, 120000);   // 保險：兩分鐘一定收掉
 }
@@ -878,6 +937,24 @@ ipcMain.on('saver-report', (e, r) => {
   if (r.kind === 'bun' && cfg.species === 'panda') {
     saverBun = { id: String(r.id), x: o.x + Number(r.x), y: o.y + Number(r.y), at: Date.now() };
     if (!saverVillain && ['sleep', 'idle'].includes(state) && !BUSY.includes(state)) { set('bunrun', 9000); say(Q.pick(['包子！', '聞到包子香了！', '我的包子～']), true); }
+  } else if (r.kind === 'catch' && cfg.species === 'cat') {   // 靈貓撲到一隻螢火蟲
+    if (!saverVillain && !BUSY.includes(state) && ['sleep', 'idle', 'happy'].includes(state)) { set('happy', 900); if (Math.random() < 0.35) say(Q.pick(['抓到了！', '喵！', '一隻螢火蟲～', '燈籠又亮了']), true); }
+  } else if (r.kind === 'catjar' && cfg.species === 'cat') {   // 燈籠收滿，飄上天
+    if (!saverVillain && !BUSY.includes(state)) { set('happy', 1600); say(Q.pick(['燈籠滿了，送上天當星星！', '又多一顆星了', '師父，你看得到嗎？']), true); }
+  } else if (r.kind === 'tree' && cfg.species === 'rabbit') {   // 種月桂、澆水、桂花雨
+    if (r.op === 'plant') { cfg.moonTree = { x: Math.max(0.1, Math.min(0.9, Number(r.x) || 0.5)), grow: 0.06, last: Date.now() }; saveCfg(); if (!BUSY.includes(state)) { set('happy', 1400); say(Q.pick(['種下月桂了！', '快快長大～', '每次你離開，它就長大一點']), true); } }
+    else if (r.op === 'water' && cfg.moonTree) { cfg.moonTree.grow = Math.min(1, cfg.moonTree.grow + 0.02); saveCfg(); if (Math.random() < 0.3 && !BUSY.includes(state)) say(Q.pick(['澆水澆水～', '喝吧喝吧']), true); }
+    else if (r.op === 'rain' && !BUSY.includes(state)) { set('spin', 1600); say(Q.pick(['桂花雨！', '好香啊～', '月桂開花了！']), true); }
+  } else if (r.kind === 'pound' && cfg.species === 'rabbit') {   // 搗藥連對十下
+    if (!BUSY.includes(state)) { strikeMove = 'pound'; set('strike', 1600); say(r.combo >= 30 ? '搗出九轉金丹了！' : Q.pick(['搗得好！', '連搗十下！', '金丹一顆！']), true); }
+  } else if (r.kind === 'bunnies' && cfg.species === 'rabbit') {   // 五隻小月兔都找到了
+    if (!BUSY.includes(state)) { set('happy', 1800); say(Q.pick(['全部找到了！', '小月兔們，回月宮囉～', '捉迷藏你贏了']), true); }
+  } else if (r.kind === 'moonphase' && cfg.species === 'rabbit') {   // 你把月亮拖成滿月／弦月／新月
+    if (saverVillain || BUSY.includes(state)) return;
+    if (r.phase === 'full') { set('spin', 1800); say(Q.pick(['滿月了！跳支舞～', '月圓人團圓！', '轉圈圈～']), true); }
+    else if (r.phase === 'half') { strikeMove = 'pound'; set('strike', 3200); say(Q.pick(['弦月好搗藥', '搗藥搗藥～', '杵聲咚咚']), true); }
+    else if (r.phase === 'new') { set('sleep', 24 * 3600000); say(Q.pick(['月亮躲起來了…', '呼……晚安', '沒有月光，睡吧']), true); }
+    else { set('happy', 1200); say(Q.pick(['月牙彎彎', '像一把小鐮刀']), true); }
   } else if (r.kind === 'pethit') {   // 被 BOSS 的黑氣彈打中：踉蹌一下，繼續打
     if (!BUSY.includes(state)) { set('startle', 700); say(Q.pick(['好痛！', '可惡！', '這點傷不算什麼！']), true); }
   } else if (r.kind === 'villain') {
@@ -952,10 +1029,11 @@ function checkSaver(idle) {
   if (cfg.saver && idle >= cfg.saver * 60) openSaver(false);
 }
 function saverInfo() {
-  const poems = POEMS.slice().sort(() => Math.random() - 0.5).slice(0, 8);
+  const poems = myPoems().slice().sort(() => Math.random() - 0.5).slice(0, 8);
   const t = todos();
   return {
     outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined },
+    tree: cfg.moonTree || null,   // 玉兔的月桂
     comp: can('companion') ? compSpecies() : '',
     title: isDone() ? heavenText() : REALMS[realm()] + STAGES[stageOf(cfg.xp)], name: (LORE.CHARS[cfg.species] || {}).name || '',
     poems, todayMin: daily().min, left: t.items.filter((x) => x.text && !x.done).map((x) => x.text),
@@ -1043,7 +1121,7 @@ function dodgeThunder() {
 
 // ---- 召喚同門（合體）：多一隻跟在旁邊的靈寵
 let comp = null;
-const COMP_STATES = ['sleep', 'taichi', 'drink', 'gaze', 'happy', 'fireworks', 'dizzy', 'startle'];
+const COMP_STATES = ['sleep', 'taichi', 'drink', 'gaze', 'happy', 'fireworks', 'dizzy', 'startle', 'eat', 'spin', 'laugh'];
 function compSpecies() {
   const all = ['cat', 'fox', 'rabbit', 'panda', 'dragon'];
   return all.includes(cfg.compSpecies) && cfg.compSpecies !== cfg.species ? cfg.compSpecies : all.find((s) => s !== cfg.species);
@@ -1051,7 +1129,7 @@ function compSpecies() {
 function compSend(ch, arg) { if (comp && !comp.win.isDestroyed()) comp.win.webContents.send(ch, arg); }
 function compPush() {
   if (!comp) return;
-  compSend('state', { state: comp.state, dir: comp.dir, outfit: { species: compSpecies(), hat: 'none', robe: cfg.robe === 'yuebai' ? 'qing' : 'yuebai', gear: 'none', realm: Math.min(realm(), 2) } });
+  compSend('state', { state: comp.state, dir: comp.dir, outfit: { species: compSpecies(), hat: 'none', robe: cfg.robe === 'yuebai' ? 'qing' : 'yuebai', gear: 'none', realm: Math.min(realm(), 2), move: comp.move || undefined } });
 }
 function compSet(s) { if (comp && comp.state !== s) { comp.state = s; compPush(); } }
 function openCompanion() {
@@ -1076,9 +1154,35 @@ function closeCompanion() {
   if (comp) { compSend('say', '師兄再見～'); const w = comp.win; setTimeout(() => { if (!w.isDestroyed()) w.close(); }, 1200); }
   cfg.companion = false; saveCfg();
 }
+function petsTop() { if (comp && !comp.win.isDestroyed()) comp.win.moveTop(); if (win && !win.isDestroyed()) win.moveTop(); }   // 靈寵和同門都在特效、反派、擂台上面
+// 同門幫忙打怪：黑風怪／BOSS 出現時，同門跑到另一邊夾擊，每一秒半出一招；心魔出現時也幫忙打一下
+const COMP_FIGHT = ['師兄，我來幫你！', '吃我一招！', '左右夾擊！', '別想跑！', '看招！'];
+function compFight(l, k) {
+  const v = saverVillain, t = now();
+  const vx = v.x - 100 * k, side = pos.x < vx ? -1 : 1, tx = Math.max(l.xmin, Math.min(l.xmax, vx - side * 115 * k)), dx = tx - comp.pos.x;
+  comp.pos.y = l.ground;
+  if (!comp.fighting) { comp.fighting = true; compSend('say', Q.pick(COMP_FIGHT)); }
+  if (Math.abs(dx) > 16 * k) { const d = dx < 0 ? -1 : 1; if (d !== comp.dir) { comp.dir = d; compPush(); } comp.pos.x += d * Math.min(Math.abs(dx), 11 * k); comp.move = ''; compSet('chase'); return true; }
+  const f = vx > comp.pos.x ? 1 : -1; if (f !== comp.dir) { comp.dir = f; compPush(); }
+  if (t - (comp.lastHit || 0) > 1500) {
+    comp.lastHit = t; comp.move = Q.pick(Object.keys(MOVES)); comp.state = ''; compSet('strike');
+    saverCmd({ kind: 'hit', dmg: 1 });
+    if (Math.random() < 0.25) compSend('say', Q.pick(COMP_FIGHT));
+  } else if (t - comp.lastHit > 900) { comp.move = ''; compSet('idle'); }
+  return true;
+}
 function compTick(l, k) {   // 跟在靈寵後面走；靈寵在做的事，同門也跟著做
   if (!comp || comp.win.isDestroyed()) return;
   comp.prev = { x: comp.pos.x, y: comp.pos.y };
+  if (comp.act && (saverVillain || demon)) { comp.act = null; comp.move = ''; }   // 有怪：先打怪
+  if (saverVillain && overlays().length) return void compFight(l, k);
+  if (comp.fighting) { comp.fighting = false; comp.move = ''; compSend('say', Q.pick(['打跑了！', '師兄好厲害', '我們聯手無敵！'])); }
+  if (demon && comp.demonHit !== demon.t0 && now() - demon.t0 > 3500) {   // 心魔：同門幫忙打一下（還是要你點才會散）
+    comp.demonHit = demon.t0; comp.move = 'flick'; comp.state = ''; compSet('strike'); compSend('say', Q.pick(['心魔退散！', '師兄，我幫你！']));
+    if (demon.hp > 1) { demon.hp -= 1; demon.hitAt = now(); pushState(); }
+    setTimeout(() => { if (comp) { comp.move = ''; compSet('idle'); } }, 900);
+  }
+  if (comp.act && pairActTick(l, k)) return;
   const tx = pos.x - dir * 130 * k, dx = tx - comp.pos.x;
   comp.pos.y = l.ground;
   if (Math.abs(dx) > 10 * k) {
@@ -1091,10 +1195,74 @@ function compTick(l, k) {   // 跟在靈寵後面走；靈寵在做的事，同�
     if (comp.dir !== dir) { comp.dir = dir; compPush(); }
     compSet(state === 'strike' ? 'happy' : COMP_STATES.includes(state) ? state : 'idle');
   }
-  if (Date.now() - comp.said > 90000 && Math.random() < 0.004 && !poemTimer && !spar) {   // 偶爾聊兩句，透露兩隻的關係
+  if (Date.now() - comp.said > 90000 && Math.random() < 0.004 && pairFree()) {   // 偶爾一起做點事：聊天、對詩、切磋、追逐、擊掌
     comp.said = Date.now();
-    if (!pairTalk()) compSend('say', Q.pick(['師兄等等我', '今天也一起修煉', '一起加油！']));
+    const r = Math.random();
+    if (r < 0.25) { if (!pairTalk()) startPair('highfive'); }
+    else startPair(r < 0.45 ? 'poem' : r < 0.65 ? 'duel' : r < 0.85 ? 'tag' : 'highfive');
   }
+}
+
+// ---- 同門一起做的事。comp.act = { kind, t0, until, side }；pairActTick 回傳 true 表示這一格的位置由活動決定
+function pairFree() { return comp && !comp.act && !poemTimer && !spar && !demon && !saverVillain && !(saverWin && !saverWin.isDestroyed()) && ['idle', 'walk'].includes(state); }
+function compName() { return (LORE.CHARS[compSpecies()] || {}).name || '同門'; }
+function startPair(kind, manual) {
+  if (!comp) return false;
+  if (!pairFree()) { if (manual) say('等我忙完～', true); return false; }
+  const t = now(), side = comp.pos.x < pos.x ? -1 : 1;
+  comp.act = { kind, t0: t, until: t + ({ poem: 26000, duel: 7600, tag: 7000, highfive: 3200 })[kind], side, step: -1 };
+  set('idle', comp.act.until - t);   // 牠先站著，配合同門
+  if (kind === 'poem') pairPoem();
+  if (kind === 'duel') { say(Q.pick(['來切磋一下！', '師弟，接招！', '比劃比劃？']), true); }
+  if (kind === 'tag') { compSend('say', Q.pick(['來追我呀～', '抓不到我！', '師兄好慢～'])); }
+  if (kind === 'highfive') { say(Q.pick(['來，擊掌！', '今天也辛苦了', '加油加油！']), true); }
+  return true;
+}
+function pairPoem() {   // 對詩：各念自己朝代的一首，一句一句輪流
+  const mine = myPoems(), theirs = POEMS.filter((p) => p.sp === compSpecies());
+  if (!theirs.length) return;
+  const a = Q.pick(mine), b = Q.pick(theirs);
+  const seq = [['a', '來對詩！我先～'], ...a.lines.slice(0, 4).map((x) => ['a', x]), ['a', '——' + a.by.replace(/《.*$/, '')],
+    ['b', '換我！'], ...b.lines.slice(0, 4).map((x) => ['b', x]), ['b', '——' + b.by.replace(/《.*$/, '')], ['a', Q.pick(['好詩！', '平分秋色', '下次再比！'])]];
+  comp.act.until = now() + seq.length * 2300 + 800;
+  set('idle', seq.length * 2300 + 800);
+  seq.forEach(([who, text], i) => setTimeout(() => { if (!comp || !comp.act || comp.act.kind !== 'poem') return; if (who === 'a') send('say', text); else compSend('say', text); }, i * 2300));
+}
+function pairActTick(l, k) {
+  const A = comp.act, t = now(), e = t - A.t0;
+  if (t > A.until || spar || demon || BUSY.includes(state)) { comp.act = null; comp.move = ''; compSet('idle'); return false; }
+  comp.pos.y = l.ground;
+  const face = () => { const d = comp.pos.x < pos.x ? 1 : -1; if (d !== comp.dir) { comp.dir = d; compPush(); } if (state === 'idle' && dir !== -d) { dir = -d; pushState(); } };
+  const goto = (tx, sp) => { const dx = tx - comp.pos.x; if (Math.abs(dx) > 6 * k) { const d = dx < 0 ? -1 : 1; if (d !== comp.dir) { comp.dir = d; compPush(); } comp.pos.x += d * Math.min(Math.abs(dx), sp * k); compSet('walk'); return false; } return true; };
+  if (A.kind === 'poem') { if (goto(pos.x + A.side * 120 * k, 3)) { face(); compSet('idle'); } return true; }
+  if (A.kind === 'highfive') {   // 跑過來擊掌
+    if (e < 1.4) { if (goto(pos.x + A.side * 62 * k, 6)) face(); return true; }
+    if (A.step < 0) { A.step = 0; set('happy', 1400); compSet('happy'); compSend('say', '啪！'); send('say', '耶～'); }
+    return true;
+  }
+  if (A.kind === 'tag') {   // 繞著靈寵跑一大圈，靈寵轉頭追著看，最後抓到
+    const R = 170 * k, a = e * 1.9, cx = Math.max(l.xmin + R, Math.min(l.xmax - R, pos.x)), x = cx + Math.cos(a) * R, hop = Math.abs(Math.sin(e * 9)) * 14 * k;
+    const d = -Math.sin(a) >= 0 ? 1 : -1; if (d !== comp.dir) { comp.dir = d; compPush(); }
+    comp.pos.x = Math.max(l.xmin, Math.min(l.xmax, x)); comp.pos.y = l.ground - hop - Math.max(0, Math.sin(a)) * 30 * k; compSet('chase');
+    if (state === 'idle') { const w = comp.pos.x < pos.x ? -1 : 1; if (w !== dir) { dir = w; pushState(); } }
+    if (A.step < 0 && e > 2) { A.step = 0; say(Q.pick(['站住！', '別跑！', '看我抓到你～']), true); }
+    if (A.step === 0 && e > 5.6) { A.step = 1; set('happy', 1400); compSet('laugh'); compSend('say', Q.pick(['被抓到了！', '哈哈哈不玩了', '師兄好快！'])); }
+    return true;
+  }
+  if (A.kind === 'duel') {   // 面對面切磋：輪流出招，最後抱拳
+    if (!goto(pos.x + A.side * 115 * k, 5)) return true;
+    face();
+    const n = Math.floor((e - 0.8) / 1.2);
+    if (n >= 0 && n < 5 && n !== A.step) {
+      A.step = n;
+      const mv = Q.pick(Object.keys(MOVES));
+      if (n % 2 === 0) { strikeMove = mv; set('strike', 800); comp.move = ''; compSet('startle'); }
+      else { comp.move = mv; comp.state = ''; compSet('strike'); set('startle', 600); }
+    }
+    if (n >= 5 && A.step !== 99) { A.step = 99; comp.move = ''; compSet('happy'); set('happy', 1500); say('承讓！', true); compSend('say', '承讓承讓～'); }
+    return true;
+  }
+  return false;
 }
 function compPlace() {
   if (!comp || comp.win.isDestroyed()) return;
@@ -1235,7 +1403,7 @@ function records() {
       { what: '在電腦前用（離開不算）', gain: '每分鐘 +1（一天最多 480；過了宵禁時間不加）' }, { what: '劃掉一件事', gain: '+20；三件全成再 +60' },
       { what: '起身休息後回來', gain: '+15' }, { what: '護眼看完 20 秒', gain: '+5' }, { what: '每天第一次寫好三件事', gain: '+10' },
       { what: '摸頭、點牠', gain: '+1（每天最多 30）' }, { what: '餵靈丹', gain: '+30（每天三顆）' }, { what: '你離開時牠自己閉關', gain: '每兩分鐘 +1（最多 120）' },
-      { what: '比法術、比劍、三仙歸洞、擂台', gain: '每場最多 +15（一天合計最多 60）' }, { what: '打散心魔、摸到錦鯉', gain: '+15、+5' },
+      { what: '比劍、三仙歸洞、擂台', gain: '每場最多 +15（一天合計最多 60）' }, { what: '打散心魔、摸到錦鯉', gain: '+15、+5' },
       { what: '連續修煉（隔三天內都算連續）', gain: '每天第一次 +5 × 天數（最多 +30）' },
       { what: '渡劫期閃過天雷', gain: '+20（被劈到也有 +5）' },
     ],
@@ -1317,6 +1485,7 @@ function feed() {
   if (now() - lastPill < 30000) return say('丹毒未消，等等再吃', true);
   lastPill = now(); daily().pills += 1;
   set('eat', 3200);
+  if (comp && !comp.act) setTimeout(() => { if (comp) compSend('say', Q.pick(['我也要！', '分我一半～', '好香！'])); }, 500);   // 同門跟著吃（COMP_STATES 有 eat）
 }
 
 function tick() {
@@ -1522,7 +1691,7 @@ function onClick(zone) {
   const t = now();
   lastTouch = t;
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
-  if (spar) { if (spar.kind === 'spell' && now() < spar.until) return sparAct(); if (spar.kind === 'sword' && now() < spar.until) return; endSpar(); }
+  if (spar) { if (now() < spar.until) return; endSpar(); }   // 比劍中點牠本人：不算（要點破綻或揮劍）
   if (['fall', 'drag', 'tribulation', 'struck', 'vanish', 'appear'].includes(state)) return;
   if (disguise) { clicks = []; return endDisguise(true); }   // 變裝的狐仙被點到：露餡
   if (state === 'warn') { clicks = []; return dodgeThunder(); }
@@ -1535,7 +1704,8 @@ function onClick(zone) {
   if (state === 'climb' || state === 'hang') { say('別吵，練功中！'); return; }
   if (state === 'roll' || KUNGFU.includes(state)) { touchGain(); say('抓不到我～'); return; }   // 飛行、輕功中被點：繼續
   if (state === 'sleep') { set('startle', 900); say('修煉被打斷了！'); clicks = []; return; }
-  if (clicks.length >= 5 && !BUSY.includes(state) && !saverVillain) { clicks = []; return startSpar('spell'); }   // 連點五下：比法術（反派在場時不比）
+  if (clicks.length >= 5 && !BUSY.includes(state)) { clicks = []; set('dizzy', 1600); say(Q.pick(['道心不穩…', '別一直戳我啦', '頭好暈～']), true); return; }   // 連點五下：暈（比法術已取消）
+  if (comp && !comp.act && Math.random() < 0.18) setTimeout(() => compSend('say', Q.pick(['我也要摸摸！', '師兄偏心～', '也摸摸我嘛'])), 700);   // 同門吃醋
   if (onTouch(zone)) return;
   touchGain();
   set('happy', 1500);
@@ -1705,6 +1875,12 @@ function menu() {
             label: name, type: 'radio', checked: compSpecies() === v, click: () => { cfg.compSpecies = v; saveCfg(); compPush(); },
           })),
         },
+        { type: 'separator', visible: !!comp },
+        { label: '一起對詩', visible: !!comp, click: () => startPair('poem', true) },
+        { label: '切磋一下', visible: !!comp, click: () => startPair('duel', true) },
+        { label: '玩追逐', visible: !!comp, click: () => startPair('tag', true) },
+        { label: '擊掌', visible: !!comp, click: () => startPair('highfive', true) },
+        { label: '聊聊天', visible: !!comp, click: () => { if (!pairTalk()) startPair('highfive', true); } },
       ],
     },
     { type: 'separator' },
@@ -1775,6 +1951,7 @@ function create() {
     set('idle', 2500);
     setTimeout(() => (morningDue() ? morning() : say(greeting())), 1500);
     setInterval(tick, TICK);
+    setTimeout(warmFx, 4000);   // 先把特效視窗準備好
     setInterval(checkStretch, 10000);
     setInterval(checkNotes, 5000);
     powerMonitor.on('lock-screen', onLock); powerMonitor.on('suspend', onLock);
@@ -1793,7 +1970,7 @@ function create() {
     else if (demo === 'divine') setTimeout(() => { cfg.divine = null; divine(); }, 2500);
     else if (demo === 'demon') setTimeout(() => { lastDemon = 0; demon = { hp: 3, t0: now(), until: Date.now() + 45000, hitAt: 0 }; pushState(); sayLines([...Q.pick(DEMON_SAYS), '道友快點牠，打散心魔！'], 2600); }, 2500);
     else if (demo === 'curfew') { cfg.curfew = 0.5; lastCurfewSay = 0; setTimeout(() => { const h = new Date().getHours(); cfg.curfew = h >= 4 ? Math.max(21, Math.min(23, h)) : 0.5; if (h >= 4 && h < 21) cfg.curfew = 21; lastCurfewSay = 0; }, 100); }
-    else if (demo === 'spell' || demo === 'sword') setTimeout(() => startSpar(demo), 2500);
+    else if (demo === 'sword' || demo === 'spell') setTimeout(() => startSpar('sword'), 2500);
     else if (demo === 'lock') setTimeout(() => { onLock(); setTimeout(() => { lockAt -= 42 * 60000; onUnlock(); }, 3000); }, 2500);
     else if (demo && demo.startsWith('omen')) setTimeout(() => startOmen(demo.split(':')[1]), 2500);
     else if (demo === 'cups') setTimeout(() => openGame('cups.html', 460, 300), 2500);
@@ -1801,6 +1978,9 @@ function create() {
     else if (demo === 'strike') setInterval(() => { if (!BUSY.includes(state)) startStrike(); }, 2600);
     else if (demo === 'thunder') setTimeout(() => { set('warn', 3000); say('天雷將至！點我閃開！', true); }, 2500);
     else if (demo === 'companion') setTimeout(openCompanion, 2000);
+    else if (demo === 'ult' || demo === 'sig') setTimeout(() => startSkill(demo), 2500);
+    else if (demo === 'pairvillain') setTimeout(() => { openCompanion(); setTimeout(() => openVillain(''), 2500); }, 1500);
+    else if ((demo || '').startsWith('pair:')) setTimeout(() => { openCompanion(); setTimeout(() => startPair(demo.slice(5), true), 2500); }, 1500);
     else if (demo === 'records') openRecords();
     else if (demo === 'drink') setTimeout(startDrink, 2500);
     else if (demo === 'gaze') setTimeout(startGaze, 2500);
@@ -1836,6 +2016,7 @@ ipcMain.on('click', (e, zone) => {
   if (!fromComp(e)) return onClick(typeof zone === 'string' ? zone : '');
   touchGain(); compSet('happy'); setTimeout(() => compSet('idle'), 1400);   // 點同門：牠開心一下
   compSend('say', Q.pick(['嘿嘿～', '師兄你看！', '修為 +1']));
+  if (Math.random() < 0.25 && !BUSY.includes(state)) setTimeout(() => say(Q.pick(['那我呢？', '哼，偏心', '我也要～']), true), 900);
 });
 ipcMain.on('drag-start', (e) => { if (!fromComp(e)) onDragStart(); });
 ipcMain.on('drag-end', (e) => { if (!fromComp(e)) onDragEnd(); });
