@@ -37,6 +37,11 @@ function loadCfg() {
     saveCfg();   // 換算完馬上存，免得下次又換算一次
   }
   if (process.env.PET_TEST_XP) cfg.xp = Number(process.env.PET_TEST_XP) || 0;   // 測試用：假裝修為是這個數字（不存檔）
+  if (typeof cfg.merit !== 'number' || cfg.merit < 0) cfg.merit = 0;
+  if (!Array.isArray(cfg.history)) cfg.history = [];
+  // 已經慶祝過的境界會存檔：突破後還沒演天劫就關掉程式，下次開啟會補演
+  if (typeof cfg.seenRealm !== 'number') { cfg.seenRealm = realmOf(cfg.xp); cfg.seenDone = cfg.xp >= MAX_XP; }
+  pending = realmOf(cfg.xp) > cfg.seenRealm || (cfg.xp >= MAX_XP && !cfg.seenDone);
   if (!Array.isArray(cfg.notes)) cfg.notes = [];
   cfg.notes = cfg.notes.filter((n) => n && typeof n.text === 'string' && Number.isFinite(n.at));
   if (!cfg.todos || !Array.isArray(cfg.todos.items)) cfg.todos = { date: '', items: [] };
@@ -69,7 +74,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -125,17 +130,25 @@ function startGaze() {
   set('gaze', 20000);   // 陪你看遠方 20 秒
   const f = Q.pick(Q.FAR);
   sayLines(['看看 6 公尺外', '遠眺 20 秒～', ...Q.verseLines(f)], 3200);
-  setTimeout(() => { if (state === 'gaze') { gain(5); stat('gazes'); set('happy', 1400); say('眼睛舒服多了吧，修為 +5', true); } }, 20000);
+  setTimeout(() => { if (state === 'gaze') { gain(5, 'eye'); stat('gazes'); set('happy', 1400); say('眼睛舒服多了吧，修為 +5', true); } }, 20000);
 }
 let activeSec = 0, awaySec = 0, awayGained = 0;
 function checkXp(idle) {
   if (idle < 60) {
     awaySec = 0; awayGained = 0;
     activeSec += 10;
-    if (activeSec >= 60) { activeSec -= 60; gain(1); daily().min += 1; stat('totalMin'); }
+    if (activeSec >= 60) {
+      activeSec -= 60; stat('totalMin');
+      const d = daily(); d.min += 1;
+      // 熬夜（過了宵禁時間）不長修為；一天專注修為最多八小時，免得越加班升越快
+      if (curfewOn()) { if (!d.lateTold) { d.lateTold = true; xpNotes.push(['夜深了，道友', '熬夜不長修為喔']); } }
+      else if ((d.xp.work || 0) >= WORK_CAP) { if (!d.capTold) { d.capTold = true; xpNotes.push(['今日專注滿八小時', '修為到頂，該歇了']); } }
+      else gain(1, 'work');
+    }
+    flushXpNotes();
   } else {
     awaySec += 10;
-    if (awaySec >= 120 && awayGained < 120) { awaySec -= 120; awayGained += 1; gain(1); }   // 每兩分鐘 +1，最多 120
+    if (awaySec >= 120 && awayGained < 120) { awaySec -= 120; awayGained += 1; gain(1, 'retreat'); }   // 每兩分鐘 +1，最多 120
   }
 }
 function checkHealth(idle) {
@@ -174,7 +187,7 @@ function checkStretch() {
     return;
   }
   if (praise && idle < 5 && !['drag', 'fall', 'tribulation'].includes(state)) {
-    praise = false; gain(15); stat('breaks'); set('happy', 1600); sayLines(['休息得好！修為 +15', Q.pick(Q.CHEER)]);
+    praise = false; gain(15, 'rest'); stat('breaks'); set('happy', 1600); sayLines(['休息得好！修為 +15', Q.pick(Q.CHEER)]);
     return;
   }
   if (!cfg.stretch) return;
@@ -234,24 +247,70 @@ function realm() { return realmOf(cfg.xp); }
 function can(a) { return realm() >= ABILITY[a]; }
 function lockLabel(label, a) { return can(a) ? label : `${label}（${REALMS[ABILITY[a]]}解鎖）`; }
 let pending = false, lastPill = 0, lastSave = 0;
+// 小境界：每個大境界分四段，到了會說一聲（不演天劫）
+const STAGES = ['初期', '中期', '後期', '巔峰'];
+// 每日上限：小遊戲與切磋的修為、專注工作的修為（分鐘）。超過照樣能玩、能用，只是不再加修為
+const GAME_CAP = 60, WORK_CAP = 480;
+// 渡劫圓滿之後，多出來的修為化為功德；每 1500 功德飛升一重天，共九重
+const HEAVEN_STEP = 1500, HEAVEN_MAX = 9, NUM = '一二三四五六七八九';
+const SRC = { work: '專注工作', todo: '今日三件事', rest: '起身休息', eye: '護眼遠眺', pet: '摸頭', pill: '靈丹', retreat: '閉關',
+  game: '切磋與小遊戲', omen: '心魔與祥瑞', thunder: '天雷', bonus: '連續修煉', other: '其他' };
+let xpNotes = [], ascend = false;   // 等牠有空時要說的話（每則是幾行泡泡）；飛升了還沒慶祝
 function realmOf(xp) { let i = 0; while (i + 1 < NEED.length && xp >= NEED[i + 1]) i++; return i; }
+function stageOf(xp) {
+  if (xp >= MAX_XP) return 3;
+  const r = realmOf(xp), top = r + 1 < NEED.length ? NEED[r + 1] : MAX_XP;
+  return Math.max(0, Math.min(3, Math.floor(4 * (xp - NEED[r]) / (top - NEED[r]))));
+}
 function isDone() { return cfg.xp >= MAX_XP; }
+function heaven() { return Math.min(HEAVEN_MAX, Math.floor((cfg.merit || 0) / HEAVEN_STEP)); }
+function heavenText() { const h = heaven(); return h ? `飛升第${NUM[h - 1]}重天` : '渡劫圓滿'; }
 function realmText() {
   const i = realmOf(cfg.xp);
-  if (isDone()) return '渡劫圓滿';
-  return `${REALMS[i]}期（${Math.floor(cfg.xp)}／${i + 1 < NEED.length ? NEED[i + 1] : MAX_XP}）`;
+  if (isDone()) return heaven() >= HEAVEN_MAX ? `${heavenText()}（圓滿）` : `${heavenText()}（功德 ${Math.floor(cfg.merit % HEAVEN_STEP)}／${HEAVEN_STEP}）`;
+  return `${REALMS[i]}${STAGES[stageOf(cfg.xp)]}（${Math.floor(cfg.xp)}／${i + 1 < NEED.length ? NEED[i + 1] : MAX_XP}）`;
 }
-function gain(n) {
-  const before = realmOf(cfg.xp), wasDone = isDone();
-  cfg.xp = Math.min(MAX_XP, cfg.xp + n);
+// 加修為。src 是來源（SRC 的鍵），用來記今天各來源拿了多少。回傳實際加到的數字（碰到每日上限會變少，甚至是 0）
+function gain(n, src) {
+  src = SRC[src] ? src : 'other';
+  n = Math.max(0, Number(n) || 0);
+  const d = daily();
+  if (src === 'game') {
+    n = Math.min(n, GAME_CAP - (d.xp.game || 0));
+    if (n <= 0) { if (!d.gameTold) { d.gameTold = true; xpNotes.push(['今日切磋修為已滿', '再玩純屬娛樂～']); } return 0; }
+  }
+  if (!n) return 0;
+  const before = realmOf(cfg.xp), sBefore = stageOf(cfg.xp), wasDone = isDone(), hBefore = heaven();
+  const room = MAX_XP - cfg.xp;
+  cfg.xp += Math.min(n, room);
+  if (n > room) cfg.merit = (cfg.merit || 0) + (n - Math.max(0, room));
+  d.xp[src] = (d.xp[src] || 0) + n;
   if (realmOf(cfg.xp) > before || (!wasDone && isDone())) pending = true;
+  else if (!wasDone && stageOf(cfg.xp) > sBefore) xpNotes.push([`${REALMS[before]}${STAGES[stageOf(cfg.xp)]}了！`, stageOf(cfg.xp) === 3 ? '離突破只差一步' : '穩紮穩打']);
+  if (heaven() > hBefore) ascend = true;
   if (now() - lastSave > 30000) { lastSave = now(); saveCfg(); }
   if (tray) tray.setToolTip('桌面靈寵｜' + realmText());
   pushState();
+  return n;
 }
-// 今天的次數（摸頭上限、靈丹三顆、早上寫三件事的獎勵）
+function dayXp(d) { return Object.values((d && d.xp) || {}).reduce((a, b) => a + (Number(b) || 0), 0); }
+// 今天的次數與各來源修為。換日時把昨天收進歷史、結算連續修煉
 function daily() {
-  if (!cfg.daily || cfg.daily.date !== today()) cfg.daily = { date: today(), clicks: 0, pills: 0, wrote: false, min: 0 };
+  const t = today();
+  if (!cfg.daily || cfg.daily.date !== t) {
+    const prev = cfg.daily, st = cfg.stats = cfg.stats || {};
+    if (prev && prev.date) cfg.history = [...(cfg.history || []), { date: prev.date, xp: Math.round(dayXp(prev)), min: prev.min || 0 }].slice(-30);
+    // 連續修煉：隔一到三天都算連續（週末不開電腦不會斷），更久就重新算
+    const gap = prev && prev.date ? Math.round((Date.parse(t) - Date.parse(prev.date)) / 86400000) : 0;
+    st.streak = gap >= 1 && gap <= 3 ? (st.streak || 1) + 1 : 1;
+    st.bestStreak = Math.max(st.bestStreak || 1, st.streak);
+    cfg.daily = { date: t, clicks: 0, pills: 0, wrote: false, min: 0, xp: {} };
+    if (st.streak > 1) {
+      const n = st.streak, bonus = 5 * Math.min(n - 1, 6);
+      setTimeout(() => { gain(bonus, 'bonus'); xpNotes.push([`連續修煉 ${n} 天`, `修為 +${bonus}`]); }, 0);
+    }
+  }
+  if (!cfg.daily.xp) cfg.daily.xp = {};
   return cfg.daily;
 }
 function stat(key, n) {
@@ -260,9 +319,15 @@ function stat(key, n) {
   const d = today();
   if (cfg.stats.lastDay !== d) { cfg.stats.lastDay = d; cfg.stats.days = (cfg.stats.days || 0) + 1; }
 }
+// 有話要說（小境界、每日上限、連續修煉）就等牠有空時說
+function flushXpNotes() {
+  if (!xpNotes.length || BUSY.includes(state) || spar || demon || deliver || pending) return;
+  if (['idle', 'walk'].includes(state)) set('happy', 1300);
+  sayLines(xpNotes.shift(), 2400);
+}
 function touchGain() {   // 摸頭、點牠：每次 +1，每天最多 30
   const d = daily();
-  if (d.clicks < 30) { d.clicks += 1; gain(1); }
+  if (d.clicks < 30) { d.clicks += 1; gain(1, 'pet'); }
 }
 
 // ---- 行為 ----
@@ -427,13 +492,13 @@ function endSpar() {
   const win = hearts > 0 && hits >= need;
   const airborne = pos.y < limits().ground - 5;
   const xp = win ? Math.min(15, 3 + Math.floor(hits / 6) + blocks + Math.floor(maxCombo / 10)) : Math.min(5, Math.floor(hits / 8) + blocks);
-  if (xp) gain(xp);
+  const got = xp ? gain(xp, 'game') : 0;
   if (win) stat(kind === 'spell' ? 'spellWins' : 'swordWins');
   if (airborne) { landAfter = true; set('land'); }   // 在空中就收劍飄下來
   else if (win) set('fireworks', 2400);
   else set(hearts <= 0 ? 'happy' : 'dizzy', 1800);
   const head = win ? (hits >= need * 1.6 ? '神乎其技！' : '道友贏了！') : hearts <= 0 ? '承讓承讓～' : '時間到！';
-  sayLines([head, `${kind === 'spell' ? '法術' : '劍招'} ${hits}・連擊 ${maxCombo}`, `暴擊 ${crits}・格擋 ${blocks}`, xp ? `修為 +${xp}` : '再接再厲～'], 2400);
+  sayLines([head, `${kind === 'spell' ? '法術' : '劍招'} ${hits}・連擊 ${maxCombo}`, `暴擊 ${crits}・格擋 ${blocks}`, got ? `修為 +${got}` : xp ? '今日切磋修為已滿' : '再接再厲～'], 2400);
 }
 function onSwipe() {   // 畫面端：游標在身上來回揮了一下
   const t = now();
@@ -458,7 +523,7 @@ function checkDemon(idle) {
 function hitDemon(big) {
   demon.hp -= big ? 2 : 1; demon.hitAt = now();
   if (demon.hp <= 0) {
-    demon = null; gain(15); stat('demons'); set('fireworks', 2200);
+    demon = null; gain(15, 'omen'); stat('demons'); set('fireworks', 2200);
     say('心魔散了！多謝道友護法，修為 +15', true);
   } else { set('strike', 700); strikeMove = 'flick'; say(['喝！', '看招！', '再一下！'][Math.floor(Math.random() * 3)], true); }
   pushState();
@@ -557,14 +622,16 @@ ipcMain.on('game-result', (_e, r) => {
   if (!r || typeof r !== 'object') return;
   if (r.game === 'cups') {
     const wins = Math.max(0, Math.min(10, Number(r.wins) || 0));
-    stat('cupsWins', wins); gain(Math.min(9, wins * 3));
-    setTimeout(() => say(wins ? `猜中 ${wins} 次，修為 +${Math.min(9, wins * 3)}` : '一次都沒猜中，哈哈', true), 300);
+    stat('cupsWins', wins);
+    const got = gain(Math.min(9, wins * 3), 'game');
+    setTimeout(() => say(wins ? `猜中 ${wins} 次${got ? `，修為 +${got}` : '！'}` : '一次都沒猜中，哈哈', true), 300);
   } else if (r.game === 'duel') {
-    if (r.win) { stat('duelWins'); gain(10); }
-    setTimeout(() => { set(r.win ? 'dizzy' : 'happy', 1600); say(r.win ? '道友劍法高明！修為 +10' : '承讓承讓～下次再比', true); }, 300);
+    let got = 0;
+    if (r.win) { stat('duelWins'); got = gain(10, 'game'); }
+    setTimeout(() => { set(r.win ? 'dizzy' : 'happy', 1600); say(r.win ? `道友劍法高明！${got ? `修為 +${got}` : ''}` : '承讓承讓～下次再比', true); }, 300);
   } else if (r.game === 'omen' && r.clicked) {
     if (r.kind === 'meteor') openWish();
-    else if (r.kind === 'koi') { gain(5); say('摸到錦鯉，今天必有好運！修為 +5', true); }
+    else if (r.kind === 'koi') { gain(5, 'omen'); say('摸到錦鯉，今天必有好運！修為 +5', true); }
   } else if (r.game === 'wish' && typeof r.text === 'string' && r.text.trim()) {
     cfg.wishes = [...(cfg.wishes || []), { text: r.text.trim().slice(0, 40), at: Date.now() }].slice(-100); saveCfg();
     say('願望收好了，本座幫你記著', true);
@@ -618,7 +685,7 @@ function checkThunder(idle) {
 }
 function dodgeThunder() {
   const l = limits(), k = cfg.scale;
-  stat('dodges'); gain(20);
+  stat('dodges'); gain(20, 'thunder');
   const side = Math.random() < 0.5 ? -1 : 1;
   const x1 = Math.max(l.xmin, Math.min(l.xmax, pos.x + side * 170 * k));
   dir = side;
@@ -769,8 +836,8 @@ function toggleTodo(i) {
     const left = t.items.filter((x) => x.text && !x.done).length;
     stat('todosDone');
     const free = !BUSY.includes(state);
-    if (left === 0) { gain(80); stat('allDone'); if (free) set('fireworks', 3600); sayLines(['三件都完成了！', '修為 +80', ...Q.verseLines(Q.pick(Q.VERSE))]); }
-    else { gain(20); if (free) set('happy', 1500); sayLines([Q.pick(Q.DONE), `修為 +20，還剩 ${left} 件`]); }
+    if (left === 0) { gain(80, 'todo'); stat('allDone'); if (free) set('fireworks', 3600); sayLines(['三件都完成了！', '修為 +80', ...Q.verseLines(Q.pick(Q.VERSE))]); }
+    else { gain(20, 'todo'); if (free) set('happy', 1500); sayLines([Q.pick(Q.DONE), `修為 +20，還剩 ${left} 件`]); }
   }
   return t;
 }
@@ -792,17 +859,34 @@ function openRecords() {
   recWin.on('closed', () => { recWin = null; });
 }
 function records() {
-  const r = realm(), st = cfg.stats || {};
+  const r = realm(), st = cfg.stats || {}, d = daily(), done = isDone(), h = heaven();
+  const top = r + 1 < NEED.length ? NEED[r + 1] : MAX_XP;
+  const week = [...(cfg.history || []).slice(-6), { date: d.date, xp: Math.round(dayXp(d)), min: d.min }];
   return {
-    realm: r, realmName: REALMS[r], done: isDone(), xp: Math.floor(cfg.xp),
-    cur: isDone() ? MAX_XP : NEED[r], next: isDone() ? MAX_XP : (r + 1 < NEED.length ? NEED[r + 1] : MAX_XP),
+    realm: r, realmName: REALMS[r], stage: stageOf(cfg.xp), stageName: STAGES[stageOf(cfg.xp)], done, xp: Math.floor(cfg.xp),
+    title: done ? heavenText() : REALMS[r] + STAGES[stageOf(cfg.xp)],
+    cur: done ? MAX_XP : NEED[r], next: done ? MAX_XP : top,
+    // 小境界的門檻（給進度條畫刻度）
+    marks: done ? [] : [1, 2, 3].map((k) => ({ name: STAGES[k], at: NEED[r] + (top - NEED[r]) * k / 4 })),
+    heaven: { n: h, max: HEAVEN_MAX, step: HEAVEN_STEP, merit: Math.floor(cfg.merit || 0), into: h >= HEAVEN_MAX ? HEAVEN_STEP : Math.floor((cfg.merit || 0) % HEAVEN_STEP) },
     realms: REALMS.map((name, i) => ({ name, need: NEED[i], unlock: UNLOCK[i], got: r >= i })),
-    stats: { days: st.days || 1, todayMin: daily().min, totalMin: st.totalMin || 0, todosDone: st.todosDone || 0, allDone: st.allDone || 0,
-      breaks: st.breaks || 0, gazes: st.gazes || 0, dodges: st.dodges || 0, strikes: st.strikes || 0 },
+    today: { total: Math.round(dayXp(d)), by: Object.keys(SRC).filter((k) => d.xp[k]).map((k) => ({ name: SRC[k], xp: Math.round(d.xp[k]) })).sort((a, b) => b.xp - a.xp) },
+    week,
+    caps: [
+      { name: '專注工作', used: Math.min(WORK_CAP, Math.round(d.xp.work || 0)), max: WORK_CAP },
+      { name: '切磋與小遊戲', used: Math.min(GAME_CAP, Math.round(d.xp.game || 0)), max: GAME_CAP },
+      { name: '摸頭', used: d.clicks || 0, max: 30 },
+      { name: '靈丹', used: (d.pills || 0) * 30, max: 90 },
+    ],
+    late: curfewOn(),
+    stats: { days: st.days || 1, streak: st.streak || 1, bestStreak: st.bestStreak || st.streak || 1, todayMin: d.min, totalMin: st.totalMin || 0, todosDone: st.todosDone || 0, allDone: st.allDone || 0,
+      breaks: st.breaks || 0, gazes: st.gazes || 0, dodges: st.dodges || 0, strikes: st.strikes || 0, demons: st.demons || 0 },
     sources: [
-      { what: '在電腦前用（離開不算）', gain: '每分鐘 +1' }, { what: '劃掉一件事', gain: '+20；三件全成再 +60' },
+      { what: '在電腦前用（離開不算）', gain: '每分鐘 +1（一天最多 480；過了宵禁時間不加）' }, { what: '劃掉一件事', gain: '+20；三件全成再 +60' },
       { what: '起身休息後回來', gain: '+15' }, { what: '護眼看完 20 秒', gain: '+5' }, { what: '每天第一次寫好三件事', gain: '+10' },
       { what: '摸頭、點牠', gain: '+1（每天最多 30）' }, { what: '餵靈丹', gain: '+30（每天三顆）' }, { what: '你離開時牠自己閉關', gain: '每兩分鐘 +1（最多 120）' },
+      { what: '比法術、比劍、三仙歸洞、擂台', gain: '每場最多 +15（一天合計最多 60）' }, { what: '打散心魔、摸到錦鯉', gain: '+15、+5' },
+      { what: '連續修煉（隔三天內都算連續）', gain: '每天第一次 +5 × 天數（最多 +30）' },
       { what: '渡劫期閃過天雷', gain: '+20（被劈到也有 +5）' },
     ],
   };
@@ -847,7 +931,7 @@ ipcMain.handle('ui-todos', (_e, t) => {
     return { text, done: !!((t && t.items) || [])[i]?.done, paid: same ? old[i].paid : false };
   });
   cfg.todos = { date: today(), items }; saveCfg(); refreshUi();
-  if (items.some((x) => x.text) && !daily().wrote) { daily().wrote = true; gain(10); }   // 每天第一次寫好三件事 +10
+  if (items.some((x) => x.text) && !daily().wrote) { daily().wrote = true; gain(10, 'todo'); }   // 每天第一次寫好三件事 +10
   if (items.some((x) => x.text) && !BUSY.includes(state)) { set('happy', 1200); say('好，我幫你記著！', true); }
   return todos();
 });
@@ -1020,20 +1104,25 @@ function tick() {
 
     if (pending && ['idle', 'walk', 'sleep'].includes(state)) {
       pending = false; set('tribulation', 3300); say('天劫將至！', true);
+    } else if (ascend && !pending && ['idle', 'walk', 'sleep'].includes(state)) {
+      ascend = false; saveCfg(); set('fireworks', 3600);
+      sayLines([`${heavenText()}！`, heaven() >= HEAVEN_MAX ? '九重天，到頂了' : '功德又滿一重', ...Q.verseLines(Q.pick(Q.VERSE))]);
+      refreshUi();
     }
 
     if (t > until) {
-      if (state === 'eat') { set('happy', 1500); say('修為 +30'); gain(30); }
+      if (state === 'eat') { set('happy', 1500); say('修為 +30'); gain(30, 'pill'); }
       else if (state === 'tribulation') {
+        cfg.seenRealm = realm(); cfg.seenDone = isDone();
         saveCfg(); set('happy', 1800);
-        if (isDone()) sayLines(['渡劫圓滿！', '道友與本座，功德圓滿', ...Q.verseLines(Q.pick(Q.VERSE))]);
+        if (isDone()) sayLines(['渡劫圓滿！', '此後修為化為功德', '功德滿了就飛升', ...Q.verseLines(Q.pick(Q.VERSE))]);
         else sayLines([`突破！${REALMS[realm()]}期`, '獲得：', ...chunks(UNLOCK[realm()]), ...Q.verseLines(Q.pick(Q.VERSE))]);
         refreshUi();
       }
       else if (state === 'peek') { set('walk', 2500); }
       else if ((state === 'spell' || state === 'sword') && !spar) { set('idle', 800); }
       else if (state === 'hexagram') { hexShow = null; set('idle', 1500); }
-      else if (state === 'warn') { gain(5); set('struck', 1100); say('被劈了一下…修為 +5', true); }
+      else if (state === 'warn') { gain(5, 'thunder'); set('struck', 1100); say('被劈了一下…修為 +5', true); }
       else if (state === 'struck') { set('dizzy', 1800); }
       else decide();
     }
@@ -1318,4 +1407,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { set, say, feed, gain, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };

@@ -357,6 +357,11 @@
       g.addColorStop(0, 'rgba(245,184,46,0.28)'); g.addColorStop(1, 'rgba(245,184,46,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(100, 150 - lift, 82, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+      const hv = o.mini ? 0 : (fit.heaven || 0);   // 飛升幾重天，就有幾顆金星繞著牠轉
+      for (let i = 0; i < hv; i++) {
+        const a = t * 0.7 + i * Math.PI * 2 / hv;
+        spark(ctx, 100 + Math.cos(a) * 66, 138 - lift + Math.sin(a) * 22, 4.4, 0.55 + 0.4 * Math.sin(a), C.gold);
+      }
     }
     if (taichi) {
       ctx.save(); ctx.translate(100, 186 - lift - 94 + Math.sin(t * 2) * 3); ctx.rotate(t * 1.6); ctx.globalAlpha = 0.95;
