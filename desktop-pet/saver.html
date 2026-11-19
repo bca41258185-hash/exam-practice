@@ -327,7 +327,7 @@
       // 追龍珠：龍頭朝龍珠轉（有轉向上限，所以會繞、會盤），身體沿著龍頭走過的路
       startChase(T) {
         if (this.chase) { this.chase.end = 0; return; }
-        const BL = Math.min(W * 0.62, 1250 * K), y = H * 0.5, path = [];
+        const BL = Math.min(W * 0.95, 1800 * K), y = H * 0.5, path = [];   // 和平常游過去的龍一樣長，玩龍珠時不會變小
         for (let i = 0; i <= 30; i++) path.push([-BL * 1.3 + i / 30 * BL * 1.2, y]);   // 從畫面左外側游進來
         this.chase = { head: { x: path[path.length - 1][0], y, ang: 0 }, path, BL, speed: 0, lastBite: -9, end: 0, caught: false, since: T };
       },
@@ -609,7 +609,7 @@
   let last = now();
   function frame(t) {
     if (clock == null) requestAnimationFrame(frame);
-    const T = t / 1000, dt = Math.min(0.05, T - last); last = T;
+    const T = t / 1000, dt = Math.max(0, Math.min(0.05, T - last)); last = T;   // 時間不會倒退（測試時兩個時鐘交錯也不會讓龍反著游）
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!S) return;
     let A = Math.min(1, (T - born) / 3);   // 慢慢飄出來
@@ -693,7 +693,7 @@
   window.saverPet = (x, y, dir) => { petPos = { x, y, dir }; };
   window.saverFoe = () => villain && { x: villain.x, y: villain.y, hp: villain.hp, state: villain.state, type: villain.type };   // 測試用   // 測試／預告片：指定靈寵位置
   window.saverVillain = (bossId) => { villainStart(clock || now(), bossId); return !!villain; };
-  window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
+  window.saverScene = () => S; window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
   requestAnimationFrame(frame);
 })();
 </script>
