@@ -36,7 +36,8 @@ function loadCfg() {
     cfg.xp = NEED[r]; cfg.xpVersion = 2;
     saveCfg();   // 換算完馬上存，免得下次又換算一次
   }
-  if (process.env.PET_TEST_XP) cfg.xp = Number(process.env.PET_TEST_XP) || 0;   // 測試用：假裝修為是這個數字（不存檔）
+  if (process.env.PET_TEST_XP) cfg.xp = Number(process.env.PET_TEST_XP) || 0;
+  if (process.env.PET_TEST_XP && process.env.PET_TEST_SPECIES) cfg.species = process.env.PET_TEST_SPECIES;   // 測試用：換角色（不存檔）   // 測試用：假裝修為是這個數字（不存檔）
   if (typeof cfg.merit !== 'number' || cfg.merit < 0) cfg.merit = 0;
   if (!Array.isArray(cfg.history)) cfg.history = [];
   if (![0, 3, 5, 10, 20].includes(cfg.saver)) cfg.saver = 10;
@@ -788,7 +789,7 @@ function openSaver(manual) {
   mine.loadFile(path.join(__dirname, 'saver.html'));
   mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
   mine.on('closed', () => {
-    if (saverWin === mine) saverWin = null;
+    if (saverWin === mine) { saverWin = null; saverBun = null; saverVillain = null; }
     if (state === 'sleep' && !lockAt) set('idle', 1200);
   });
   saverAt = Date.now(); saverLeaving = false;
@@ -805,11 +806,52 @@ function leaveSaver() {   // 你回來了：告訴它慢慢散掉（它自己數
   const mine = saverWin;
   setTimeout(() => { if (saverWin === mine && saverLeaving) closeSaver(); }, 20000);   // 保險（只關這一次開的；你在玩、取消散掉時不關）
 }
+// 螢幕保護回報：熊貓看到包子就跑去吃；黑風怪出現就跑去打
+let saverBun = null, saverVillain = null, villainSaid = 0;
+function saverOrigin() { const b = saverWin && !saverWin.isDestroyed() ? saverWin.getBounds() : { x: 0, y: 0 }; return b; }
+function saverCmd(c) { if (saverWin && !saverWin.isDestroyed()) saverWin.webContents.send('saver-cmd', c); }
+ipcMain.on('saver-report', (_e, r) => {
+  if (!r || typeof r !== 'object') return;
+  const o = saverOrigin();
+  if (r.kind === 'bun' && cfg.species === 'panda') {
+    saverBun = { id: String(r.id), x: o.x + Number(r.x), y: o.y + Number(r.y), at: Date.now() };
+    if (!saverVillain && ['sleep', 'idle'].includes(state) && !BUSY.includes(state)) { set('bunrun', 9000); say(Q.pick(['包子！', '聞到包子香了！', '我的包子～']), true); }
+  } else if (r.kind === 'villain') {
+    if (r.state === 'gone') {
+      saverVillain = null;
+      if (['villainrun', 'strike'].includes(state) || state === 'sleep') {
+        if (r.beaten) { gain(10); stat('villains'); set('fireworks', 2400); say('邪不勝正！修為 +10', true); }
+        else { set('dizzy', 1600); say(Q.pick(['讓牠跑了…可惡！', '下次別讓我遇到！']), true); }
+      }
+      return;
+    }
+    saverVillain = { x: o.x + Number(r.x), y: o.y + Number(r.y), hp: r.hp, state: r.state };
+    if (!['villainrun', 'strike'].includes(state) && !BUSY.includes(state) && Date.now() - villainSaid > 4000) {
+      villainSaid = Date.now(); stopPoem(); set('villainrun', 30000); say(Q.pick(['何方妖孽！', '黑風怪！哪裡跑！', '休想偷東西！']), true);
+    }
+  }
+});
+function saverChase(t, l, k) {   // 在地面上跑向包子或反派（每格呼叫）
+  const goal = state === 'bunrun' ? saverBun : saverVillain;
+  if (!goal || !saverWin || saverWin.isDestroyed()) { set('idle', 800); return; }
+  const tx = goal.x - 100 * k, dx = tx - pos.x, d = dx < 0 ? -1 : 1;
+  if (d !== dir) { dir = d; pushState(); }
+  const reach = state === 'bunrun' ? 18 * k : 120 * k;
+  if (Math.abs(dx) > reach) { pos.x = Math.max(l.xmin, Math.min(l.xmax, pos.x + d * Math.min(Math.abs(dx), 12 * k))); return; }
+  if (state === 'bunrun') {   // 到了：包子飛進嘴裡
+    const o = saverOrigin();
+    saverCmd({ kind: 'eat', id: saverBun.id, x: pos.x + 100 * k - o.x, y: pos.y + 150 * k - o.y });
+    saverBun = null; set('eat', 2400); say(Q.pick(['好吃！', '再來一個～', '包子是熊貓的命', '嗯～皮薄餡多']), true); touchGain();
+  } else if (t - (saverVillain.lastHit || 0) > 1100) {   // 打反派：每一秒多出一招
+    saverVillain.lastHit = t; startStrike(); saverCmd({ kind: 'hit', dmg: 1 }); set('strike', 900);
+  }
+}
+
 function checkSaver(idle) {
   const open = saverWin && !saverWin.isDestroyed();
   if (open) {
     if (idle < 10 && Date.now() > saverHold) leaveSaver();
-    else if (!saverLeaving && !saverHold && ['idle', 'walk'].includes(state)) set('sleep', 24 * 3600000);   // 開始時牠剛好在忙，忙完再坐下
+    else if (!saverLeaving && !saverHold && ['idle', 'walk'].includes(state) && !saverVillain) set('sleep', 24 * 3600000);   // 開始時牠剛好在忙，忙完再坐下
     return;
   }
   if (cfg.saver && idle >= cfg.saver * 60) openSaver(false);
@@ -1316,6 +1358,8 @@ function tick() {
       pos.x += dir * 1.6 * k;
       if (pos.x <= l.xmin && dir < 0) { if (can('climb') && Math.random() < 0.35) startClimb(-1); else dir = 1, pushState(); }
       else if (pos.x >= l.xmax && dir > 0) { if (can('climb') && Math.random() < 0.35) startClimb(1); else dir = -1, pushState(); }
+    } else if (state === 'bunrun' || state === 'villainrun') {
+      saverChase(t, l, k);
     } else if (state === 'peekout') {
       const target = dir < 0 ? l.xmin - 46 * k : l.xmax + 46 * k;
       pos.x += dir * 2 * k;
@@ -1342,6 +1386,8 @@ function tick() {
         refreshUi();
       }
       else if (state === 'peek') { set('walk', 2500); }
+      else if (state === 'strike' && saverVillain) { set('villainrun', 30000); }
+      else if (state === 'bunrun' || state === 'villainrun') { set('idle', 800); }
       else if ((state === 'spell' || state === 'sword') && !spar) { set('idle', 800); }
       else if (state === 'hexagram') { hexShow = null; set('idle', 1500); }
       else if (state === 'warn') { gain(5, 'thunder'); set('struck', 1100); say('被劈了一下…修為 +5', true); }
@@ -1602,6 +1648,7 @@ function create() {
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
     if (demo === 'saver') setTimeout(() => openSaver(true), 2000);
+    else if (demo === 'villain') setTimeout(() => { openSaver(true); setTimeout(() => saverWin && saverWin.webContents.executeJavaScript('window.saverVillain && window.saverVillain()'), 3000); }, 2000);
     else if (demo === 'story') setTimeout(() => tellStory(true), 2500);
     else if (demo === 'pair') setTimeout(() => { openCompanion(); setTimeout(pairTalk, 2500); }, 1500);
     else if (demo === 'divine') setTimeout(() => { cfg.divine = null; divine(); }, 2500);

@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('fx', {
   onLeave: (fn) => ipcRenderer.on('saver-leave', () => fn()),
   exit: () => ipcRenderer.send('saver-exit'),
   off: () => ipcRenderer.send('saver-off'),
-  play: () => ipcRenderer.send('saver-play'),   // 正在玩（例如拿著龍珠）：先別收起
+  play: () => ipcRenderer.send('saver-play'),
+  report: (o) => ipcRenderer.send('saver-report', o),   // 告訴主程序：哪顆包子能吃、反派在哪
+  onCmd: (fn) => ipcRenderer.on('saver-cmd', (_e, c) => fn(c)),   // 主程序說：吃掉這顆包子、反派被打了一下   // 正在玩（例如拿著龍珠）：先別收起
   onStay: (fn) => ipcRenderer.on('saver-stay', () => fn()),   // 「不要再自動開」：關掉閒置自動開，並收起這一次
 });

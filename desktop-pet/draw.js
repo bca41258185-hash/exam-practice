@@ -1208,7 +1208,7 @@
     const sp = SPECIES[fit.species] || SPECIES.cat;
     const state = o.state, t = o.t, st = o.st, dir = o.dir < 0 ? -1 : 1;
     const look = o.look || { x: 0, y: 0 };
-    const moving = state === 'walk' || state === 'chase' || state === 'climb' || !!(o.outfit && o.outfit.spar && o.outfit.spar.running);
+    const moving = state === 'walk' || state === 'chase' || state === 'climb' || state === 'bunrun' || state === 'villainrun' || !!(o.outfit && o.outfit.spar && o.outfit.spar.running);
     const air = state === 'drag' || state === 'fall';
     const fly = state === 'roll' || state === 'swordland' || !!(o.outfit && o.outfit.spar && o.outfit.spar.flying);   // 御劍飛行（鬥法時在空中也是）
     const med = state === 'sleep';           // 打坐修煉
