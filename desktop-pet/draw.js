@@ -332,7 +332,7 @@
     gold: { body: '#F2C14E', dark: '#B4741A', belly: '#FFF1CC', fin: '#D9342B', mane: '#D9342B', line: '#5A2E0E', horn: '#FFF6DA', iris: '#E8432E', scale: '#B4741A', scute: '#D9A441' },
     ink: { body: '#3A434C', dark: '#0E1318', belly: '#DCD5C1', fin: '#11161C', mane: '#11161C', line: '#0B0E12', horn: '#DCD5C1', iris: '#F5B82E', scale: '#C9C2AE', scute: '#8C8676' },
   };
-  root.LOONG_STYLE = 'geoqing';   // 幾何青龍（其他風格見 LOONG_STYLES 與 build/loong-*.png）
+  root.LOONG_STYLE = 'shard';   // 碎片龍（其他風格見 LOONG_STYLES 與 build/loong-*.png）
   function drawLoong(ctx, pts, s, t, o) {
     o = o || {};
     const n = pts.length; if (n < 6) return;
@@ -341,6 +341,7 @@
     if (style === 'poly' || style === 'flat' || style === 'geoqing') return drawLoongGeo(ctx, pts, s, t, o, style);
     if (style === 'cloud') return drawLoongCloud(ctx, pts, s, t, o);
     if (style === 'line') return drawLoongLine(ctx, pts, s, t, o);
+    if (style === 'shard') return drawLoongShard(ctx, pts, s, t, o);
     const PL = LOONG_PAL[style] || LOONG_PAL.real, ink = style === 'ink';
     const BODY = PL.body, DARK = PL.dark, BELLY = PL.belly, FIN = PL.fin, MANE = PL.mane, INK = PL.line, HORN = PL.horn;
     const tan = pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; });   // 指向龍頭
@@ -594,6 +595,94 @@
       const i = Math.round(fr * (n - 1)), w = wid(Math.round(0.3 * (n - 1))), q = P(i, side * 0.6);
       cloud(q[0] - tan[i][0] * w * 0.4, q[1] - tan[i][1] * w * 0.4 + Math.sin(t + fr * 7) * w * 0.15, w * sz, 0.92);
     }
+    ctx.restore();
+  }
+
+  // ── 碎片龍：整條龍切成大片不規則多邊形，碎片之間留透明的縫；每片是水彩質感的青、藍、紫漸層；不描邊，靠剪影 ──
+  // o.scatter：0 拼好、1 碎片四散（龍吟時用來「聚合成龍」和「碎裂散開」）
+  const SHARD_PAL = ['#1F9AA3', '#5FC9BE', '#245F99', '#34407F', '#55306E', '#178993', '#7FD6C9', '#3D2A6B'];
+  let shardTex = null;
+  function shardTexture() {   // 一張 256×256 的水彩紋理，畫一次就重複用
+    if (shardTex || typeof document === 'undefined') return shardTex;
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    let seed = 7; const r = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let k = 0; k < 520; k++) {   // 一層層深淺不一的暈染斑點，像水彩紙上的顆粒
+      const px = r() * 256, py = r() * 256, rr = 3 + r() * 26, col = ['255,255,255', '10,25,60', '120,220,205', '60,30,110', '15,60,90', '10,25,60'][k % 6];
+      const g = x.createRadialGradient(px, py, 0, px, py, rr); g.addColorStop(0, `rgba(${col},${(col[0] === '2' ? 0.12 : 0.22) + r() * 0.25})`); g.addColorStop(0.7, `rgba(${col},${0.06 + r() * 0.08})`); g.addColorStop(1, `rgba(${col},0)`);
+      x.fillStyle = g; for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) { x.beginPath(); x.arc(px + ox, py + oy, rr, 0, 6.283); x.fill(); }
+    }
+    shardTex = x.createPattern(c, 'repeat'); return shardTex;
+  }
+  function drawLoongShard(ctx, pts, s, t, o) {
+    const n = pts.length; if (n < 8) return;
+    if (!o.fixed) { let L = 0; for (let i = 1; i < n; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); s = Math.max(0.3, L / 500); }
+    const scat = Math.max(0, Math.min(1, o.scatter || 0));
+    const tan = pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; });
+    const sg = o.sg || (tan[0][0] >= 0 ? 1 : -1), up = tan.map(([x, y]) => [y * sg, -x * sg]);
+    const wid = (i) => { const u = i / (n - 1); const neck = 0.62 + 0.38 * Math.sin(Math.min(1, u / 0.22) * Math.PI / 2); return s * 16 * neck * Math.pow(1 - u, 0.75) + s * 1.5; };
+    const P = (i, k) => [pts[i][0] + up[i][0] * wid(i) * k, pts[i][1] + up[i][1] * wid(i) * k];
+    const hash = (k) => { const x = Math.sin(k * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+    const shards = [];   // { p: [[x,y],...], c: 調色盤索引, h: 雜湊 }
+    const add = (p, key, c) => shards.push({ p, h: hash(key), c: c == null ? Math.floor(hash(key + 0.5) * SHARD_PAL.length) : c });
+    // 局部座標（龍頭、四肢、尾巴）換回畫面座標
+    const L2W = (org, d, u) => ([x, y]) => [org[0] + d[0] * x - u[0] * y, org[1] + d[1] * x - u[1] * y];
+    // 尾鰭：三片大三角，像鯨尾
+    { const i = n - 1, f = L2W(pts[Math.max(0, i - 2)], [-tan[i][0], -tan[i][1]], up[i]), w = s * 14, sw = Math.sin(t * 2) * 0.12;
+      add([[0, -w * 0.4], [w * 3.2, -w * (1.9 + sw)], [w * 2.2, 0]].map(f), 901, 2); add([[0, w * 0.4], [w * 2.2, 0], [w * 3.0, w * (1.7 - sw)]].map(f), 902, 4); add([[w * 1.2, 0], [w * 2.6, -w * 0.5], [w * 2.6, w * 0.5]].map(f), 903, 1); }
+    // 背鰭：幾片細長的尖三角，往後倒
+    for (let i = 8; i < n * 0.7; i += 14) { const w = wid(i), a = P(i, 0.9), b = P(i + 3, 0.9), tip = [a[0] + up[i][0] * w * 1.6 - tan[i][0] * w * 1.6, a[1] + up[i][1] * w * 1.6 - tan[i][1] * w * 1.6]; add([a, tip, b], 700 + i); }
+    // 四肢：上臂一片、前臂一片、三根爪
+    for (const [fr, side] of [[0.2, 1], [0.25, -1], [0.56, 1], [0.61, -1]]) {
+      const i = Math.round(fr * (n - 1)), w = wid(i) * 1.25, f = L2W(P(i, -0.7), tan[i], up[i]), sw = Math.sin(t * 2 + fr * 9) * 0.15, bx = side > 0 ? -1 : -0.6;
+      const el = [bx * w * 1.3, w * (1.3 + sw)], hd = [w * (0.8 + sw), w * 2.3];
+      add([[-w * 0.6, 0], [w * 0.5, 0], [el[0] + w * 0.35, el[1]], [el[0] - w * 0.25, el[1] - w * 0.2]].map(f), 500 + i);
+      add([[el[0] - w * 0.25, el[1] - w * 0.2], [el[0] + w * 0.35, el[1]], [hd[0] + w * 0.25, hd[1] - w * 0.25], [hd[0] - w * 0.2, hd[1]]].map(f), 520 + i);
+      for (const a of [-0.8, -0.2, 0.4]) add([[hd[0] - w * 0.12, hd[1]], [hd[0] + Math.cos(a) * w * 0.85, hd[1] + Math.sin(a) * w * 0.85 + w * 0.15], [hd[0] + w * 0.12, hd[1] - w * 0.1]].map(f), 540 + i + a, 6);
+    }
+    // 身體：沿著脊椎每隔約 1.7 倍身寬切一節，每節再斜切成 2～3 片
+    let i0 = 0, acc = 0, seg = 0;
+    for (let i = 1; i < n; i++) {
+      acc += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      const need = Math.max(wid(i0) * (2.6 + hash(seg * 1.7) * 1.4), s * 46);   // 一節約 2.6～4 倍身寬；尾巴再細也至少這麼長，變成細長的碎片
+      if (acc < need && i < n - 1) continue;
+      const A = P(i0, 1), B = P(i, 1), C = P(i, -1), D = P(i0, -1), h = hash(seg * 3.1);
+      const mid = Math.round((i0 + i) / 2), M = P(mid, (h - 0.5) * 0.9);
+      if (wid(i0) < s * 6 || h < 0.4) { add([A, B, C], seg * 2 + 0.1); add([A, C, D], seg * 2 + 0.2); }
+      else if (h < 0.75) { add([A, B, D], seg * 2 + 0.3); add([B, C, D], seg * 2 + 0.4); }
+      else { const AB = P(mid, 1); add([A, AB, M, D], seg * 2 + 0.5); add([AB, B, C, M], seg * 2 + 0.6); add([D, M, C], seg * 2 + 0.7); }
+      i0 = i; acc = 0; seg++;
+    }
+    // 龍頭：幾片大碎片拼出剪影（局部座標：x 往前、y 往下，單位 R）
+    const R = s * 40, hf = L2W(pts[0], tan[0], up[0]), H = (q) => q.map(([x, y]) => hf([x * R, y * R]));
+    const mv = Math.sin(t * 1.6) * 0.08, op = 0.08 + 0.05 * Math.sin(t * 1.4);
+    add(H([[-0.25, -0.45], [-1.7, -0.75 + mv], [-0.3, 0.0]]), 800, 4); add(H([[-0.3, 0.0], [-1.45, 0.35 - mv], [-0.25, 0.4]]), 801, 2); add(H([[-0.3, -0.05], [-1.2, -0.1 + mv], [-0.3, 0.2]]), 802, 7);   // 鬃毛：三大片
+    add(H([[0.25, -0.62], [-1.15, -2.0], [0.02, -0.6]]), 810, 3); add(H([[0.55, -0.6], [-0.65, -2.1], [0.32, -0.62]]), 811, 4);   // 兩支長角
+    add(H([[-0.32, 0.38], [-0.38, -0.42], [0.45, -0.72], [0.62, 0.22]]), 820);                    // 後腦
+    add(H([[0.45, -0.72], [0.9, -0.55], [0.62, 0.22]]), 821);                                     // 眼窩
+    add(H([[0.9, -0.55], [2.2, -0.42], [1.2, -0.05]]), 822);                                      // 吻部上半
+    add(H([[0.9, -0.55], [1.2, -0.05], [0.62, 0.22]]), 823);
+    add(H([[1.2, -0.05], [2.2, -0.42], [2.25, -0.08]]), 824);                                     // 鼻頭
+    add(H([[0.55, 0.3 + op], [1.95, 0.15 + op], [1.55, 0.5 + op], [0.35, 0.58]]), 825);           // 下顎
+    add(H([[2.05, -0.12], [0.2, 1.1 + mv], [1.45, 0.3]]), 826, 1);   // 一條鬚（細長三角）
+    if (o.pearl) { const c = hf([3.0 * R, -0.2 * R + Math.sin(t * 1.5) * 0.1 * R]), r = 0.32 * R; for (let k = 0; k < 6; k++) { const a0 = k * Math.PI / 3 + t * 0.4; add([c, [c[0] + Math.cos(a0) * r, c[1] + Math.sin(a0) * r], [c[0] + Math.cos(a0 + Math.PI / 3) * r, c[1] + Math.sin(a0 + Math.PI / 3) * r]], 850 + k, k % 2 ? 1 : 6); } }
+    // 畫：每片往重心縮一點留縫，再依 scatter 往外飛、旋轉
+    const gap = 2.2 * s, tex = shardTexture();
+    ctx.save();
+    for (const sh of shards) {
+      let cx = 0, cy = 0; for (const q of sh.p) { cx += q[0]; cy += q[1]; } cx /= sh.p.length; cy /= sh.p.length;
+      const ang = sh.h * 6.283, dist = scat * scat * (260 + sh.h * 520) * s, rot = scat * (sh.h - 0.5) * 3;
+      const ox = Math.cos(ang) * dist, oy = Math.sin(ang) * dist - scat * 60 * s;
+      ctx.save(); ctx.globalAlpha *= 1 - scat * 0.85; ctx.translate(cx + ox, cy + oy); ctx.rotate(rot);
+      ctx.beginPath(); sh.p.forEach(([x, y], k) => { const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1, f = Math.max(0, 1 - gap / d); k ? ctx.lineTo(dx * f, dy * f) : ctx.moveTo(dx * f, dy * f); }); ctx.closePath();
+      const c1 = SHARD_PAL[sh.c % SHARD_PAL.length], c2 = SHARD_PAL[(sh.c + 1 + Math.floor(sh.h * 3)) % SHARD_PAL.length], r = 40 * s;
+      const g = ctx.createLinearGradient(-r * Math.cos(sh.h * 6), -r * Math.sin(sh.h * 6), r * Math.cos(sh.h * 6), r * Math.sin(sh.h * 6)); g.addColorStop(0, c1); g.addColorStop(1, c2);
+      ctx.fillStyle = g; ctx.globalAlpha *= 0.97; ctx.fill();
+      ctx.save(); ctx.clip(); ctx.globalAlpha = Math.abs(sh.h - 0.5) * 0.5; ctx.fillStyle = sh.h > 0.5 ? '#0B1630' : '#FFFFFF'; ctx.fillRect(-400, -400, 800, 800); ctx.restore();   // 每片深淺不同，像參考圖那樣明暗分明
+      if (tex) { ctx.save(); ctx.clip(); ctx.globalAlpha = 0.7 * (1 - scat * 0.85); ctx.fillStyle = tex; ctx.translate(sh.h * 200, sh.h * 120); ctx.fillRect(-400, -400, 800, 800); ctx.restore(); }
+      ctx.restore();
+    }
+    // 眼睛：一小片琥珀色的菱形，畫在最上面
+    if (scat < 0.5) { const e = H([[0.5, -0.5], [0.7, -0.42], [0.5, -0.34], [0.3, -0.42]]); ctx.globalAlpha *= 1 - scat * 2; ctx.fillStyle = '#F5B547'; ctx.shadowColor = '#F5B547'; ctx.shadowBlur = 8 * s; ctx.beginPath(); e.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); }
     ctx.restore();
   }
 
@@ -937,7 +1026,7 @@
     ctx.lineWidth = 2.2 * s; for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0.9 * R, 0.12 * R); ctx.bezierCurveTo(1.15 * R, (0.12 + d * 0.05) * R, 1.25 * R, (0.3 + d * 0.15) * R + Math.sin(t * 3 + d) * 0.04 * R, 1.08 * R, (0.4 + d * 0.15) * R); ctx.stroke(); }
     ctx.restore(); ctx.restore();
   }
-  root.LOONG_STYLES = ['real', 'chibi', 'ink', 'gold', 'poly', 'flat', 'cloud', 'geoqing', 'line'];
+  root.LOONG_STYLES = ['real', 'chibi', 'ink', 'gold', 'poly', 'flat', 'cloud', 'geoqing', 'line', 'shard'];
 
   function drawPet(ctx, o) {
     const fit = o.outfit || {};

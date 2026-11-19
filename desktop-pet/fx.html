@@ -164,6 +164,7 @@
     // 小青龍．龍吟：一條畫好的青龍（assets/dragon/qinglong.png）從牠身邊的雲裡浮現，呼吸、發光，最後往上飛走
     // 圖還沒載好時，退回程式畫的龍
     dragonrise(u, A, k, D) {
+      if ((window.LOONG_STYLE || 'shard') === 'shard' && !window.DRAGON_ART) return FX.dragonriseShard(u, A, k, D);
       const img = window.DRAGON_IMG;
       if (!img || !img.complete || !img.naturalWidth) return FX.dragonriseVector(u, A, k, D);
       const inT = 0.9, outT = 0.9, pin = clamp(u / inT), pout = clamp((u - (D - outT)) / outT);
@@ -187,6 +188,22 @@
         const a0 = r() * 6.283, rr = h * (0.25 + r() * 0.35), q = (u * (0.2 + r() * 0.3) + r()) % 1;
         spark(cx + Math.cos(a0) * rr * 0.6, cy + Math.sin(a0) * rr - q * 120 * k, (4 + r() * 6) * k, al * Math.sin(q * Math.PI) * 0.9, i % 3 ? GOLD : '#FFB38A');
       }
+    },
+    // 碎片龍：碎片從四面八方飛來拼成一條 S 形盤繞的龍，停留時微微呼吸，最後碎裂散開
+    dragonriseShard(u, A, k, D) {
+      const inT = 1.2, outT = 0.9, ease = (x) => 1 - Math.pow(1 - x, 3);
+      const scatter = u < inT ? 1 - ease(clamp(u / inT)) : u > D - outT ? Math.pow(clamp((u - (D - outT)) / outT), 1.5) : 0;
+      const h = Math.min(H * 0.78, 950 * k), w = h * 0.8, side = P.x < W / 2 ? 1 : -1;
+      const ox = clamp(P.x + side * w * 0.35, w / 2 + 20, W - w / 2 - 20) - w / 2, oy = (H - h) / 2 + h * 0.07;   // 往下留空間給龍角
+      const br = Math.sin(u * 1.8) * 0.012;   // 呼吸
+      const ctrl = [[0.74, 0.12], [0.52, 0.16], [0.33 - br, 0.3], [0.36, 0.5 + br], [0.6 + br, 0.56], [0.76, 0.7], [0.6, 0.86 - br], [0.34, 0.86], [0.18, 0.76]];
+      const pts = window.loongSpine(ctrl.map(([x, y]) => [ox + (side > 0 ? x : 1 - x) * w, oy + y * h]), 90);
+      ctx.save(); ctx.globalAlpha *= A;
+      // 拼好的那一刻，背後亮一下
+      const flashA = u > inT - 0.15 && u < inT + 0.6 ? 1 - Math.abs(u - inT - 0.1) / 0.5 : 0;
+      if (flashA > 0) { const g = ctx.createRadialGradient(ox + w / 2, oy + h / 2, 10, ox + w / 2, oy + h / 2, h * 0.6); g.addColorStop(0, `rgba(160,230,220,${0.35 * flashA})`); g.addColorStop(1, 'rgba(160,230,220,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+      window.drawLoong(ctx, pts, 1, u, { style: 'shard', sg: side, pearl: true, scatter });
+      ctx.restore();
     },
     dragonriseVector(u, A, k, D) {
       const sx = P.x < W / 2 ? 1 : -1, span = Math.max(P.x, W - P.x) + 300 * k;

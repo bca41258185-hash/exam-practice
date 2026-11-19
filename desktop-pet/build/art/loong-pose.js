@@ -10,8 +10,8 @@ const path = require('path');
   await p.addScriptTag({ path: path.join(__dirname, '..', '..', 'draw.js') });
   await p.evaluate((style) => {
     const c = document.getElementById('c').getContext('2d');
-    // 左半：深色桌面；右半：淺色桌面
-    c.fillStyle = '#1E3A42'; c.fillRect(0, 0, 800, 1000); c.fillStyle = '#D9E4E2'; c.fillRect(800, 0, 800, 1000);
+    // 左半：白底（像參考圖）；右半：深色桌面
+    c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, 800, 1000); c.fillStyle = '#1E3A42'; c.fillRect(800, 0, 800, 1000);
     const pose = (ox, oy, sc) => loongSpine([[0.74, 0.17], [0.52, 0.2], [0.33, 0.33], [0.36, 0.52], [0.6, 0.58], [0.76, 0.72], [0.6, 0.88], [0.34, 0.87], [0.2, 0.78]].map(([x, y]) => [ox + x * 760 * sc, oy + y * 960 * sc]), 90);
     drawLoong(c, pose(20, 10, 1), 1.35, 1.1, { style, sg: 1, pearl: true });
     drawLoong(c, pose(820, 10, 1), 1.35, 1.1, { style, sg: 1, pearl: true });

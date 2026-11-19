@@ -133,13 +133,13 @@
 
 ## 小青龍的龍
 
-奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是程式畫的**幾何青龍**：低多邊形切面的青藍鱗身、奶白帶金光的三角鬃毛、深色金尖的長角、琥珀色會發光的眼、身邊幾朵幾何祥雲。
+奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是程式畫的**碎片龍**：整條龍切成大片不規則多邊形，碎片之間留透明的縫，每片是水彩質感的青、藍、紫漸層，不描邊、靠剪影。龍吟時碎片從四面八方飛來拼成一條 S 形盤繞的龍，停留時微微呼吸，最後碎裂散開。
 
-![幾何青龍](build/loong-geoqing.png)
+![碎片龍](build/loong-pose-shard.png)
 
-`draw.js` 裡還有其他風格可換（改 `LOONG_STYLE`）：`real` 國風寫實、`chibi` Q 版、`ink` 水墨、`gold` 金龍、`poly` 低多邊形（綠）、`flat` 扁平幾何、`cloud` 雲中青龍。對照圖在 `build/loong-*.png`，`node build/art/loong.js 風格,風格 輸出檔名` 可重畫。
+`draw.js` 裡還有其他風格可換（改 `LOONG_STYLE`）：`real` 國風寫實、`chibi` Q 版、`ink` 水墨、`gold` 金龍、`poly` 低多邊形、`flat` 扁平幾何、`cloud` 雲中青龍、`geoqing` 幾何青龍、`line` 黑金線描。`node build/art/loong-pose.js 風格` 畫 S 形大圖，`node build/art/loong.js 風格,風格 檔名` 畫對照圖。
 
-另外有一張用 Figma AI 畫的青龍插畫（`assets/dragon/`，原圖在 `build/art/dragon/`），目前沒用。要改用它，把 `fx.html` 和 `saver.html` 裡的 `DRAGON_ART` 改成 `true`；換別張圖就用同樣檔名放一張去背的直式 PNG（建議 1024×1536）。
+另外有三張用 Figma AI 畫的龍插畫（原圖在 `build/art/dragon/`，去背的青龍在 `assets/dragon/`），目前沒用。要改用青龍插畫，把 `fx.html` 和 `saver.html` 裡的 `DRAGON_ART` 改成 `true`。
 
 ## 螢幕保護
 
