@@ -280,9 +280,13 @@ addEventListener('mouseleave', () => {
   hit = false; pet.send('hit', false);
 });
 // 按住不放半秒（沒有拖動）：叫出快捷輪盤。滑鼠中鍵點牠：直接施展奧義
-let holdTimer = null, held = false;
+let holdTimer = null, held = false, lastUlt = 0;
+function sendUlt() { const t = performance.now(); if (t - lastUlt > 400) { lastUlt = t; pet.send('ult'); } }   // 同一次中鍵只算一次
+// 有些滑鼠的中鍵只會送 auxclick 或 pointerdown，三種都接
+addEventListener('auxclick', (e) => { if (e.button === 1 && opaqueAt(e)) { e.preventDefault(); sendUlt(); } });
+addEventListener('pointerdown', (e) => { if (e.button === 1 && opaqueAt(e)) sendUlt(); });
 addEventListener('mousedown', (e) => {
-  if (e.button === 1 && opaqueAt(e)) { e.preventDefault(); pet.send('ult'); return; }
+  if (e.button === 1 && opaqueAt(e)) { e.preventDefault(); sendUlt(); return; }
   if (e.button !== 0 || !opaqueAt(e)) return;
   down = { x: e.screenX, y: e.screenY };
   dragging = false; held = false;

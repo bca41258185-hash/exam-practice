@@ -827,7 +827,12 @@ function saverInfo() {
 function startSkill(kind) {
   const sk = skills()[kind], need = SKILL_REALM[kind];
   if (realm() < need) return say(`${sk[1]}要到${REALMS[need]}才會喔`, true);
-  if (BUSY.includes(state) || spar || ['sleep', 'taichi', 'drink', 'gaze', 'strike', 'eat', 'warn', 'struck'].includes(state)) return;
+  // 打坐、喝水、看遠方、打太極時叫牠：直接醒來出招；真的不行時說原因，不要安靜沒反應
+  if (spar) return say('鬥法中，先打完這場！', true);
+  if (['warn', 'struck'].includes(state)) return say('天雷當頭，先閃開！', true);
+  if (BUSY.includes(state) || state === 'tribulation') return say('等我落地再說～', true);
+  if (['strike', 'eat'].includes(state)) return;   // 正在出招或吃東西：這一下忽略
+  if (['sleep', 'taichi', 'drink', 'gaze'].includes(state)) { stopPoem(); if (state === 'sleep') say('出關！', true); }
   lastTouch = now(); stat('strikes'); strikeMove = sk[0];
   if (sk[0] === 'bellwave' && demon) { demon.hp = 1; say(sk[2], true); return hitDemon(false); }   // 鈴音震散心魔
   const dur = kind === 'ult' ? 4200 : 2300;
@@ -1218,10 +1223,17 @@ function tick() {
       spar.nextMove = t + rnd(1800, 2800);
       const a = area(), r = Math.random();
       const how = can('roll') && r < 0.45 ? 'fly' : r < 0.75 ? 'dash' : 'blink';
-      const tx = Math.max(l.xmin, Math.min(l.xmax, cur.x - 100 * k + rnd(-650, 650) * k));
-      const ty = how === 'dash' ? l.ground : Math.max(a.y + 10 * k, Math.min(l.ground - 140 * k, a.y + rnd(0.08, 0.7) * (l.ground - a.y)));
-      spar.target = { x: tx, y: how === 'blink' && Math.random() < 0.5 ? l.ground : ty, how };
-      if (Math.random() < 0.45) say({ fly: '御劍乘風！', dash: Q.pick(['凌波微步！', '踏雪無痕！']), blink: '縮地成寸！' }[how], true);
+      // 跑到角落或邊上（左右各兩成、或貼在最上面）：這一步一定往螢幕中間回來
+      const w = W(), relX = (pos.x + w / 2 - a.x) / a.width, relY = (pos.y + w / 2 - a.y) / a.height;
+      const cornered = relX < 0.2 || relX > 0.8 || relY < 0.15;
+      const tx = cornered
+        ? a.x + a.width * rnd(0.35, 0.65) - w / 2
+        : Math.max(l.xmin, Math.min(l.xmax, cur.x - 100 * k + rnd(-650, 650) * k));
+      const ty = how === 'dash' ? l.ground : Math.max(a.y + 10 * k, Math.min(l.ground - 140 * k, a.y + rnd(cornered ? 0.3 : 0.08, 0.7) * (l.ground - a.y)));
+      spar.target = { x: Math.max(l.xmin, Math.min(l.xmax, tx)), y: how === 'blink' && Math.random() < 0.5 ? l.ground : ty, how };
+      if (cornered) spar.nextMove = t + rnd(1400, 2000);   // 回到中間後很快再換位置
+      if (cornered && Math.random() < 0.6) say(Q.pick(['回中間再戰！', '角落太擠了', '換個地方打！']), true);
+      else if (Math.random() < 0.45) say({ fly: '御劍乘風！', dash: Q.pick(['凌波微步！', '踏雪無痕！']), blink: '縮地成寸！' }[how], true);
       if (how === 'blink') {   // 瞬移：直接到新位置，畫面端在新位置畫一圈結界
         prevPos = { x: spar.target.x, y: spar.target.y };
         pos.x = spar.target.x; pos.y = spar.target.y; spar.blinkAt = t; pushState();
