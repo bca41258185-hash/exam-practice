@@ -7,8 +7,9 @@ contextBridge.exposeInMainWorld('fx', {
   // 快捷輪盤：{ items: [{ id, ch, label, on, why }], cx, cy }；選了哪一格回報 id（'more' 是開完整選單）
   onWheel: (fn) => ipcRenderer.on('wheel-open', (_e, a) => fn(a)),
   pick: (id) => ipcRenderer.send('wheel-pick', id),
-  // 螢幕保護：讀角色與今天的資料、摸牠（回傳有沒有加到修為）、結束
+  // 螢幕保護（桌面上飄東西）：讀角色、游標在不在某個東西上（在才接住滑鼠）、主程序說你回來了、散完了
   info: () => ipcRenderer.invoke('saver-info'),
-  touch: () => ipcRenderer.invoke('saver-touch'),
+  clickable: (on) => ipcRenderer.send('saver-clickable', !!on),
+  onLeave: (fn) => ipcRenderer.on('saver-leave', () => fn()),
   exit: () => ipcRenderer.send('saver-exit'),
 });

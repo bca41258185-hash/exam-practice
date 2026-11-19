@@ -752,33 +752,48 @@ function wheelPick(id) {
   if (id === 'more' && win) return menu().popup({ window: win });
 }
 
-// ---- 螢幕保護：你離開一陣子，整個螢幕換成青雲山的夜色，牠在山上打坐；可以摸牠、點天空放流星，按任意鍵回來
-let saverWin = null, saverAt = 0;
+// ---- 螢幕保護：你離開一陣子，桌面上飄出東西來（每個角色飄的不一樣）。不換畫面：視窗透明、滑鼠穿透，桌面照常看得到。
+// 你回來之後還會多飄十幾秒才散掉；游標靠近它們會閃開，點到會炸成光點。
+let saverWin = null, saverAt = 0, saverHold = 0, saverLeaving = false;
 function openSaver(manual) {
   if (saverWin && !saverWin.isDestroyed()) return;
   if (!manual && (spar || lockAt)) return;
-  const w = W(), b = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).bounds;
+  const w = W(), a = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).workArea;
   const mine = saverWin = new BrowserWindow({
-    x: b.x, y: b.y, width: b.width, height: b.height, frame: false, resizable: false, skipTaskbar: true, hasShadow: false,
-    alwaysOnTop: true, backgroundColor: '#070B14', show: false,
+    x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
+    hasShadow: false, focusable: false, alwaysOnTop: true, backgroundColor: '#00000000', show: false,
     webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
-  mine.setAlwaysOnTop(true, 'screen-saver');
+  mine.setAlwaysOnTop(true, 'floating');
+  mine.setIgnoreMouseEvents(true, { forward: true });
   mine.loadFile(path.join(__dirname, 'saver.html'));
-  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.show(); mine.focus(); if (win && !win.isDestroyed()) win.hide(); });
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.showInactive(); if (win && !win.isDestroyed()) win.moveTop(); });
   mine.on('closed', () => {
     if (saverWin === mine) saverWin = null;
-    if (win && !win.isDestroyed()) win.showInactive();
-    const mins = Math.round((Date.now() - saverAt) / 60000);
-    if (!BUSY.includes(state)) { set('happy', 1500); say(mins >= 1 ? `道友回來了，守了 ${mins} 分鐘` : '道友回來了', true); }
+    if (state === 'sleep' && !lockAt) set('idle', 1200);
   });
-  saverAt = Date.now();
+  saverAt = Date.now(); saverLeaving = false;
+  saverHold = manual ? Date.now() + 45000 : 0;   // 手動開的：你明明在電腦前，所以先飄 45 秒再說
+  if (!BUSY.includes(state) && !manual) set('sleep', 24 * 3600000);   // 你不在，牠就打坐
   stat('savers');
 }
 function closeSaver() { if (saverWin && !saverWin.isDestroyed()) saverWin.close(); }
+function leaveSaver() {   // 你回來了：告訴它慢慢散掉（它自己數完秒會叫 saver-exit）
+  if (!saverWin || saverWin.isDestroyed() || saverLeaving) return;
+  saverLeaving = true; saverWin.webContents.send('saver-leave');
+  const mins = Math.round((Date.now() - saverAt) / 60000);
+  if (!BUSY.includes(state)) { set('happy', 1500); say(mins >= 1 ? `道友回來了，守了 ${mins} 分鐘` : '道友回來了', true); }
+  const mine = saverWin;
+  setTimeout(() => { if (saverWin === mine) closeSaver(); }, 20000);   // 保險（只關這一次開的，不會誤關之後新開的）
+}
 function checkSaver(idle) {
-  if (!cfg.saver || idle < cfg.saver * 60 || (saverWin && !saverWin.isDestroyed())) return;
-  openSaver(false);
+  const open = saverWin && !saverWin.isDestroyed();
+  if (open) {
+    if (idle < 10 && Date.now() > saverHold) leaveSaver();
+    else if (!saverLeaving && !saverHold && ['idle', 'walk'].includes(state)) set('sleep', 24 * 3600000);   // 開始時牠剛好在忙，忙完再坐下
+    return;
+  }
+  if (cfg.saver && idle >= cfg.saver * 60) openSaver(false);
 }
 function saverInfo() {
   const poems = POEMS.slice().sort(() => Math.random() - 0.5).slice(0, 8);
@@ -1466,7 +1481,7 @@ function menu() {
         { label: '現在開始', click: () => openSaver(true) },
         { type: 'separator' },
         ...[[0, '關閉'], [3, '閒置 3 分鐘'], [5, '閒置 5 分鐘'], [10, '閒置 10 分鐘'], [20, '閒置 20 分鐘']].map(([m, label]) => ({
-          label, type: 'radio', checked: cfg.saver === m, click: () => { cfg.saver = m; saveCfg(); say(m ? `閒置 ${m} 分鐘後護山` : '不開螢幕保護了', true); },
+          label, type: 'radio', checked: cfg.saver === m, click: () => { cfg.saver = m; saveCfg(); say(m ? `閒置 ${m} 分鐘後飄出來` : '不開螢幕保護了', true); },
         })),
       ],
     },
@@ -1589,8 +1604,8 @@ ipcMain.on('hold', (e) => { if (!fromComp(e)) openWheel(); });
 ipcMain.on('ult', (e) => { if (!fromComp(e)) startSkill('ult'); });
 ipcMain.on('wheel-pick', (_e, id) => wheelPick(String(id)));
 ipcMain.handle('saver-info', () => saverInfo());
-ipcMain.handle('saver-touch', () => { const before = cfg.xp; touchGain(); return cfg.xp > before; });
 ipcMain.on('saver-exit', closeSaver);
+ipcMain.on('saver-clickable', (_e, on) => { if (saverWin && !saverWin.isDestroyed()) saverWin.setIgnoreMouseEvents(!on, { forward: true }); });
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -1606,4 +1621,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { set, say, feed, gain, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, leaveSaver, checkSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
