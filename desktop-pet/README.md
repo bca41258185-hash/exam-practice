@@ -133,13 +133,18 @@
 
 ## 小青龍的龍
 
-奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是**色塊碎片龍**：龍的造型取自一張 AI 畫的低多邊形青龍，再由程式切成大片三角形，每片一個平塗色，片與片之間留縫。龍吟時碎片從四面八方飛來拼成龍、全身微微起伏呼吸，最後碎裂散開；螢幕保護裡牠從雲下游過。
+奧義「龍吟」、螢幕保護「雲海聽雨」裡的龍是**會游的色塊碎片龍**：造型取自一張 AI 畫的側面低多邊形青龍，由程式切成大片三角形，每片一個平塗色，片與片之間留縫。
 
-![三種配色](build/loong-shards-palettes.jpg)
+每片碎片都記著「在身體的哪裡、離中線多遠」，所以龍能沿著一條曲線真的扭動著游：龍頭帶路，一道波從頭傳到尾，尾巴擺得最大。
+
+- **龍吟**：碎片在角色身邊聚合成龍，龍鑽出來，扭著身體橫越畫面中段，再往斜上方游走。
+- **螢幕保護**：龍從畫面一側游到另一側。
+
+![會游的碎片龍（拉直）](build/loong-swim-flat.png)
 
 - **配色**：`draw.js` 的 `SHARD_PALETTE`，`qingci` 青瓷（預設）、`mojin` 墨金、`cuiyu` 翠玉。
-- **造型**：`loong-shards.js`，由 `build/art/dragon/make-shards.py` 從 `build/art/dragon/geo-lowpoly-original.png` 產生。後面可以接一個數字調碎片大小，例如 `python3 make-shards.py 2` 片數更少、更大片。換一張龍的圖，也能照樣轉出新造型。
-- 其他程式畫法（國風寫實、Q 版、水墨、金龍、幾何青龍、黑金線描等）都還在 `draw.js`，改 `LOONG_STYLE` 可換；三張 AI 插畫原圖在 `build/art/dragon/`。
+- **造型**：`loong-swim.js`，由 `build/art/dragon/make-swim.py` 從 `geo-swim-original.png` 產生（後面可接數字調碎片大小）。另一張直立盤繞的造型在 `loong-shards.js`（`make-shards.py`），目前沒用。
+- 其他程式畫法（國風寫實、Q 版、水墨、金龍、幾何青龍、黑金線描等）都還在 `draw.js`；四張 AI 原圖在 `build/art/dragon/`。
 
 ## 螢幕保護
 

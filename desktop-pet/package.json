@@ -41,6 +41,7 @@
       "wheel.html",
       "saver.html",
       "loong-shards.js",
+      "loong-swim.js",
       "assets/**"
     ],
     "directories": {

@@ -9,6 +9,7 @@
 <body>
 <canvas id="c"></canvas>
 <script src="loong-shards.js"></script>
+<script src="loong-swim.js"></script>
 <script src="draw.js"></script>
 <script>
   // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
@@ -165,6 +166,7 @@
     // 小青龍．龍吟：一條畫好的青龍（assets/dragon/qinglong.png）從牠身邊的雲裡浮現，呼吸、發光，最後往上飛走
     // 圖還沒載好時，退回程式畫的龍
     dragonrise(u, A, k, D) {
+      if (window.LOONG_SWIM && !window.DRAGON_ART) return FX.dragonriseSwim(u, A, k, D);
       if ((window.LOONG_STYLE || 'shard') === 'shard' && !window.DRAGON_ART) return FX.dragonriseShard(u, A, k, D);
       const img = window.DRAGON_IMG;
       if (!img || !img.complete || !img.naturalWidth) return FX.dragonriseVector(u, A, k, D);
@@ -189,6 +191,20 @@
         const a0 = r() * 6.283, rr = h * (0.25 + r() * 0.35), q = (u * (0.2 + r() * 0.3) + r()) % 1;
         spark(cx + Math.cos(a0) * rr * 0.6, cy + Math.sin(a0) * rr - q * 120 * k, (4 + r() * 6) * k, al * Math.sin(q * Math.PI) * 0.9, i % 3 ? GOLD : '#FFB38A');
       }
+    },
+    // 會游的碎片龍：從角色身邊鑽出來，邊游邊拼好，一路扭著身體往斜上方游出畫面
+    dragonriseSwim(u, A, k, D) {
+      // 從角色身上鑽出 → 橫越畫面中段、上下起伏 → 最後往斜上方游走
+      const sx = P.x < W / 2 ? 1 : -1, X = (f) => (sx > 0 ? f : 1 - f) * W, BL = Math.min(W * 0.55, 1150 * k);
+      const route = window.makeRoute(window.loongSpine([[P.x, P.y], [P.x + sx * 0.1 * W, H * 0.6], [X(0.5), H * 0.48], [X(0.75), H * 0.6], [X(1.0), H * 0.42], [X(1.4), H * 0.15]], 140));
+      const qh = (0.12 + 0.88 * Math.pow(clamp(u / D), 1.15)) * (route.total + BL * 0.4);
+      const scatter = u < 0.9 ? Math.pow(1 - u / 0.9, 2) : 0;
+      ctx.save(); ctx.globalAlpha *= A;
+      // 身後一道淡淡的水紋
+      const r = rng(71);
+      for (let i = 0; i < 26; i++) { const q = qh - BL * (0.2 + r() * 1.1); if (q < 0) continue; const [x, y] = route.at(q); spark(x + (r() - 0.5) * 80 * k, y + (r() - 0.5) * 80 * k, (3 + r() * 6) * k, 0.5 * (1 - scatter), i % 2 ? '#9ED8C8' : '#E2A83A'); }
+      window.drawShardSwim(ctx, route, qh, BL, { t: u, amp: 0.045, mirror: sx < 0, scatter });
+      ctx.restore();
     },
     // 碎片龍：碎片從四面八方飛來拼成一條 S 形盤繞的龍，停留時微微呼吸，最後碎裂散開
     dragonriseShard(u, A, k, D) {

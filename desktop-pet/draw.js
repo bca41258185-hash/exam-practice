@@ -598,6 +598,53 @@
     ctx.restore();
   }
 
+  // ── 會游的色塊碎片龍：造型來自 loong-swim.js（側面游動的青龍），每片頂點記著 (沿身體位置 s, 離中線 d) ──
+  // makeRoute(點陣)：把一串點變成可用「走了幾像素」查位置的路線
+  function makeRoute(pts) {
+    const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const total = L[L.length - 1];
+    const at = (q) => {
+      if (q <= 0) { const [a, b] = [pts[0], pts[1]], d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [a[0] + (b[0] - a[0]) / d * q, a[1] + (b[1] - a[1]) / d * q]; }
+      if (q >= total) { const [a, b] = [pts[pts.length - 2], pts[pts.length - 1]], d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [b[0] + (b[0] - a[0]) / d * (q - total), b[1] + (b[1] - a[1]) / d * (q - total)]; }
+      let lo = 0, hi = L.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (L[m] < q) lo = m; else hi = m; }
+      const f = (q - L[lo]) / ((L[hi] - L[lo]) || 1); return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * f, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * f];
+    };
+    return { total, at };
+  }
+  root.makeRoute = makeRoute;
+  // drawShardSwim(ctx, 路線, 龍頭走到哪(像素), 身長(像素), { t, amp(擺幅，身長的比例), mirror(往左游時 true), scatter, palette })
+  // 身體每一點都在路線上落後龍頭一段，再加一道從頭傳到尾的波，尾巴擺得最大
+  function drawShardSwim(ctx, route, qh, BL, o) {
+    const D = root.LOONG_SWIM; if (!D) return false;
+    o = o || {};
+    const pal = SHARD_PALETTES[o.palette || root.SHARD_PALETTE] || SHARD_PALETTES.qingci, tr = D.tris, t = o.t || 0;
+    const amp = o.amp == null ? 0.05 : o.amp, scat = Math.max(0, Math.min(1, o.scatter || 0)), up = o.mirror ? -1 : 1, gap = BL * 0.0016;
+    const N = 64, S = [], T = [];
+    for (let i = 0; i <= N; i++) {
+      const s = i / N, q = qh - (1 - s) * BL, p = route.at(q), p2 = route.at(q + 2), dx = p2[0] - p[0], dy = p2[1] - p[1], l = Math.hypot(dx, dy) || 1;
+      const nx = -dy / l * up, ny = dx / l * up, w = amp * BL * Math.sin((1 - s) * 7.5 - t * 5.5) * (0.12 + 0.88 * (1 - s));
+      S.push([p[0] + nx * w, p[1] + ny * w]);
+    }
+    for (let i = 0; i <= N; i++) { const a = S[Math.max(0, i - 1)], b = S[Math.min(N, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; T.push([-dy / l * up, dx / l * up]); }
+    const map = (s, d) => { const f = Math.max(0, Math.min(1, s)) * N, i = Math.min(N - 1, Math.floor(f)), r = f - i;
+      const x = S[i][0] + (S[i + 1][0] - S[i][0]) * r, y = S[i][1] + (S[i + 1][1] - S[i][1]) * r, nx = T[i][0] + (T[i + 1][0] - T[i][0]) * r, ny = T[i][1] + (T[i + 1][1] - T[i][1]) * r;
+      return [x + nx * d * BL, y + ny * d * BL]; };
+    ctx.save();
+    for (let k = 0, idx = 0; k < tr.length; k += 7, idx++) {
+      const A = map(tr[k], tr[k + 1]), B = map(tr[k + 2], tr[k + 3]), C = map(tr[k + 4], tr[k + 5]);
+      const gx = (A[0] + B[0] + C[0]) / 3, gy = (A[1] + B[1] + C[1]) / 3;
+      const hs = Math.sin(idx * 127.1 + 311.7) * 43758.5453, hh = hs - Math.floor(hs);
+      const ang = hh * 6.283, dist = scat * scat * (0.2 + hh * 0.5) * BL, rot = scat * (hh - 0.5) * 4;
+      ctx.save(); ctx.globalAlpha *= 1 - scat * 0.85; ctx.translate(gx + Math.cos(ang) * dist, gy + Math.sin(ang) * dist); ctx.rotate(rot);
+      ctx.beginPath();
+      [A, B, C].forEach(([x, y], j) => { const dx = x - gx, dy = y - gy, d = Math.hypot(dx, dy) || 1, f = Math.max(0, 1 - gap / d); j ? ctx.lineTo(dx * f, dy * f) : ctx.moveTo(dx * f, dy * f); });
+      ctx.closePath(); ctx.fillStyle = pal[tr[k + 6]] || pal[2]; ctx.fill(); ctx.restore();
+    }
+    ctx.restore();
+    return true;
+  }
+  root.drawShardSwim = drawShardSwim;
+
   // ── 色塊碎片龍：造型來自 loong-shards.js（由 AI 低多邊形青龍轉成大片三角），每片一個平塗色，片間留縫 ──
   // drawShardDragon(ctx, 中心x, 中心y, 高, { flip, scatter(0 拼好～1 散開), t, palette })
   const SHARD_PALETTES = {
@@ -1659,8 +1706,8 @@
       ctx.restore();
     }
     if (strike === 'dragonrise' && far) {   // 小青龍．龍吟：一條小龍從身邊盤旋升起（關掉全螢幕特效時的小視窗版）
-      const sc = st < 0.8 ? 1 - st / 0.8 : st > 3.3 ? Math.min(1, (st - 3.3) / 0.8) : 0;
-      if (!drawShardDragon(ctx, 100 + dir * 40, 88, 150, { flip: dir < 0, scatter: sc, t })) {
+      const sc = st < 0.6 ? 1 - st / 0.6 : 0, rt = makeRoute([[100 - dir * 120, 210], [100, 120], [100 + dir * 130, 20]]);
+      if (!drawShardSwim(ctx, rt, st / 3.4 * (rt.total + 170), 170, { t, amp: 0.06, mirror: dir < 0, scatter: sc })) {
         const head = Math.min(1.25, st * 0.55), pts = [];
         for (let i = 0; i < 34; i++) { const p = Math.max(0, head - i * 0.022); pts.push([20 + p * 150, 182 - p * 150 + Math.sin(p * 11) * 14]); }
         ctx.save(); ctx.globalAlpha *= Math.min(1, (1.3 - head) * 4); drawLoong(ctx, pts, 0.42, t, { sg: 1 }); ctx.restore();
