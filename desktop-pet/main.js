@@ -244,10 +244,10 @@ const UNLOCK = ['點、拖、甩、吟詩', '腳下靈氣圈、來追我', '金�
   '雙擊出招', '畫圈縮地成寸', '召喚同門', '腳踏祥雲、大乘語錄', '天雷閃避'];
 // 外觀進化：到這些境界時樣子會變（draw.js 依境界畫），突破時順便說一句各角色變了什麼
 const EVOLVE = {
-  2: { cat: '掛上師父的鈴鐺', fox: '長出第二條尾巴', rabbit: '耳尖染金', panda: '衣領滾金邊', dragon: '龍角長大了' },
-  4: { cat: '修出第二條尾巴', fox: '三尾了', rabbit: '眉心一彎金月', panda: '戴上太極佩', dragon: '龍角分叉了' },
-  6: { cat: '尾尖燃起靈火', fox: '五尾，披帛飄飄', rabbit: '身後升起彎月', panda: '眼圈鑲金', dragon: '披帛飄飄' },
-  8: { cat: '三尾，眉心金蓮', fox: '八尾齊開', rabbit: '眉心金月更亮', panda: '眉心金蓮', dragon: '龍珠回來了' },
+  2: { cat: '掛上師父的鈴鐺', fox: '長出第二條尾巴', rabbit: '耳尖染金', panda: '頭頂冒出竹葉', dragon: '龍角長大了' },
+  4: { cat: '修出第二條尾巴', fox: '三尾了', rabbit: '眉心一彎金月', panda: '兩片竹葉、太極佩', dragon: '龍角分叉了' },
+  6: { cat: '尾尖燃起靈火', fox: '五尾如屏', rabbit: '身後升起彎月', panda: '身後長出靈竹', dragon: '披帛飄飄' },
+  8: { cat: '三尾，眉心金蓮', fox: '八尾齊開', rabbit: '眉心金月更亮', panda: '師父的丹爐來了', dragon: '龍珠回來了' },
 };
 const ABILITY = { chase: 1, roll: 2, climb: 3, strike: 4, blink: 5, companion: 6, thunder: 8 };
 function realm() { return realmOf(cfg.xp); }
