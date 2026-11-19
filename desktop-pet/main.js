@@ -75,7 +75,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), grab: state === 'drag' ? grabFace : undefined, evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || (disguise && disguise.as) || cfg.species, fake: disguise && !morph && cfg.species === 'fox' ? 'fox' : undefined, poof, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), grab: state === 'drag' ? grabFace : undefined, evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -675,6 +675,25 @@ function gameCap() { return cfg.species === 'fox' ? 90 : GAME_CAP; }
 function pillMax() { return cfg.species === 'rabbit' ? 4 : 3; }
 function restGain() { return cfg.species === 'panda' ? 25 : 15; }
 let morph = '';   // 狐仙千面幻化：暫時變成的角色
+// 狐仙平常也會偷偷變成別的同門，但尾巴藏不住、睫毛也還在——點牠一下就被識破
+let disguise = null, lastTrick = 0, poof = 0;   // poof：每變一次身加一，畫面據此冒一陣煙
+const TRICK_CAUGHT = ['被你看穿了！', '尾巴又露出來了……', '嘻嘻，剛剛有騙到你嗎？', '下次一定變得更像！'];
+function startDisguise() {
+  const others = Object.keys(SKILLS).filter((k) => k !== 'fox');
+  disguise = { as: others[Math.floor(Math.random() * others.length)], until: now() + 25000 + Math.random() * 20000 };
+  lastTrick = now(); poof++; pushState();
+}
+function endDisguise(caught) {
+  if (!disguise) return;
+  disguise = null; poof++;
+  if (caught) { set('happy', 1300); say(Q.pick(TRICK_CAUGHT), true); } else { say(Q.pick(['還是當自己舒服～', '玩夠了，變回來囉']), true); pushState(); }
+}
+function foxTrick() {
+  if (cfg.species !== 'fox') { if (disguise) { disguise = null; poof++; pushState(); } return; }
+  const t = now();
+  if (disguise) { if (t > disguise.until && state === 'idle') endDisguise(false); return; }
+  if (state === 'idle' && !morph && !spar && !demon && t - lastTouch > 20000 && t - lastTrick > 120000 && Math.random() < 0.0008) startDisguise();
+}
 
 // ---- 全螢幕特效：技能的氣勁、月光、雨、龍影畫在一個蓋滿螢幕的透明視窗上（滑鼠穿透），不會被桌寵的小視窗切掉
 let fxWin = null, fxOn = false, fxTimer = null;
@@ -814,10 +833,11 @@ function startSkill(kind) {
   const dur = kind === 'ult' ? 4200 : 2300;
   set('strike', dur); say(sk[2], true);
   playFx(sk[0], dur);
-  if (sk[0] === 'morph') {
-    const others = Object.keys(SKILLS).filter((k) => k !== cfg.species);
-    setTimeout(() => { morph = others[Math.floor(Math.random() * others.length)]; pushState(); }, 350);
-    setTimeout(() => { morph = ''; pushState(); }, 3300);
+  if (sk[0] === 'morph') {   // 千面幻化：一陣煙換一個樣子，四位同門輪流變一遍，最後變回自己
+    disguise = null;
+    const others = Object.keys(SKILLS).filter((k) => k !== cfg.species).sort(() => Math.random() - 0.5);
+    others.forEach((sp, i) => setTimeout(() => { if (state !== 'strike') return; morph = sp; poof++; pushState(); }, 350 + i * 700));
+    setTimeout(() => { morph = ''; poof++; pushState(); }, 3300);
   }
   if (kind === 'ult' && !daily().ultDone) { daily().ultDone = true; const g = gain(10, 'skill'); setTimeout(() => xpNotes.push(['今日首次施展奧義', `修為 +${g}`]), 0); }
 }
@@ -1158,6 +1178,7 @@ function feed() {
 }
 
 function tick() {
+  foxTrick();
   if (!win || win.isDestroyed()) return;
   const l = limits(), k = cfg.scale, t = now();
   const cur = screen.getCursorScreenPoint();
@@ -1337,6 +1358,7 @@ function onClick(zone) {
   clicks = clicks.filter((c) => t - c < 2500); clicks.push(t);
   if (spar) { if (spar.kind === 'spell' && now() < spar.until) return sparAct(); if (spar.kind === 'sword' && now() < spar.until) return; endSpar(); }
   if (['fall', 'drag', 'tribulation', 'struck', 'vanish', 'appear'].includes(state)) return;
+  if (disguise) { clicks = []; return endDisguise(true); }   // 變裝的狐仙被點到：露餡
   if (state === 'warn') { clicks = []; return dodgeThunder(); }
   const dbl = t - lastClickAt < 380; lastClickAt = t;
   if (demon) return hitDemon(dbl && realm() >= 4);
@@ -1642,4 +1664,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, grabFace: () => grabFace, updateGrabFace, setVel: (x, y) => { vel = { x, y }; }, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, leaveSaver, checkSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { startDisguise, endDisguise, fox: () => ({ disguise, morph, poof }), set, say, feed, gain, grabFace: () => grabFace, updateGrabFace, setVel: (x, y) => { vel = { x, y }; }, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, leaveSaver, checkSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };

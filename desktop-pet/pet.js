@@ -41,6 +41,8 @@ pet.onState((s) => {
   }
   if (!sp && was && s.state === 'fireworks') beep(was, 'win');
   lastSpar = sp || null;
+  if (s.outfit && S.outfit && s.outfit.poof !== S.outfit.poof && S.outfit.poof != null) s.outfit.poofAt = performance.now() / 1000;   // 變身：記下時間，畫一陣煙
+  else if (s.outfit && S.outfit) s.outfit.poofAt = S.outfit.poofAt;
   S = s;
 });
 // ---- 鬥法回饋：在游標的位置爆出火花；法術是從游標飛向牠的符，劍是一道劍痕

@@ -16,8 +16,8 @@
   // 角色：身體顏色、耳朵內側、耳朵與尾巴的形狀、臉上的花紋
   const SPECIES = {
     cat: { body: '#FFF3D6', inner: '#FFC9B8', ears: 'cat', tail: 'cat' },                        // 靈貓
-    fox: { body: '#F8B36B', inner: '#FFF1DE', ears: 'fox', tail: 'fox', muzzle: '#FFF1DE' },     // 狐仙
-    rabbit: { body: '#FFFFFF', inner: '#FFC4CF', ears: 'rabbit', tail: 'puff' },                 // 玉兔
+    fox: { body: '#F8B36B', inner: '#FFF1DE', ears: 'fox', tail: 'fox', muzzle: '#FFF1DE', lash: true },     // 狐仙
+    rabbit: { body: '#FFFFFF', inner: '#FFC4CF', ears: 'rabbit', tail: 'puff', lash: true },                 // 玉兔
     panda: { body: '#FFFFFF', inner: '#3B3640', ears: 'round', tail: 'puff', tailColor: '#3B3640', patches: '#5B5560' },  // 熊貓
     dragon: { body: '#B9E6C9', inner: '#F5B82E', ears: 'horn', tail: 'dragon', whisker: true },  // 小青龍
   };
@@ -1397,7 +1397,8 @@
     drawGearBack(ctx, gear, robeD);
     ctx.lineWidth = 3; ctx.strokeStyle = C.line;
     const wag = Math.sin(t * (state === 'happy' ? 16 : 4)) * (med ? 1 : 6);
-    drawTail(ctx, sp, wag, ev);
+    if (fit.fake === 'fox' && fit.species !== 'fox') drawTail(ctx, SPECIES.fox, wag * 1.6, 0);   // 狐仙變裝的破綻：狐狸尾巴藏不住
+    else drawTail(ctx, sp, wag, ev);
 
     // 腳
     const ph = moving ? Math.sin(t * (state === 'chase' ? 14 : 9)) : 0;
@@ -1486,8 +1487,19 @@
     const grab = state === 'drag' && fit.grab && fit.grab !== 'shock' ? fit.grab : '';
     const blink = (t % 4.2) < 0.14;
     ctx.fillStyle = C.line; ctx.lineWidth = 2.6;
+    const lash = sp.lash || fit.fake === 'fox';   // 女生角色（狐仙、玉兔）有睫毛；狐仙變裝時睫毛也還在
     const eye = (x) => {
-      if (yawn || (med || taichi || drink) || (blink && (state === 'idle' || moving || state === 'peek' || fly))) {
+      const shut = yawn || (med || taichi || drink) || (blink && (state === 'idle' || moving || state === 'peek' || fly));
+      if (lash && state !== 'dizzy' && grab !== 'star') {   // 睫毛：眼睛外側上緣三根，閉眼時往下
+        const o = x < 6 ? -1 : 1;
+        ctx.save(); ctx.lineWidth = 1.7; ctx.lineCap = 'round'; ctx.strokeStyle = sp.patches ? '#FFFFFF' : C.line; ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          if (shut) { const bx = x + o * (2 + k * 1.5); ctx.moveTo(bx, ey + 0.5); ctx.lineTo(bx + o * (1.2 + k * 0.8), ey + 3.6); }
+          else { const a = -Math.PI / 2 + o * (0.5 + k * 0.4), px = x + Math.cos(a) * 4.8, py = ey + Math.sin(a) * 5.6; ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(a) * 3.6 + o * 0.8, py + Math.sin(a) * 3.6 - 0.6); }
+        }
+        ctx.stroke(); ctx.restore();
+      }
+      if (shut) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey); ctx.quadraticCurveTo(x, ey + (med ? 4 : 0), x + 5, ey); ctx.stroke();
       } else if (flip) {
         ctx.beginPath(); ctx.moveTo(x - 5, ey - 3); ctx.lineTo(x + 1, ey); ctx.lineTo(x - 5, ey + 3); ctx.stroke();
@@ -1742,13 +1754,13 @@
         ctx.restore();
       }
     }
-    if (strike === 'morph') {   // 狐仙．千面幻化：變身前後各一陣煙
-      for (const t0 of [0.2, 1.75]) {
-        const p = (st - t0) / 0.6;
-        if (p > 0 && p < 1) for (let i = 0; i < 7; i++) {
-          const a = i * 0.9 + t0;
-          ctx.save(); ctx.globalAlpha = (1 - p) * 0.92; ellipse(ctx, 100 + Math.cos(a) * (14 + p * 46), 150 + Math.sin(a) * (10 + p * 34), 20 - p * 6, 18 - p * 6, '#FFFFFF', null); ctx.restore();
-        }
+    // 變身的煙：千面幻化每換一個樣子冒一陣（0.35 秒起每 0.7 秒換一次，3.3 秒變回來）；平常變裝、露餡時也冒一陣
+    const puffs = strike === 'morph' ? [0.2, 0.9, 1.6, 2.3, 3.15].map((t0) => st - t0) : fit.poofAt != null ? [t - fit.poofAt - 0.05] : [];
+    for (const dt of puffs) {
+      const p = dt / 0.6;
+      if (p > 0 && p < 1) for (let i = 0; i < 7; i++) {
+        const a = i * 0.9 + dt * 0.1;
+        ctx.save(); ctx.globalAlpha = (1 - p) * 0.92; ellipse(ctx, 100 + Math.cos(a) * (14 + p * 46), 150 + Math.sin(a) * (10 + p * 34), 20 - p * 6, 18 - p * 6, '#FFFFFF', null); ctx.restore();
       }
     }
     if (strike === 'pound') {   // 玉兔．玉杵搗藥：杵上下搗，小丹丸一顆顆跳出來

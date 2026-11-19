@@ -588,7 +588,7 @@ function sSkills(u, T) {
     fw.fxPreview({ move, dur: 4200, dir: 1, scale: 1.7, species: k, robe: FIT[k].robe, x: px, y: gy - 34 * S, ground: gy - 4 }, Math.min(v, 4.15));
     ctx.drawImage(fw.document.getElementById('c'), 0, 0, W, H);
   }
-  const sp2 = move === 'morph' && v > 0.35 && v < 3.3 ? 'panda' : k;
+  const sp2 = move === 'morph' && v > 0.35 && v < 3.3 ? ['panda', 'cat', 'rabbit', 'dragon'][Math.min(3, Math.floor((v - 0.35) / 0.7))] : k;
   pet({ state: 'strike', t: T, st: v, outfit: { species: sp2, hat: 'none', robe: FIT[k].robe, gear: 'none', realm: 6, move, fx: true } }, px, gy, S);
   banner(name, `${CAST[i][1]}．奧義　｜　${sig}　｜　${trait}`, T, T - v + 0.15, T - v + 3.9);
   ctx.fillStyle = 'rgba(12,20,28,0.82)'; ctx.fillRect(1180, 60, 740, 96);
