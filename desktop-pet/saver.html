@@ -265,7 +265,7 @@
           const BL = Math.min(W * 0.5, 980 * K);
           if (!this.route || this.routeW !== W) { this.routeW = W; const pts = []; for (let i = 0; i <= 60; i++) { const x = -0.1 * W + i / 60 * (1.2 * W + BL); pts.push([x, H * 0.5 + Math.sin(i / 60 * 7) * H * 0.07]); } this.route = window.makeRoute(pts); }
           window.drawShardSwim(ctx, this.route, p * (this.route.total + BL * 0.2), BL, { t: T, amp: 0.04 });
-        } else if (p >= 0 && p <= 1.35 && !(img && img.naturalWidth)) {
+        } else if (p >= 0 && p <= 1.35 && !(img && img.naturalWidth) && !window.LOONG_SWIM) {   // 只有碎片龍資料沒載到才用程式畫的舊龍
           const pts = [];
           for (let i = 0; i < 48; i++) { const q = p - i * 0.0062; pts.push([-120 * K + q * (W + 240 * K), H * 0.42 + Math.sin(q * 11) * 80 * K]); }
           window.drawLoong(ctx, pts, 1.05 * K, T, { sg: 1 });

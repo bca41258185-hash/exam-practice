@@ -635,7 +635,7 @@ function sSaver(u, T) {
   const sw = frameWin('svf');
   let cur = [1100, 640];
   if (sw && sw.saverManual) {
-    if (saverScene !== i || v < 0.05) { sw.saverManual(k, 12); saverScene = i; saverHit = false; }
+    if (saverScene !== i || v < 0.05) { sw.saverManual(k, k === 'dragon' ? 7.5 : 12); saverScene = i; saverHit = false; }   // 小青龍：讓游動的龍在這段中間正好游過
     const spot = sw.saverSpot() || { x: 960, y: 300 }, p = eIO(seg(v, 1.2, 2.3));
     cur = [lerp(1100, spot.x, p), lerp(640, spot.y, p)];
     if (v >= 2.45 && !saverHit) { saverHit = true; sw.saverClick(spot.x, spot.y); }
