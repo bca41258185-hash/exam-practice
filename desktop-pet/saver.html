@@ -24,7 +24,8 @@
   const LINGER = 14, FADE = 4, GOLD = '#F5B82E', LINE = '#4A3A2A';
   function size() { W = innerWidth; H = innerHeight; K = Math.max(0.7, Math.min(1.5, H / 1080)); cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
   addEventListener('resize', size); size();
-  const rnd = (a, b) => a + Math.random() * (b - a), now = () => performance.now() / 1000, clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  let clock = null;   // 預告片算圖時由外面指定時間（saverDraw），平常是 null
+  const rnd = (a, b) => a + Math.random() * (b - a), now = () => (clock == null ? performance.now() / 1000 : clock), clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
   const count = (per, lo, hi) => Math.max(lo, Math.min(hi, Math.round(W * H / per)));
   function spark(x, y, r, a, color) {
     ctx.save(); ctx.globalAlpha *= clamp(a); ctx.fillStyle = color; ctx.translate(x, y); ctx.beginPath();
@@ -258,7 +259,7 @@
 
   let last = now();
   function frame(t) {
-    requestAnimationFrame(frame);
+    if (clock == null) requestAnimationFrame(frame);
     const T = t / 1000, dt = Math.min(0.05, T - last); last = T;
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!S) return;
@@ -291,6 +292,11 @@
     if (sp === 'panda') { S.buns[0].at = 0; S.buns[0].y = H / 2; S.click(S.buns[0], T); return S.eaten; }
     if (sp === 'dragon') { S.click(S.clouds[0], T); return S.clouds[0].storm === T; }
   };
+  // 預告片算圖用：自己一格一格畫（不跟著真實時間跑）
+  window.saverManual = (species, pre) => { clock = 0; sp = species; things = []; bursts = []; leaveAt = 0; flash = -9; hot = false; mouse = { x: -9999, y: -9999 }; size(); SCENES[sp].init(-(pre || 12)); S = SCENES[sp]; born = -9; last = 0; };
+  window.saverDraw = (T, mx, my) => { clock = T; if (mx != null) mouse = { x: mx, y: my }; frame(T * 1000); };
+  window.saverSpot = () => { const T = clock || 0; if (sp === 'cat') return S.bell(); if (sp === 'fox') return things[0]; if (sp === 'rabbit') return S.moon(T); if (sp === 'panda') return S.buns.find((b) => T >= b.at && b.y < H - 80 && b.y > 120) || S.buns[0]; return S.clouds[0]; };
+  window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
   requestAnimationFrame(frame);
 })();
 </script>

@@ -2,6 +2,9 @@
 <html lang="zh-Hant"><head><meta charset="utf-8"><title>桌面靈寵預告片</title>
 <style>html,body{margin:0;background:#000}canvas{display:block;width:100vw;height:auto}</style></head>
 <body><canvas id="c" width="1920" height="1080"></canvas>
+<!-- 技能特效與螢幕保護直接借用程式裡的頁面來畫（要用 http 開才行，見 render.js） -->
+<iframe id="fxf" src="../../fx.html" style="position:absolute;left:-5000px;top:0;width:1920px;height:1080px;border:0"></iframe>
+<iframe id="svf" src="../../saver.html" style="position:absolute;left:-5000px;top:0;width:1920px;height:1080px;border:0"></iframe>
 <script src="../../draw.js"></script>
 <script src="trailer.js"></script>
 <script>

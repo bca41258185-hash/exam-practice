@@ -1,7 +1,7 @@
 // 桌面靈寵預告片：render(T) 依時間 T（秒）把整個畫面畫到 1920x1080 的畫布上。
 // 角色全部用 ../../draw.js 的 drawPet 畫，所以和程式裡看到的一模一樣。
 /* global drawPet */
-const W = 1920, H = 1080, DUR = 108;
+const W = 1920, H = 1080, DUR = 155;
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 const KAI = '"AR PL UKai TW","DFKai-SB","BiauKai","KaiTi",serif';
@@ -488,7 +488,7 @@ function sRealm(T) {
   } else if (!done) banner('天劫降臨', '烏雲預告三秒——點牠，閃開天雷', T, 80.2, 82.4, 110, 330);
   else { text('渡劫圓滿', 960, 240, 200, { color: GOLD, glow: 'rgba(255,230,150,1)', blur: 70, alpha: seg(tu, 3.2, 3.5) }); flash((1 - seg(tu, 3.2, 3.8)) * 0.9, '255,244,210'); }
   text('九重境界', 110, 90, 62, { align: 'left', color: 'rgba(255,243,214,0.9)' });
-  text('好好工作、好好休息，約一週修到渡劫', 110, 150, 34, { align: 'left', color: 'rgba(230,242,238,0.8)', font: SANS, weight: '500' });
+  text('約一週修到渡劫；圓滿之後飛升九重天', 110, 150, 32, { align: 'left', color: 'rgba(230,242,238,0.8)', font: SANS, weight: '500' });
   flash(1 - seg(T, 72, 72.3));
   vignette(0.5);
 }
@@ -541,19 +541,126 @@ function sEnd(T) {
   pet({ state: 'sleep', t: T, st: u, outfit: fit('cat', { realm: 8 }) }, 960, 1040, 1.25);
   text('桌面靈寵', W / 2, 250, 210, { color: GOLD, glow: 'rgba(246,200,90,0.9)', blur: 60, alpha: seg(u, 0.3, 1.1) });
   text('道友，上山吧。', W / 2, 420, 84, { color: '#fff', alpha: seg(u, 1.2, 2), glow: 'rgba(0,0,0,0.8)', blur: 14 });
-  text('五位同門．九重境界．陪你工作，也勸你休息', W / 2, 522, 42, { color: '#E6F2EE', alpha: seg(u, 2, 2.8), font: SANS, weight: '500' });
+  text('五位同門．本命技能．九重境界．陪你工作，也勸你休息', W / 2, 522, 42, { color: '#E6F2EE', alpha: seg(u, 2, 2.8), font: SANS, weight: '500' });
   text('Windows ／ macOS', W / 2, 588, 36, { color: 'rgba(230,242,238,0.75)', alpha: seg(u, 2.4, 3.2), font: SANS, weight: '500' });
   vignette(0.5);
   flash(1 - seg(T, 101.5, 102.2), '0,0,0');
   flash(seg(T, 106.6, 107.8), '0,0,0');
 }
 
-const SCENES = [[0, sPrologue], [13.5, sWait], [21, sTitle], [26, sDesktop], [38, sCast], [50, sKungfu], [62, sCare], [72, sRealm], [84, sDemon], [93.5, sHome], [101.5, sEnd]];
+// ---------- 第二版新增的段落（都用段落內的時間 u，從 0 開始） ----------
+const STAGE = ['幼年', '初成', '通靈', '化形', '渡劫', '圓滿'];
+// 外觀進化（12 秒）：五個角色各 2.4 秒，從幼年一路長到圓滿
+function sEvolve(u, T) {
+  const i = Math.min(4, Math.floor(u / 2.4)), v = u - i * 2.4;
+  const [k, name, , , glyph, [c0, c1]] = CAST[i], stage = Math.min(5, Math.floor(v / 0.37)), sv = v - stage * 0.37;
+  const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, c0); g.addColorStop(1, c1); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.globalAlpha = 0.07; text(glyph, 960, 600, 980, { color: '#fff' }); ctx.restore();
+  speedLines(T, 'rgba(255,255,255,0.05)', 960, 620);
+  ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(960, 845, 300, 34, 0, 0, 6.28); ctx.fill(); ctx.restore();
+  const pop = 1 + Math.max(0, 0.16 - sv) * 0.9;
+  pet({ state: stage === 5 ? 'happy' : 'idle', t: 10.6 + T, st: sv, outfit: { species: k, hat: 'none', robe: FIT[k].robe, gear: 'none', realm: [0, 2, 4, 6, 8, 8][stage], done: stage === 5, evo: stage } }, 960, 840, 4.4 * pop);
+  STAGE.forEach((n, j) => {
+    const x = 460 + j * 200, on = j <= stage, cur = j === stage;
+    ctx.save(); ctx.fillStyle = on ? GOLD : 'rgba(255,255,255,0.25)'; if (cur) { ctx.shadowColor = GOLD; ctx.shadowBlur = 30; } ctx.beginPath(); ctx.arc(x, 960, cur ? 16 : 10, 0, 6.28); ctx.fill(); ctx.restore();
+    text(n, x, 1012, cur ? 54 : 40, { color: on ? '#FFF3D6' : 'rgba(255,255,255,0.4)' });
+  });
+  ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(460, 960); ctx.lineTo(1460, 960); ctx.stroke(); ctx.restore();
+  text(name, 150, 470, 170, { align: 'left', color: GOLD, glow: 'rgba(246,200,90,0.7)', blur: 40, alpha: seg(v, 0, 0.3) });
+  ctx.fillStyle = 'rgba(12,20,28,0.82)'; ctx.fillRect(0, 60, W, 110);
+  text('外觀進化——境界越高，樣子越不同', W / 2, 116, 62, { color: '#FFF3D6' });
+  flash((1 - seg(sv, 0, 0.14)) * (stage ? 0.4 : 0));
+  flash((1 - seg(v, 0, 0.2)) * 0.9);
+  vignette(0.4);
+}
+// 本命技能（20 秒）：五個角色的奧義各 4 秒，特效蓋滿整個螢幕（直接用程式裡 fx.html 的畫法）
+const SK = [
+  ['cat', '九命貓影', 'shadows', '絕技　鈴音鎮魂', '天賦　守山'], ['fox', '千面幻化', 'morph', '絕技　狐火', '天賦　幻術'],
+  ['rabbit', '月華', 'moonlight', '絕技　玉杵搗藥', '天賦　月宮靈藥'], ['panda', '太極推手', 'taiji', '絕技　掌勺', '天賦　大師兄的飯'],
+  ['dragon', '龍吟', 'dragonrise', '絕技　喚雨', '天賦　行雲布雨'],
+];
+function frameWin(id) { const f = document.getElementById(id); return f && f.contentWindow; }
+function sSkills(u, T) {
+  const i = Math.min(4, Math.floor(u / 4)), v = u - i * 4, [k, name, move, sig, trait] = SK[i], S = 2.2, px = 960, gy = 1026;
+  desktop(T, 0.3);
+  const fw = frameWin('fxf');
+  if (fw && fw.fxPreview) {
+    fw.fxPreview({ move, dur: 4200, dir: 1, scale: 1.7, species: k, robe: FIT[k].robe, x: px, y: gy - 34 * S, ground: gy - 4 }, Math.min(v, 4.15));
+    ctx.drawImage(fw.document.getElementById('c'), 0, 0, W, H);
+  }
+  const sp2 = move === 'morph' && v > 0.35 && v < 3.3 ? 'panda' : k;
+  pet({ state: 'strike', t: T, st: v, outfit: { species: sp2, hat: 'none', robe: FIT[k].robe, gear: 'none', realm: 6, move, fx: true } }, px, gy, S);
+  banner(name, `${CAST[i][1]}．奧義　｜　${sig}　｜　${trait}`, T, T - v + 0.15, T - v + 3.9);
+  ctx.fillStyle = 'rgba(12,20,28,0.82)'; ctx.fillRect(1180, 60, 740, 96);
+  text('每個角色，三項本命技能', 1890, 108, 50, { align: 'right', color: '#FFF3D6' });
+  flash((1 - seg(v, 0, 0.2)) * 0.9);
+}
+// 操作方式（7 秒）：按住半秒，頭上展開快捷輪盤
+function sWheel(u, T) {
+  const G = 1026, S = 2.2, px = 1180, cy = G - 150;
+  desktop(T);
+  const open = eBack(seg(u, 1.7, 2.1)), picked = u >= 4.6;
+  pet({ state: picked ? 'strike' : 'idle', t: T, st: picked ? u - 4.6 : u, dir: -1, outfit: fit('cat', { hat: 'none', gear: 'none', realm: 2, move: 'bellwave' }), look: { x: -40, y: -30 } }, px, G, S);
+  const items = ['絕', '奧', '丹', '坐', '劍', '事', '符', '卦'], labels = ['鈴音鎮魂', '九命貓影', '餵靈丹', '打坐修煉', '御劍飛行', '今日三件事', '寫傳音符', '求一卦'];
+  const R = 250, pos = items.map((_, j) => { const a = (180 - j * 180 / 7) * Math.PI / 180; return [px + Math.cos(a) * R * open, cy - Math.sin(a) * R * 0.9 * open, Math.cos(a)]; });
+  if (open > 0) items.forEach((ch, j) => {
+    const [x, y, c] = pos[j], hot = j === 0 && u > 3.9;
+    ctx.save(); ctx.globalAlpha = Math.min(1, open); ctx.fillStyle = hot ? '#F5B82E' : '#FFF6E0'; ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 4;
+    ctx.beginPath(); ctx.arc(x, y, 46, 0, 6.28); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.stroke(); ctx.restore();
+    text(ch, x, y + 2, 46, { color: INK, alpha: Math.min(1, open) });
+    ctx.save(); ctx.globalAlpha = seg(u, 2.1, 2.5); ctx.font = `500 26px ${SANS}`; const tw = ctx.measureText(labels[j]).width + 26, lx = c < -0.3 ? x - 58 - tw : c > 0.3 ? x + 58 : x - tw / 2, ly = Math.abs(c) <= 0.3 ? y - 96 : y - 20;
+    ctx.fillStyle = 'rgba(40,30,20,0.85)'; ctx.beginPath(); ctx.roundRect(lx, ly, tw, 40, 14); ctx.fill(); text(labels[j], lx + tw / 2, ly + 21, 26, { color: '#FFF6E0', font: SANS, weight: '500' }); ctx.restore();
+  });
+  // 游標：移到牠身上、按住（一圈進度）、再移到「絕」點下去
+  let cx, cyy;
+  if (u < 1) { const p = eIO(u); cx = lerp(700, px, p); cyy = lerp(500, cy, p); }
+  else if (u < 3) { cx = px; cyy = cy; }
+  else { const p = eIO(seg(u, 3, 3.9)); cx = lerp(px, pos[0][0], p); cyy = lerp(cy, pos[0][1], p); }
+  if (u >= 1 && u < 1.7) { ctx.save(); ctx.strokeStyle = GOLD; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(px, cy, 44, -Math.PI / 2, -Math.PI / 2 + (u - 1) / 0.7 * 6.28); ctx.stroke(); ctx.restore(); }
+  if (u >= 4.5 && u < 4.9) { const p = (u - 4.5) / 0.4; ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${1 - p})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(pos[0][0], pos[0][1], 46 + p * 60, 0, 6.28); ctx.stroke(); ctx.restore(); }
+  cursor(cx, cyy, u >= 1 && u < 3 ? 'grab' : '');
+  banner('按住半秒：快捷輪盤', '常用的功能繞在頭上，點一下就用', T, T - u + 0.2, T - u + 6.8);
+  const tips = ['雙擊　出招', '中鍵　奧義', '滾輪　御劍飛行', '連點五下　比法術'];
+  tips.forEach((s2, j) => { const a = seg(u, 2.6 + j * 0.35, 3 + j * 0.35); ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = 'rgba(12,20,28,0.8)'; ctx.beginPath(); ctx.roundRect(120 - (1 - a) * 40, 330 + j * 84, 470, 66, 12); ctx.fill(); text(s2, 150 - (1 - a) * 40, 364 + j * 84, 40, { align: 'left', color: '#FFF3D6' }); ctx.restore(); });
+  flash(1 - seg(u, 0, 0.3), '10,20,28');
+}
+// 螢幕保護（20 秒）：五個角色各一套，直接用程式裡 saver.html 的畫法疊在桌面上
+const SAVER = [['cat', '守山夜', '螢火蟲、師父的鈴鐺、貓掌印'], ['fox', '狐火燈會', '狐火排陣，點到就換陣'], ['rabbit', '月宮桂落', '月亮橫越螢幕，點它灑下桂花'],
+  ['panda', '竹林灶火', '竹子長出來，包子冒著蒸氣'], ['dragon', '雲海聽雨', '小龍游過，點雲打雷下雨']];
+let saverScene = -1, saverHit = false;
+function sSaver(u, T) {
+  const i = Math.min(4, Math.floor(u / 4)), v = u - i * 4, [k, name, desc] = SAVER[i];
+  desktop(T, 0.12);
+  pet({ state: 'sleep', t: T, st: v, dir: -1, outfit: fit(k, { hat: 'none', gear: 'none', realm: 4 }) }, 1560, 1026, 2.0);
+  const sw = frameWin('svf');
+  let cur = [1100, 640];
+  if (sw && sw.saverManual) {
+    if (saverScene !== i || v < 0.05) { sw.saverManual(k, 12); saverScene = i; saverHit = false; }
+    const spot = sw.saverSpot() || { x: 960, y: 300 }, p = eIO(seg(v, 1.2, 2.3));
+    cur = [lerp(1100, spot.x, p), lerp(640, spot.y, p)];
+    if (v >= 2.45 && !saverHit) { saverHit = true; sw.saverClick(spot.x, spot.y); }
+    sw.saverDraw(v, cur[0], cur[1]);
+    ctx.drawImage(sw.document.getElementById('c'), 0, 0, W, H);
+  }
+  cursor(cur[0], cur[1]);
+  if (v >= 2.45 && v < 2.8) { const p = (v - 2.45) / 0.35; ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${1 - p})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(cur[0], cur[1], 20 + p * 70, 0, 6.28); ctx.stroke(); ctx.restore(); }
+  banner(`${CAST[i][1]}「${name}」`, desc, T, T - v + 0.15, T - v + 3.9, 110, 760);
+  ctx.fillStyle = 'rgba(12,20,28,0.82)'; ctx.beginPath(); ctx.roundRect(60, 900, 1170, 96, 14); ctx.fill();   // 標題放下面：鈴鐺、月亮、雲都在螢幕上緣
+  text('你離開時，桌面飄出牠的世界——不換畫面、不擋工作', 96, 950, 46, { align: 'left', color: '#FFF3D6' });
+  flash((1 - seg(v, 0, 0.25)) * 0.8, '10,20,28');
+}
+
+// [新的開始時間, 場景, 舊版場景寫死的開始時間（null 表示新段落，吃段落內時間）]
+const SCENES = [[0, sPrologue, 0], [13.5, sWait, 13.5], [21, sTitle, 21], [26, sDesktop, 26], [38, sCast, 38],
+  [50, sEvolve, null], [62, sSkills, null], [82, sWheel, null], [89, sCare, 62], [99, sRealm, 72], [111, sSaver, null],
+  [131, sDemon, 84], [140.5, sHome, 93.5], [148.5, sEnd, 101.5]];
 function render(T) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
   ctx.clearRect(0, 0, W, H);
-  let fn = SCENES[0][1];
-  for (const [a, f] of SCENES) if (T >= a) fn = f;
-  ctx.save(); fn(T); ctx.restore();
+  let sc = SCENES[0];
+  for (const s of SCENES) if (T >= s[0]) sc = s;
+  ctx.save();
+  if (sc[2] == null) sc[1](T - sc[0], T); else sc[1](T - sc[0] + sc[2]);
+  ctx.restore();
 }
 window.render = render; window.DUR = DUR;
