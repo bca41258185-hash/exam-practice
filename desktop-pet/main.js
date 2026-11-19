@@ -39,6 +39,7 @@ function loadCfg() {
   if (process.env.PET_TEST_XP) cfg.xp = Number(process.env.PET_TEST_XP) || 0;   // 測試用：假裝修為是這個數字（不存檔）
   if (typeof cfg.merit !== 'number' || cfg.merit < 0) cfg.merit = 0;
   if (!Array.isArray(cfg.history)) cfg.history = [];
+  if (![0, 3, 5, 10, 20].includes(cfg.saver)) cfg.saver = 10;
   // 已經慶祝過的境界會存檔：突破後還沒演天劫就關掉程式，下次開啟會補演
   if (typeof cfg.seenRealm !== 'number') { cfg.seenRealm = realmOf(cfg.xp); cfg.seenDone = cfg.xp >= MAX_XP; }
   pending = realmOf(cfg.xp) > cfg.seenRealm || (cfg.xp >= MAX_XP && !cfg.seenDone);
@@ -74,7 +75,7 @@ function limits() {
 }
 
 function send(ch, arg) { if (win && !win.isDestroyed()) win.webContents.send(ch, arg); }
-function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
+function pushState() { send('state', { state: state === 'peekout' ? 'walk' : state, dir, outfit: { species: morph || cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, carry: !!(deliver || carrying), realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined, fx: fxOn || undefined, move: strikeMove, hex: hexShow, lantern: curfewOn(), demon: demon && { hp: demon.hp, t0: demon.t0, hitAt: demon.hitAt }, zone: touchZone, spar: sparInfo() } }); }
 function say(text, force) { stopPoem(); if (cfg.talk || force) send('say', text); }
 
 // 吟詩：泡泡一次一行，一句一句唸，最後報出處。其他話插進來就停。
@@ -182,6 +183,7 @@ function checkStretch() {
   checkDemon(idle);
   checkCurfew(idle);
   checkOmen(idle);
+  checkSaver(idle);
   if (idle >= BREAK_SEC) {   // 你離開座位了：重新計時；如果是被提醒之後才去休息，回來時誇你
     if (reminded) praise = true;
     sitSince = Date.now(); reminded = false;
@@ -241,8 +243,8 @@ const NEED = [0, 150, 500, 1000, 1600, 2300, 3100, 4000, 5000];
 const MAX_XP = 6000;
 const OLD_NEED = [0, 100, 400, 1200, 3000, 7000, 15000, 30000, 60000];   // 舊制，換算用
 // 每個境界解鎖的功夫與特效（角色、裝扮一直都開放；工作工具永遠不鎖）
-const UNLOCK = ['點、拖、甩、吟詩', '腳下靈氣圈、來追我', '金丹微光、御劍飛行', '壁虎遊牆功、元嬰小分身',
-  '雙擊出招', '畫圈縮地成寸', '召喚同門', '腳踏祥雲、大乘語錄', '天雷閃避'];
+const UNLOCK = ['點、拖、甩、吟詩、雙擊彈指', '腳下靈氣圈、來追我', '金丹微光、御劍飛行、本命絕技', '壁虎遊牆功、元嬰小分身',
+  '雙擊多四式武學', '畫圈縮地成寸', '召喚同門、本命奧義', '腳踏祥雲、大乘語錄', '天雷閃避'];
 // 外觀進化：到這些境界時樣子會變（draw.js 依境界畫），突破時順便說一句各角色變了什麼
 const EVOLVE = {
   2: { cat: '掛上師父的鈴鐺', fox: '長出第二條尾巴', rabbit: '耳尖染金', panda: '頭頂冒出竹葉', dragon: '龍角長大了' },
@@ -250,7 +252,7 @@ const EVOLVE = {
   6: { cat: '尾尖燃起靈火', fox: '五尾如屏', rabbit: '身後升起彎月', panda: '身後長出靈竹', dragon: '披帛飄飄' },
   8: { cat: '三尾，眉心金蓮', fox: '八尾齊開', rabbit: '眉心金月更亮', panda: '師父的丹爐來了', dragon: '龍珠回來了' },
 };
-const ABILITY = { chase: 1, roll: 2, climb: 3, strike: 4, blink: 5, companion: 6, thunder: 8 };
+const ABILITY = { chase: 1, roll: 2, climb: 3, strike: 0, blink: 5, companion: 6, thunder: 8 };
 function realm() { return realmOf(cfg.xp); }
 function can(a) { return realm() >= ABILITY[a]; }
 function lockLabel(label, a) { return can(a) ? label : `${label}（${REALMS[ABILITY[a]]}解鎖）`; }
@@ -673,17 +675,134 @@ function gameCap() { return cfg.species === 'fox' ? 90 : GAME_CAP; }
 function pillMax() { return cfg.species === 'rabbit' ? 4 : 3; }
 function restGain() { return cfg.species === 'panda' ? 25 : 15; }
 let morph = '';   // 狐仙千面幻化：暫時變成的角色
+
+// ---- 全螢幕特效：技能的氣勁、月光、雨、龍影畫在一個蓋滿螢幕的透明視窗上（滑鼠穿透），不會被桌寵的小視窗切掉
+let fxWin = null, fxOn = false, fxTimer = null;
+function playFx(move, dur) {
+  if (cfg.fullFx === false) return;
+  const w = W(), a = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).workArea;
+  const arg = { move, dur, dir, scale: cfg.scale, species: cfg.species, robe: cfg.robe, x: pos.x + w / 2 - a.x, y: pos.y + w * 0.77 - a.y, ground: pos.y + w * 0.93 - a.y };
+  const go = () => {
+    if (!fxWin || fxWin.isDestroyed()) return;
+    fxWin.showInactive(); fxWin.webContents.send('fx-play', arg);
+    if (win && !win.isDestroyed()) win.moveTop();   // 角色本人留在特效上面
+    fxOn = true; pushState();
+    clearTimeout(fxTimer);
+    fxTimer = setTimeout(() => { fxOn = false; pushState(); if (fxWin && !fxWin.isDestroyed()) fxWin.hide(); }, dur + 400);
+  };
+  try {
+    if (fxWin && !fxWin.isDestroyed()) { fxWin.setBounds({ x: a.x, y: a.y, width: a.width, height: a.height }); return go(); }
+    fxWin = new BrowserWindow({
+      x: a.x, y: a.y, width: a.width, height: a.height, frame: false, transparent: true, resizable: false, skipTaskbar: true,
+      hasShadow: false, focusable: false, alwaysOnTop: true, backgroundColor: '#00000000', show: false,
+      webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+    });
+    fxWin.setAlwaysOnTop(true, 'floating');
+    fxWin.setIgnoreMouseEvents(true);
+    fxWin.loadFile(path.join(__dirname, 'fx.html'));
+    fxWin.once('ready-to-show', go);
+    fxWin.on('closed', () => { fxWin = null; fxOn = false; });
+  } catch { fxOn = false; }   // 開不了就算了，小視窗裡還有原本的特效
+}
+
+// ---- 快捷輪盤：按住牠不放半秒，周圍浮出一圈常用功能，點一下就用（不必再開右鍵選單）
+let wheelWin = null;
+function wheelItems() {
+  const sk = skills();
+  return [
+    { id: 'sig', ch: '絕', label: sk.sig[1], on: can2('sig'), why: `${REALMS[SKILL_REALM.sig]}解鎖` },
+    { id: 'ult', ch: '奧', label: sk.ult[1], on: can2('ult'), why: `${REALMS[SKILL_REALM.ult]}解鎖` },
+    { id: 'feed', ch: '丹', label: `餵靈丹（剩 ${Math.max(0, pillMax() - daily().pills)}）`, on: daily().pills < pillMax(), why: '今天吃完了' },
+    { id: 'sit', ch: '坐', label: '打坐修煉', on: true },
+    { id: 'roll', ch: '劍', label: '御劍飛行', on: can('roll'), why: `${REALMS[ABILITY.roll]}解鎖` },
+    { id: 'todo', ch: '事', label: '今日三件事', on: true },
+    { id: 'note', ch: '符', label: '寫傳音符', on: true },
+    { id: 'hex', ch: '卦', label: cfg.divine && cfg.divine.date === today() ? '今日卦象' : '求一卦', on: true },
+  ];
+}
+function closeWheel() { if (wheelWin && !wheelWin.isDestroyed()) wheelWin.close(); wheelWin = null; }
+function openWheel() {
+  if (!win || BUSY.includes(state) || spar) return;
+  closeWheel();
+  // 牠平常站在螢幕最下緣，所以輪盤是在頭上展開的半圓弧；視窗整個留在螢幕裡，靠邊時弧會往內偏一點
+  const w = W(), ww = 640, wh = 300, cx = Math.round(pos.x + w / 2), cy = Math.round(pos.y + w * 0.77);
+  const a = screen.getDisplayNearestPoint({ x: cx, y: cy }).workArea;
+  const x = Math.max(a.x, Math.min(a.x + a.width - ww, cx - ww / 2)), y = Math.max(a.y, Math.min(a.y + a.height - wh, cy - (wh - 64)));
+  const mine = wheelWin = new BrowserWindow({
+    x, y, width: ww, height: wh, frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
+    alwaysOnTop: true, backgroundColor: '#00000000', show: false,
+    webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  mine.setAlwaysOnTop(true, 'pop-up-menu');
+  mine.loadFile(path.join(__dirname, 'wheel.html'));
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.show(); mine.focus(); mine.webContents.send('wheel-open', { items: wheelItems(), cx: ww / 2, cy: wh - 64 }); });
+  mine.on('blur', () => { if (!mine.isDestroyed()) mine.close(); });
+  mine.on('closed', () => { if (wheelWin === mine) wheelWin = null; });
+  lastTouch = now();
+}
+function wheelPick(id) {
+  closeWheel();
+  if (id === 'sig' || id === 'ult') return startSkill(id);
+  if (id === 'feed') return feed();
+  if (id === 'sit') return set('sleep', 120000);
+  if (id === 'roll') return onRoll(dir);
+  if (id === 'todo') return openScroll();
+  if (id === 'note') return openNotes();
+  if (id === 'hex') return divine();
+  if (id === 'more' && win) return menu().popup({ window: win });
+}
+
+// ---- 螢幕保護：你離開一陣子，整個螢幕換成青雲山的夜色，牠在山上打坐；可以摸牠、點天空放流星，按任意鍵回來
+let saverWin = null, saverAt = 0;
+function openSaver(manual) {
+  if (saverWin && !saverWin.isDestroyed()) return;
+  if (!manual && (spar || lockAt)) return;
+  const w = W(), b = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + w / 2) }).bounds;
+  const mine = saverWin = new BrowserWindow({
+    x: b.x, y: b.y, width: b.width, height: b.height, frame: false, resizable: false, skipTaskbar: true, hasShadow: false,
+    alwaysOnTop: true, backgroundColor: '#070B14', show: false,
+    webPreferences: { preload: path.join(__dirname, 'fx-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  mine.setAlwaysOnTop(true, 'screen-saver');
+  mine.loadFile(path.join(__dirname, 'saver.html'));
+  mine.once('ready-to-show', () => { if (mine.isDestroyed()) return; mine.show(); mine.focus(); if (win && !win.isDestroyed()) win.hide(); });
+  mine.on('closed', () => {
+    if (saverWin === mine) saverWin = null;
+    if (win && !win.isDestroyed()) win.showInactive();
+    const mins = Math.round((Date.now() - saverAt) / 60000);
+    if (!BUSY.includes(state)) { set('happy', 1500); say(mins >= 1 ? `道友回來了，守了 ${mins} 分鐘` : '道友回來了', true); }
+  });
+  saverAt = Date.now();
+  stat('savers');
+}
+function closeSaver() { if (saverWin && !saverWin.isDestroyed()) saverWin.close(); }
+function checkSaver(idle) {
+  if (!cfg.saver || idle < cfg.saver * 60 || (saverWin && !saverWin.isDestroyed())) return;
+  openSaver(false);
+}
+function saverInfo() {
+  const poems = POEMS.slice().sort(() => Math.random() - 0.5).slice(0, 8);
+  const t = todos();
+  return {
+    outfit: { species: cfg.species, hat: cfg.hat, robe: cfg.robe, gear: cfg.gear, realm: realm(), done: isDone(), heaven: heaven(), evo: cfg.evolve === false ? 0 : undefined },
+    comp: can('companion') ? compSpecies() : '',
+    title: isDone() ? heavenText() : REALMS[realm()] + STAGES[stageOf(cfg.xp)], name: (LORE.CHARS[cfg.species] || {}).name || '',
+    poems, todayMin: daily().min, left: t.items.filter((x) => x.text && !x.done).map((x) => x.text),
+  };
+}
 function startSkill(kind) {
   const sk = skills()[kind], need = SKILL_REALM[kind];
   if (realm() < need) return say(`${sk[1]}要到${REALMS[need]}才會喔`, true);
   if (BUSY.includes(state) || spar || ['sleep', 'taichi', 'drink', 'gaze', 'strike', 'eat', 'warn', 'struck'].includes(state)) return;
   lastTouch = now(); stat('strikes'); strikeMove = sk[0];
   if (sk[0] === 'bellwave' && demon) { demon.hp = 1; say(sk[2], true); return hitDemon(false); }   // 鈴音震散心魔
-  set('strike', kind === 'ult' ? 2600 : 1900); say(sk[2], true);
+  const dur = kind === 'ult' ? 4200 : 2300;
+  set('strike', dur); say(sk[2], true);
+  playFx(sk[0], dur);
   if (sk[0] === 'morph') {
     const others = Object.keys(SKILLS).filter((k) => k !== cfg.species);
     setTimeout(() => { morph = others[Math.floor(Math.random() * others.length)]; pushState(); }, 350);
-    setTimeout(() => { morph = ''; pushState(); }, 1900);
+    setTimeout(() => { morph = ''; pushState(); }, 3300);
   }
   if (kind === 'ult' && !daily().ultDone) { daily().ultDone = true; const g = gain(10, 'skill'); setTimeout(() => xpNotes.push(['今日首次施展奧義', `修為 +${g}`]), 0); }
 }
@@ -692,9 +811,10 @@ function startSkill(kind) {
 let strikeMove = '', lastClickAt = 0;
 const MOVES = { palm: '降龍十八掌！', circle: '太極生兩儀～', bell: '金鐘罩！', flick: '彈指神通！' };
 function startStrike() {
-  if (Math.random() < 0.5) return startSkill('sig');   // 一半機率使出自己的絕技
+  // 雙擊一開始就能用：煉氣、築基是彈指神通；金丹起是自己的絕技；化神起絕技和四式武學各半
+  if (can2('sig') && (realm() < 4 || Math.random() < 0.5)) return startSkill('sig');
   const keys = Object.keys(MOVES);
-  strikeMove = keys[Math.floor(Math.random() * keys.length)];
+  strikeMove = realm() < 4 ? 'flick' : keys[Math.floor(Math.random() * keys.length)];
   stat('strikes'); lastTouch = now();
   set('strike', 1700); say(MOVES[strikeMove], true);
 }
@@ -1203,7 +1323,7 @@ function onClick(zone) {
   if (['fall', 'drag', 'tribulation', 'struck', 'vanish', 'appear'].includes(state)) return;
   if (state === 'warn') { clicks = []; return dodgeThunder(); }
   const dbl = t - lastClickAt < 380; lastClickAt = t;
-  if (demon) return hitDemon(dbl && can('strike'));
+  if (demon) return hitDemon(dbl && realm() >= 4);
   if (dbl && can('strike') && !BUSY.includes(state) && !['sleep', 'taichi', 'drink', 'gaze', 'strike'].includes(state)) { clicks = []; return startStrike(); }
   if (state === 'strike') return;
   if (state === 'taichi') { say('別偷懶，一起動！'); return; }
@@ -1340,6 +1460,16 @@ function menu() {
     },
     { label: '外觀隨境界進化', type: 'checkbox', checked: cfg.evolve !== false, click: (m) => { cfg.evolve = m.checked; saveCfg(); pushState(); say(m.checked ? '現出真身！' : '變回小時候的樣子', true); } },
     { label: '鬥法音效', type: 'checkbox', checked: cfg.sound !== false, click: (m) => { cfg.sound = m.checked; saveCfg(); } },
+    { label: '全螢幕技能特效', type: 'checkbox', checked: cfg.fullFx !== false, click: (m) => { cfg.fullFx = m.checked; saveCfg(); } },
+    {
+      label: '螢幕保護', submenu: [
+        { label: '現在開始', click: () => openSaver(true) },
+        { type: 'separator' },
+        ...[[0, '關閉'], [3, '閒置 3 分鐘'], [5, '閒置 5 分鐘'], [10, '閒置 10 分鐘'], [20, '閒置 20 分鐘']].map(([m, label]) => ({
+          label, type: 'radio', checked: cfg.saver === m, click: () => { cfg.saver = m; saveCfg(); say(m ? `閒置 ${m} 分鐘後護山` : '不開螢幕保護了', true); },
+        })),
+      ],
+    },
     { label: '會說話', type: 'checkbox', checked: cfg.talk, click: (m) => { cfg.talk = m.checked; saveCfg(); } },
     { label: '永遠在最上層', type: 'checkbox', checked: cfg.top, click: (m) => { cfg.top = m.checked; saveCfg(); win.setAlwaysOnTop(cfg.top, 'floating'); } },
     { label: '寫傳音符…（定時提醒）', click: openNotes },
@@ -1455,6 +1585,12 @@ ipcMain.on('drag-end', (e) => { if (!fromComp(e)) onDragEnd(); });
 ipcMain.on('roll', (e, d) => { if (!fromComp(e)) onRoll(d); });
 ipcMain.on('swipe', (e) => { if (!fromComp(e)) onSwipe(); });
 ipcMain.on('menu', () => { if (win) menu().popup({ window: win }); });
+ipcMain.on('hold', (e) => { if (!fromComp(e)) openWheel(); });
+ipcMain.on('ult', (e) => { if (!fromComp(e)) startSkill('ult'); });
+ipcMain.on('wheel-pick', (_e, id) => wheelPick(String(id)));
+ipcMain.handle('saver-info', () => saverInfo());
+ipcMain.handle('saver-touch', () => { const before = cfg.xp; touchGain(); return cfg.xp > before; });
+ipcMain.on('saver-exit', closeSaver);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -1470,4 +1606,4 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // 供自動化測試驅動
-global.__pet = { set, say, feed, gain, startSkill, gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };
+global.__pet = { set, say, feed, gain, startSkill, openWheel, wheelPick, wheelItems, openSaver, closeSaver, saverInfo, startStrike, wins: () => ({ fx: !!(fxWin && !fxWin.isDestroyed() && fxWin.isVisible()), wheel: !!wheelWin, saver: !!(saverWin && !saverWin.isDestroyed()), fxOn }), gameCap, pillMax, restGain, awayCap, records, daily, realmText, saveCfg, notes: () => xpNotes, onClick, onDragStart, onDragEnd, onRoll, startChase, startPeek, get: () => ({ state, dir, pos, cfg }) };

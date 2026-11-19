@@ -250,7 +250,7 @@ function opaqueXY(cx, cy) {
 let hit = null, down = null, dragging = false;
 addEventListener('mousemove', (e) => {
   if (down && !dragging && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 4) {
-    dragging = true;
+    dragging = true; clearTimeout(holdTimer);
     pet.send('drag-start');
   }
   if (down) return;
@@ -277,10 +277,15 @@ addEventListener('mouseleave', () => {
   if (cursorAt && opaqueXY(cursorAt.x, cursorAt.y)) return;   // 游標其實還在身上（例如換游標造型時的假離開）
   hit = false; pet.send('hit', false);
 });
+// 按住不放半秒（沒有拖動）：叫出快捷輪盤。滑鼠中鍵點牠：直接施展奧義
+let holdTimer = null, held = false;
 addEventListener('mousedown', (e) => {
+  if (e.button === 1 && opaqueAt(e)) { e.preventDefault(); pet.send('ult'); return; }
   if (e.button !== 0 || !opaqueAt(e)) return;
   down = { x: e.screenX, y: e.screenY };
-  dragging = false;
+  dragging = false; held = false;
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => { if (down && !dragging) { held = true; pet.send('hold'); } }, 500);
 });
 // 點到身體的哪個部位（角色座標：身體中心約在 (0,-32)，臉朝 +x）
 function zoneAt(e) {
@@ -304,8 +309,9 @@ function zoneAt(e) {
 }
 addEventListener('mouseup', (e) => {
   if (e.button !== 0 || !down) return;
-  if (dragging) pet.send('drag-end'); else pet.send('click', zoneAt(e));
-  down = null; dragging = false;
+  clearTimeout(holdTimer);
+  if (dragging) pet.send('drag-end'); else if (!held) pet.send('click', zoneAt(e));
+  down = null; dragging = false; held = false;
 });
 
 // 游標造型：平常移到身上是一隻摸頭的手；鬥法時變成一把劍

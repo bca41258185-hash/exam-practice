@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>青雲山夜色</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #070B14; user-select: none; cursor: default; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #back {
+    position: fixed; right: 28px; bottom: 26px; padding: 10px 22px; border-radius: 22px; border: 2px solid rgba(246,217,138,.7);
+    background: rgba(12,20,28,.6); color: #F6D98A; font: bold 17px "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC", sans-serif;
+    cursor: pointer; opacity: 0; transition: opacity .5s;
+  }
+  #back.on { opacity: 1; }
+  #back:hover { background: #F6D98A; color: #1B2A30; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="back">回去工作（或按任意鍵）</div>
+<script src="draw.js"></script>
+<script>
+// 螢幕保護：青雲山的夜色，牠在山上打坐。每個角色的夜景不一樣。
+// 互動：滑鼠經過留下靈氣；摸牠會睜眼、開心；點天空放一顆流星；點燈會亮一下。按任意鍵或右下角按鈕回去工作。
+/* global drawPet */
+(function () {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d'), back = document.getElementById('back');
+  const KAI = '"DFKai-SB","BiauKai","KaiTi","AR PL UKai TW","STKaiti",serif';
+  const api = window.fx || {   // 瀏覽器預覽用（網址加 #fox 之類換角色）
+    info: async () => ({ outfit: { species: location.hash.slice(1) || 'cat', hat: 'none', robe: 'qing', gear: 'none', realm: 6 }, comp: '', title: '合體中期', name: '靈寵',
+      poems: [{ by: '李白《靜夜思》', lines: ['床前明月光', '疑是地上霜', '舉頭望明月', '低頭思故鄉'] }], todayMin: 312, left: ['平面圖定稿'] }),
+    touch: async () => true, exit: () => console.log('exit'),
+  };
+  let W = 0, H = 0, K = 1, info = null;
+  function size() { W = innerWidth; H = innerHeight; K = Math.max(0.6, Math.min(1.6, H / 1080)); cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
+  addEventListener('resize', size); size();
+  function rng(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const STARS = (() => { const r = rng(7); return Array.from({ length: 320 }, () => [r(), r() * 0.72, r() * 1.7 + 0.4, r() * 6.28]); })();
+
+  // 每個角色的夜景：天色、山色、月亮大小與位置、飄的東西
+  const THEME = {
+    cat: { sky: ['#0A1424', '#1D4850'], hills: ['#1F4F58', '#18424A', '#123239'], moon: [0.76, 0.24, 78], drift: 'firefly', tag: '青雲山．守山夜' },
+    fox: { sky: ['#160E24', '#4A2440'], hills: ['#4A2A4A', '#3A2040', '#2A1632'], moon: [0.5, 0.26, 150], drift: 'foxfire', tag: '後山．中秋月' },
+    rabbit: { sky: ['#0A1230', '#2B3F74'], hills: ['#2E4374', '#243662', '#1A284C'], moon: [0.68, 0.3, 190], drift: 'petal', tag: '月宮．桂花落' },
+    panda: { sky: ['#0A1A18', '#1E4A3A'], hills: ['#1F4A3C', '#183C30', '#102C24'], moon: [0.62, 0.2, 70], drift: 'leaf', tag: '竹林．灶火暖' },
+    dragon: { sky: ['#08141C', '#18404A'], hills: ['#1C4852', '#153A44', '#0E2A32'], moon: [0.8, 0.2, 60], drift: 'rain', tag: '雲海．聽雨' },
+  };
+  function ridge(base, amp, seed, color, shift) {
+    const r = rng(seed), ph = [r() * 6, r() * 6, r() * 6];
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W + 16; x += 16) { const u = (x + shift) / 1920; ctx.lineTo(x, base - amp * (0.55 * Math.sin(u * 5.1 + ph[0]) + 0.3 * Math.sin(u * 11.3 + ph[1]) + 0.15 * Math.sin(u * 23 + ph[2]))); }
+    ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+  }
+  function spark(x, y, r, a, color) {
+    ctx.save(); ctx.globalAlpha = clamp(a); ctx.fillStyle = color; ctx.translate(x, y); ctx.beginPath();
+    for (let i = 0; i < 8; i++) { const an = i * Math.PI / 4, rr = i % 2 ? r * 0.32 : r; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  function text(str, x, y, px, color, align, alpha, weight) {
+    ctx.save(); ctx.globalAlpha = alpha == null ? 1 : clamp(alpha); ctx.font = `${weight || 'bold'} ${px}px ${KAI}`; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 14; ctx.fillStyle = color; ctx.fillText(str, x, y); ctx.restore();
+  }
+  function pet(o, x, y, s) { ctx.save(); ctx.translate(x - 100 * s, y - 188 * s); ctx.scale(s, s); drawPet(ctx, Object.assign({ dir: 1, look: { x: 0, y: 0 } }, o)); ctx.restore(); }
+
+  // 互動的狀態
+  let mouse = { x: -999, y: -999, at: 0 }, trail = [], meteors = [], floats = [], petState = { name: 'sleep', at: 0 }, lampAt = -99, poemI = 0, poemAt = 0;
+  const petBox = () => { const s = 3.2 * K, x = W * 0.5, y = H * 0.83; return { x, y, s, hit: (mx, my) => Math.abs(mx - x) < 46 * s && my > y - 96 * s && my < y + 6 * s }; };
+  const lampPos = () => ({ x: W * 0.17, y: H * 0.6 });
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!info) return;
+    const T = now / 1000, th = THEME[info.outfit.species] || THEME.cat, sp = info.outfit.species;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky[0]); g.addColorStop(1, th.sky[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    for (const [x, y, r, ph] of STARS) { ctx.globalAlpha = (0.4 + 0.4 * Math.sin(T * 1.2 + ph)) * (sp === 'dragon' ? 0.35 : 1); ctx.beginPath(); ctx.arc(x * W, y * H, r, 0, 6.283); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    // 月亮
+    const [mxr, myr, mr0] = th.moon, mx = mxr * W, my = myr * H, mr = mr0 * K;
+    const mg = ctx.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 3.2); mg.addColorStop(0, 'rgba(250,236,190,0.30)'); mg.addColorStop(1, 'rgba(250,236,190,0)');
+    ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx, my, mr * 3.2, 0, 6.283); ctx.fill();
+    ctx.fillStyle = sp === 'fox' ? '#FFE0B0' : '#F7EBC4'; ctx.beginPath(); ctx.arc(mx, my, mr, 0, 6.283); ctx.fill();
+    ctx.fillStyle = 'rgba(214,190,140,0.5)'; for (const [dx, dy, rr] of [[-0.3, -0.2, 0.17], [0.25, 0.15, 0.11], [-0.05, 0.4, 0.08]]) { ctx.beginPath(); ctx.arc(mx + dx * mr, my + dy * mr, rr * mr, 0, 6.283); ctx.fill(); }
+    if (sp === 'rabbit') { ctx.fillStyle = 'rgba(190,170,130,0.55)'; ctx.font = `bold ${mr * 0.5}px ${KAI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('桂', mx + mr * 0.2, my - mr * 0.1); }
+    // 流星
+    meteors = meteors.filter((m) => T - m.at < 1.1);
+    for (const m of meteors) { const p = (T - m.at) / 1.1, x = m.x + p * 520 * K, y = m.y + p * 260 * K; const lg = ctx.createLinearGradient(x, y, x - 200 * K, y - 100 * K); lg.addColorStop(0, `rgba(255,255,255,${1 - p})`); lg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.strokeStyle = lg; ctx.lineWidth = 3.5 * K; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 200 * K, y - 100 * K); ctx.stroke(); spark(x, y, 9 * K, 1 - p, '#FFFFFF'); }
+    // 山
+    ridge(H * 0.60, 120 * K, 3, th.hills[0], T * 4); ridge(H * 0.71, 90 * K, 11, th.hills[1], T * 8);
+    // 小青龍：雲海
+    if (sp === 'dragon') for (let i = 0; i < 9; i++) { const x = ((i * 300 + T * 22) % (W + 600)) - 300, y = H * (0.64 + (i % 3) * 0.035); ctx.globalAlpha = 0.5; ctx.fillStyle = '#C8DCE4'; ctx.beginPath(); ctx.arc(x - 60 * K, y + 6 * K, 34 * K, 0, 6.283); ctx.arc(x - 18 * K, y - 16 * K, 44 * K, 0, 6.283); ctx.arc(x + 38 * K, y - 6 * K, 38 * K, 0, 6.283); ctx.arc(x + 74 * K, y + 12 * K, 26 * K, 0, 6.283); ctx.rect(x - 86 * K, y + 6 * K, 180 * K, 34 * K); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    // 鎮魔燈（故事裡師父在的那盞）：點一下會亮起來
+    const lp = lampPos(), boost = clamp(1 - (T - lampAt) / 2.5), fl = (0.85 + 0.15 * Math.sin(T * 5.3) * Math.sin(T * 2.1)) * (1 + boost * 0.8), lr = (200 + boost * 260) * K;
+    const lg2 = ctx.createRadialGradient(lp.x, lp.y, 4, lp.x, lp.y, lr); lg2.addColorStop(0, `rgba(255,196,96,${Math.min(1, 0.7 * fl)})`); lg2.addColorStop(0.3, `rgba(255,150,60,${0.22 * fl})`); lg2.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = lg2; ctx.beginPath(); ctx.arc(lp.x, lp.y, lr, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#3A2A1E'; ctx.fillRect(lp.x - 3 * K, lp.y - 46 * K, 6 * K, 20 * K); ctx.fillRect(lp.x - 16 * K, lp.y - 28 * K, 32 * K, 6 * K); ctx.fillRect(lp.x - 14 * K, lp.y + 24 * K, 28 * K, 6 * K);
+    ctx.fillStyle = `rgba(255,214,130,${Math.min(1, fl)})`; ctx.beginPath(); ctx.roundRect(lp.x - 13 * K, lp.y - 22 * K, 26 * K, 46 * K, 6 * K); ctx.fill();
+    ridge(H * 0.86, 60 * K, 23, th.hills[2], T * 12);
+    // 熊貓：兩側竹影
+    if (sp === 'panda') for (const side of [0, 1]) for (let i = 0; i < 5; i++) { const x = (side ? W - 60 * K - i * 46 * K : 60 * K + i * 46 * K), sw = Math.sin(T * 0.8 + i) * 0.03; ctx.save(); ctx.translate(x, H); ctx.rotate((side ? -1 : 1) * (0.05 + i * 0.012) + sw); ctx.strokeStyle = '#0B1F18'; ctx.lineWidth = 12 * K; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -H * (0.7 - i * 0.07)); ctx.stroke(); ctx.fillStyle = '#0B1F18'; for (let j = 0; j < 5; j++) { ctx.save(); ctx.translate(0, -H * (0.7 - i * 0.07) + j * 46 * K); ctx.rotate((j % 2 ? 1 : -1) * 0.9); ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(40 * K, -14 * K, 80 * K, 0); ctx.quadraticCurveTo(40 * K, 14 * K, 0, 0); ctx.fill(); ctx.restore(); } ctx.restore(); }
+    // 飄的東西
+    const r = rng(101);
+    for (let i = 0; i < 46; i++) {
+      const bx = r() * W, by = r() * H, s1 = r(), s2 = r();
+      if (th.drift === 'firefly') { const x = bx + Math.sin(T * 0.4 + i) * 60, y = by * 0.9 + Math.cos(T * 0.3 + i * 2) * 40; spark(x, y, (3 + s1 * 4) * K, 0.35 + 0.5 * Math.sin(T * 2 + i), '#9CF0C8'); }
+      else if (th.drift === 'foxfire') { if (i > 14) continue; const x = bx + Math.sin(T * 0.5 + i) * 90, y = H * 0.25 + by * 0.5 + Math.cos(T * 0.4 + i) * 50, sc = (1 + s1) * K * (1 + Math.sin(T * 18 + i) * 0.1); ctx.save(); ctx.shadowColor = '#6FD3FF'; ctx.shadowBlur = 22; ctx.globalAlpha = 0.85; ctx.fillStyle = '#4FB6FF'; ctx.beginPath(); ctx.moveTo(x, y - 26 * sc); ctx.quadraticCurveTo(x + 18 * sc, y - 4 * sc, x, y + 14 * sc); ctx.quadraticCurveTo(x - 18 * sc, y - 4 * sc, x, y - 26 * sc); ctx.fill(); ctx.fillStyle = '#E6FBFF'; ctx.beginPath(); ctx.moveTo(x, y - 10 * sc); ctx.quadraticCurveTo(x + 8 * sc, y + 2 * sc, x, y + 10 * sc); ctx.quadraticCurveTo(x - 8 * sc, y + 2 * sc, x, y - 10 * sc); ctx.fill(); ctx.restore(); }
+      else if (th.drift === 'petal' || th.drift === 'leaf') { const y = (by + T * (26 + s1 * 34)) % H, x = bx + Math.sin(T * 0.8 + i) * 50; ctx.save(); ctx.translate(x, y); ctx.rotate(T * (0.6 + s2) + i); ctx.globalAlpha = 0.8; ctx.fillStyle = th.drift === 'petal' ? '#F5C95A' : '#6DBE6B'; ctx.beginPath(); const l = (th.drift === 'petal' ? 9 : 20) * K; ctx.moveTo(0, 0); ctx.quadraticCurveTo(l * 0.5, -l * 0.4, l, 0); ctx.quadraticCurveTo(l * 0.5, l * 0.4, 0, 0); ctx.fill(); ctx.restore(); }
+    }
+    if (th.drift === 'rain') { ctx.save(); ctx.strokeStyle = '#8FDCFF'; ctx.lineCap = 'round'; const rr = rng(61); for (let i = 0; i < 150; i++) { const x = rr() * (W + 200) - 100, spd = 620 + rr() * 420, y = (rr() * H + T * spd) % H, len = (14 + rr() * 20) * K; ctx.globalAlpha = 0.25 + rr() * 0.4; ctx.lineWidth = (1.4 + rr() * 1.4) * K; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - len * 0.2, y + len); ctx.stroke(); } ctx.restore(); }
+
+    // 牠（和同門）
+    const pb = petBox(), since = T - petState.at;
+    if (petState.name !== 'sleep' && since > (petState.name === 'happy' ? 1.6 : 4)) petState = { name: petState.name === 'happy' ? 'idle' : 'sleep', at: T };
+    if (info.comp) pet({ state: 'sleep', t: T + 3, st: T, dir: -1, outfit: { species: info.comp, hat: 'none', robe: 'yuebai', gear: 'none', realm: 2 } }, pb.x + 330 * K, pb.y + 8 * K, pb.s * 0.62);
+    pet({ state: petState.name, t: T, st: T - petState.at, outfit: info.outfit, look: { x: (mouse.x - pb.x) / pb.s, y: (mouse.y - pb.y + 40 * pb.s) / pb.s } }, pb.x, pb.y, pb.s);
+    // 滑鼠留下的靈氣
+    trail = trail.filter((p) => T - p.at < 1.2);
+    for (const p of trail) { const q = (T - p.at) / 1.2; spark(p.x + Math.sin(q * 6 + p.s) * 8, p.y - q * 40 * K, (7 - q * 5) * K, (1 - q) * 0.9, p.s > 0.5 ? '#9CF0C8' : '#F6D98A'); }
+    floats = floats.filter((f) => T - f.at < 1.5);
+    for (const f of floats) { const q = (T - f.at) / 1.5; text(f.text, f.x, f.y - q * 70 * K, 34 * K, '#F6D98A', 'center', 1 - q * q); }
+
+    // 時間、時辰、詩（位置慢慢漂，免得同一處一直亮著）
+    const d = new Date(), hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+    const dx = Math.sin(T / 47) * 40 * K, dy = Math.cos(T / 61) * 24 * K, tx = W * 0.12 + dx, ty = H * 0.17 + dy;
+    text(`${hh}:${mm}`, tx, ty, 132 * K, '#F6EBD0', 'left', 0.95);
+    text(`${'子丑寅卯辰巳午未申酉戌亥'[Math.floor(((d.getHours() + 1) % 24) / 2)]}時　${d.getMonth() + 1} 月 ${d.getDate()} 日　星期${'日一二三四五六'[d.getDay()]}`, tx + 6 * K, ty + 96 * K, 34 * K, '#CFE0DC', 'left', 0.9, 'normal');
+    text(`${th.tag}　${info.name}．${info.title}`, tx + 6 * K, ty + 146 * K, 28 * K, '#F6D98A', 'left', 0.85, 'normal');
+    if (info.left && info.left.length) text(`今日還有 ${info.left.length} 件事：${info.left.join('、')}`.slice(0, 40), tx + 6 * K, ty + 190 * K, 24 * K, '#CFE0DC', 'left', 0.7, 'normal');
+    // 詩：直排在右邊，一句一句浮出來，念完換下一首
+    const poem = info.poems[poemI % info.poems.length];
+    if (poem) {
+      const per = 2.6, total = poem.lines.length * per + 5, pu = T - poemAt;
+      if (pu > total) { poemI++; poemAt = T; }
+      const px = W * 0.88 - dx * 0.5, py = H * 0.16 - dy * 0.5, fade = clamp((total - pu) / 1.5);
+      poem.lines.forEach((ln, i) => { const a = clamp((pu - i * per) / 1.2) * fade; [...ln].forEach((ch, j) => text(ch, px - i * 62 * K, py + j * 52 * K, 42 * K, '#F6EBD0', 'center', a)); });
+      text(poem.by, px - poem.lines.length * 62 * K - 6 * K, py + 16 * K, 22 * K, '#F6D98A', 'right', clamp((pu - poem.lines.length * per) / 1.2) * fade * 0.9, 'normal');
+    }
+    // 提示
+    const hint = clamp(1 - (T - mouse.at) / 4);
+    if (hint > 0) text('摸摸牠　點天空放流星　點燈', W * 0.5, H - 36 * K, 22 * K, '#CFE0DC', 'center', hint * 0.7, 'normal');
+    back.classList.toggle('on', hint > 0);
+    // 邊緣壓暗
+    const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  const T = () => performance.now() / 1000;
+  addEventListener('mousemove', (e) => {
+    if (Math.hypot(e.clientX - mouse.x, e.clientY - mouse.y) > 14) trail.push({ x: e.clientX, y: e.clientY, at: T(), s: Math.random() });
+    mouse = { x: e.clientX, y: e.clientY, at: T() };
+    if (petBox().hit(e.clientX, e.clientY) && petState.name === 'sleep') petState = { name: 'idle', at: T() };
+    document.body.style.cursor = petBox().hit(e.clientX, e.clientY) || Math.hypot(e.clientX - lampPos().x, e.clientY - lampPos().y) < 50 * K ? 'pointer' : 'default';
+  });
+  addEventListener('mousedown', async (e) => {
+    if (e.target === back) return;
+    const pb = petBox(), lp = lampPos();
+    if (pb.hit(e.clientX, e.clientY)) {
+      petState = { name: 'happy', at: T() };
+      let got = false; try { got = await api.touch(); } catch { /* 沒連上就只演動畫 */ }
+      floats.push({ text: got ? '修為 +1' : '嘻嘻～', x: pb.x + 150 * K, y: pb.y - 260 * K, at: T() });
+    } else if (Math.hypot(e.clientX - lp.x, e.clientY - lp.y) < 50 * K) { lampAt = T(); floats.push({ text: '師父，晚安', x: lp.x, y: lp.y - 80 * K, at: T() }); }
+    else if (e.clientY < H * 0.6) meteors.push({ x: e.clientX - 260 * K, y: e.clientY - 130 * K, at: T() });
+  });
+  back.addEventListener('click', () => api.exit());
+  addEventListener('keydown', () => api.exit());
+  window.saverReady = api.info().then((d) => { info = d; poemAt = T(); });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

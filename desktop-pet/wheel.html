@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>快捷輪盤</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC", sans-serif; }
+  .it {
+    position: absolute; width: 64px; margin: -32px 0 0 -32px; text-align: center; cursor: pointer;
+    opacity: 0; transform: scale(.4); transition: opacity .16s, transform .2s cubic-bezier(.3,1.5,.5,1);
+  }
+  .it.in { opacity: 1; transform: scale(1); }
+  .it .b {
+    width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: #FFF6E0; border: 3px solid #4A3A2A; color: #4A3A2A; font-size: 26px; font-weight: bold;
+    font-family: "DFKai-SB", "KaiTi", "AR PL UKai TW", serif; box-shadow: 0 3px 0 rgba(74,58,42,.35);
+  }
+  .it:hover .b, .it.kb .b { background: #F5B82E; transform: translateY(-2px); }
+  .it .l {
+    position: absolute; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+    background: rgba(40,30,20,.85); color: #FFF6E0; font-size: 13px;
+  }
+  /* 標籤往外放，才不會蓋到隔壁那一格：左邊的往左、右邊的往右、頭頂的往上 */
+  .it.L .l { right: 66px; top: 17px; }
+  .it.R .l { left: 66px; top: 17px; }
+  .it.T .l { left: 50%; bottom: 62px; transform: translateX(-50%); }
+  .it.off { cursor: default; }
+  .it.off .b { background: #D9D2C2; color: #9A8E78; border-color: #9A8E78; box-shadow: none; }
+  .it.off:hover .b { background: #D9D2C2; transform: none; }
+  .it .n { position: absolute; left: 2px; top: -4px; width: 18px; height: 18px; border-radius: 50%; background: #4A3A2A; color: #FFF6E0; font-size: 11px; line-height: 18px; }
+  #more {
+    position: absolute; padding: 3px 12px; border-radius: 12px; background: rgba(40,30,20,.82); color: #FFF6E0; font-size: 12px;
+    cursor: pointer; transform: translate(-50%, 0); white-space: nowrap;
+  }
+  #more:hover { background: #F5B82E; color: #4A3A2A; }
+</style>
+</head>
+<body>
+<div id="more" hidden>更多…（完整選單）</div>
+<script>
+// 按住角色半秒叫出來的快捷輪盤。點一格就用；點空白、按 Esc 或視窗失焦就關掉；數字鍵 1–8 也可以選。
+(function () {
+  const api = window.fx || { onWheel: (fn) => fn({ cx: 320, cy: 236, items: '絕奧丹坐劍事符卦'.split('').map((ch, i) => ({ id: 'x' + i, ch, label: '預覽' + i, on: i !== 1, why: '合體解鎖' })) }), pick: (id) => console.log('pick', id) };
+  api.onWheel(({ items, cx, cy }) => {
+    // 在角色頭上展開的半圓弧：從左邊（略低於中心）經過頭頂到右邊
+    const R = 150, n = items.length;
+    items.forEach((it, i) => {
+      const a = (180 - i * 180 / (n - 1)) * Math.PI / 180, c = Math.cos(a);
+      const d = document.createElement('div'); d.className = 'it ' + (c < -0.3 ? 'L' : c > 0.3 ? 'R' : 'T') + (it.on ? '' : ' off');
+      d.style.left = (cx + c * R) + 'px'; d.style.top = (cy - Math.sin(a) * R * 0.9) + 'px';
+      const b = document.createElement('div'); b.className = 'b'; b.textContent = it.ch;
+      const l = document.createElement('div'); l.className = 'l'; l.textContent = it.on ? it.label : `${it.label}．${it.why || '還不能用'}`;
+      const num = document.createElement('div'); num.className = 'n'; num.textContent = String(i + 1);
+      d.append(b, l, num);
+      d.addEventListener('click', (e) => { e.stopPropagation(); if (it.on) api.pick(it.id); });
+      document.body.appendChild(d);
+      setTimeout(() => d.classList.add('in'), 20 + i * 22);
+    });
+    const more = document.getElementById('more'); more.hidden = false; more.style.left = cx + 'px'; more.style.top = Math.max(4, cy - R * 0.9 - 92) + 'px';
+    more.addEventListener('click', (e) => { e.stopPropagation(); api.pick('more'); });
+    addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return api.pick('close');
+      const i = Number(e.key) - 1;
+      if (i >= 0 && i < n && items[i].on) api.pick(items[i].id);
+    });
+  });
+  addEventListener('click', () => api.pick('close'));
+  addEventListener('contextmenu', (e) => { e.preventDefault(); api.pick('more'); });
+})();
+</script>
+</body>
+</html>

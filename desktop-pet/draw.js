@@ -805,8 +805,10 @@
       ellipse(ctx, 100 + dir * (30 + p * 70), 140, 3, 3, '#FFFFFF');
     }
     // ── 本命技能（每個角色各自的絕技與奧義）──
+    // fit.fx：主程序開了全螢幕特效視窗，會擴散出去的部分交給它畫，這裡只留貼身的道具
+    const far = !fit.fx;
     if (strike === 'bellwave') {   // 靈貓．鈴音鎮魂：鈴鐺在頭上搖，金色音波一圈圈盪開
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; far && i < 3; i++) {
         const p = (st * 1.1 + i / 3) % 1;
         ctx.save(); ctx.globalAlpha = (1 - p) * 0.9; ctx.strokeStyle = C.gold; ctx.lineWidth = 4 - p * 2.5;
         ctx.beginPath(); ctx.ellipse(100, 150 - lift, 24 + p * 72, 20 + p * 60, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -815,7 +817,7 @@
       ellipse(ctx, 0, 6, 8, 8, C.gold, C.line); ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(6, 6); ctx.moveTo(0, 6); ctx.lineTo(0, 13); ctx.stroke();
       ctx.restore();
     }
-    if (strike === 'shadows') {   // 靈貓．九命貓影：三道半透明的貓影繞著牠疾走
+    if (strike === 'shadows' && far) {   // 靈貓．九命貓影：三道半透明的貓影繞著牠疾走
       for (let i = 0; i < 3; i++) {
         const a = st * 5 + i * Math.PI * 2 / 3, x = 100 + Math.cos(a) * 62, y = 176 + Math.sin(a) * 8;
         ctx.save(); ctx.globalAlpha = 0.5; ctx.translate(x, y); ctx.scale(0.46, 0.46); ctx.translate(-100, -186);
@@ -823,7 +825,7 @@
         ctx.restore();
       }
     }
-    if (strike === 'foxfire') {   // 狐仙．狐火：五團青藍狐火繞身，然後射出去
+    if (strike === 'foxfire' && far) {   // 狐仙．狐火：五團青藍狐火繞身，然後射出去
       const out = Math.max(0, st - 1.1);
       for (let i = 0; i < 5; i++) {
         const a = st * 4 + i * Math.PI * 2 / 5, r = 54 + out * 150, x = 100 + Math.cos(a) * r, y = 146 - lift + Math.sin(a) * r * 0.5, fl = 1 + Math.sin(t * 20 + i) * 0.15;
@@ -850,7 +852,7 @@
       ctx.restore();
       for (let i = 0; i < 3; i++) { const p = (st * 1.4 + i / 3) % 1; ellipse(ctx, bx + dir * (6 + p * 26) * (i % 2 ? 1 : -0.6), 160 - Math.sin(p * Math.PI) * 34, 4, 4, C.gold, C.line); }
     }
-    if (strike === 'moonlight') {   // 玉兔．月華：頭上一輪滿月，月光灑下來
+    if (strike === 'moonlight' && far) {   // 玉兔．月華：頭上一輪滿月，月光灑下來
       const p = Math.min(1, st / 0.6), a = Math.min(1, st / 0.5) * Math.max(0, Math.min(1, (2.6 - st) / 0.5));
       ctx.save(); ctx.globalAlpha = a * 0.3; ctx.fillStyle = '#FFF4C4';
       ctx.beginPath(); ctx.moveTo(84, 44); ctx.lineTo(116, 44); ctx.lineTo(158, 188); ctx.lineTo(42, 188); ctx.closePath(); ctx.fill();
@@ -869,7 +871,7 @@
       ctx.restore();
       for (let i = 0; i < 5; i++) { const p = (st * 1.5 + i / 5) % 1; ellipse(ctx, bx + (i - 2) * 8, 152 - toss - Math.sin(p * Math.PI) * 40, 3.6, 3.6, ['#7CC878', '#E5484D', C.gold, '#FFFFFF', '#7CC878'][i], C.line); }
     }
-    if (strike === 'taiji') {   // 熊貓．太極推手：一輪黑白太極在身前轉開，往前推出
+    if (strike === 'taiji' && far) {   // 熊貓．太極推手：一輪黑白太極在身前轉開，往前推出
       const p = Math.min(1, st / 0.5), push = Math.max(0, st - 1.4), r = 8 + p * 22 + push * 10;
       ctx.save(); ctx.translate(100 + dir * (62 + push * 60), 150); ctx.rotate(st * 5); ctx.globalAlpha = Math.max(0, 0.92 - push * 0.9); ctx.lineWidth = 2.4;
       ellipse(ctx, 0, 0, r, r, '#FFFFFF', C.line);
@@ -877,7 +879,7 @@
       ellipse(ctx, 0, -r / 2, r / 7, r / 7, '#FFFFFF', null); ellipse(ctx, 0, r / 2, r / 7, r / 7, '#3B3640', null);
       ctx.restore();
     }
-    if (strike === 'rain') {   // 小青龍．喚雨：頭上一朵雲，下一陣小雨
+    if (strike === 'rain' && far) {   // 小青龍．喚雨：頭上一朵雲，下一陣小雨
       const cy = Math.max(20, top - 20), a = Math.min(1, st / 0.3);
       ctx.save(); ctx.strokeStyle = '#7FD4FF'; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.globalAlpha = a;
       for (let i = 0; i < 9; i++) { const p = (st * 1.7 + i * 0.37) % 1, x = 62 + i * 9.5, y = cy + 14 + p * (176 - cy); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 8); ctx.stroke(); }
@@ -886,7 +888,7 @@
       ctx.fillStyle = '#9AA9BD'; ctx.fillRect(74, cy - 2, 60, 10);
       ctx.restore();
     }
-    if (strike === 'dragonrise') {   // 小青龍．龍吟：一道青龍虛影盤旋升天
+    if (strike === 'dragonrise' && far) {   // 小青龍．龍吟：一道青龍虛影盤旋升天
       for (let i = 16; i >= 0; i--) {
         const p = st * 0.55 - i * 0.035;
         if (p < 0 || p > 1.1) continue;

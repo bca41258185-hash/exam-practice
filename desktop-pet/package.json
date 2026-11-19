@@ -36,6 +36,10 @@
       "duel.html",
       "omen.html",
       "wish.html",
+      "fx-preload.js",
+      "fx.html",
+      "wheel.html",
+      "saver.html",
       "assets/**"
     ],
     "directories": {
