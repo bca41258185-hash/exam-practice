@@ -1396,6 +1396,7 @@ function tick() {
     }
   }
   compTick(l, k);
+  if (saverWin && !saverWin.isDestroyed() && tickN % 3 === 0) { const o = saverOrigin(); saverCmd({ kind: 'pet', x: pos.x + 100 * k - o.x, y: pos.y + 150 * k - o.y, dir }); }
   tickAt = Date.now();
   if (Date.now() - lastFrameMsg > 200) { place(); compPlace(); }   // 畫面端沒在要（例如被系統暫停）時，照舊每次移動
 
