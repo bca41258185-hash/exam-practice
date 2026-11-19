@@ -682,21 +682,23 @@ let disguise = null, lastTrick = 0, poof = 0;   // poof：每變一次身加一�
 const TRICK_CAUGHT = ['被你看穿了！', '尾巴又露出來了……', '嘻嘻，剛剛有騙到你嗎？', '下次一定變得更像！'];
 function startDisguise() {
   const others = Object.keys(SKILLS).filter((k) => k !== 'fox');
-  disguise = { as: others[Math.floor(Math.random() * others.length)], until: now() + 25000 + Math.random() * 20000 };
+  disguise = { as: others[Math.floor(Math.random() * others.length)], until: now() + 20000 + Math.random() * 10000 };   // 變 20～30 秒
   lastTrick = now(); poof++; pushState();
+  if (process.env.PET_TEST_XP) console.log('[disguise] start', disguise.as, new Date().toTimeString().slice(0, 8));
 }
 function endDisguise(caught) {
   if (!disguise) return;
-  disguise = null; poof++;
-  if (caught) { set('happy', 1300); say(Q.pick(TRICK_CAUGHT), true); } else { say(Q.pick(['還是當自己舒服～', '玩夠了，變回來囉']), true); pushState(); }
+  disguise = null; poof++; lastTrick = now();
+  if (process.env.PET_TEST_XP) console.log('[disguise] end', caught ? 'caught' : 'timeout', new Date().toTimeString().slice(0, 8));   // 從變回來那一刻開始算冷卻
+  if (caught) { set('happy', 1300); say(Q.pick(TRICK_CAUGHT), true); } else { if (Math.random() < 0.3) say(Q.pick(['還是當自己舒服～', '玩夠了，變回來囉']), true); pushState(); }   // 一分鐘一次，不要每次都說話
 }
 function foxTrick() {
   if (cfg.species !== 'fox') { if (disguise) { disguise = null; poof++; pushState(); } return; }
   const t = now();
   const calm = ['idle', 'walk', 'sleep'].includes(state);   // 站著、走路、打坐時都可能偷偷變（以前只在站著時，一小時才一兩次，幾乎看不到）
   if (disguise) { if (t > disguise.until && calm) endDisguise(false); return; }
-  // 冷卻兩分鐘後，平均約四分鐘變一次（每格 33ms 的機率）→ 大約每 6～8 分鐘看到一次
-  if (calm && !morph && !spar && !demon && !saverVillain && t - lastTouch > 20000 && t - lastTrick > 120000 && Math.random() < TICK / 240000) startDisguise();
+  // 變回來後歇 18 秒，再平均幾秒內又變（不在站、走、打坐時要等） → 大約每分鐘變一次
+  if (calm && !morph && !spar && !demon && !saverVillain && t - lastTouch > 10000 && t - lastTrick > 18000 && Math.random() < TICK / 6000) startDisguise();
 }
 
 // ---- 全螢幕特效：技能的氣勁、月光、雨、龍影畫在一個蓋滿螢幕的透明視窗上（滑鼠穿透），不會被桌寵的小視窗切掉
