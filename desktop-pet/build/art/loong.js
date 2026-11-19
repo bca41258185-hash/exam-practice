@@ -14,7 +14,7 @@ const path = require('path');
     const c = document.getElementById('c').getContext('2d'), KAI = '"AR PL UKai TW","DFKai-SB","KaiTi",serif';
     const HT = c.canvas.height, g = c.createLinearGradient(0, 0, 0, HT); g.addColorStop(0, '#12303A'); g.addColorStop(1, '#1E5A5A'); c.fillStyle = g; c.fillRect(0, 0, 1700, HT);
     const ALL = { real: ['國風寫實', '細長、鹿角、火焰鬃毛'], chibi: ['Q 版萌龍', '和桌寵同畫風：大頭圓眼、短胖'], ink: ['水墨', '墨色、飛白、金色點睛'], gold: ['金龍', '宮廷刺繡色、紅鰭、火焰紋'],
-      poly: ['低多邊形', '每節都是明暗三角切面，像摺紙'], flat: ['扁平幾何', '直線、正圓、正三角、六角鱗，像建築圖'], cloud: ['雲中青龍', '青藍鱗身、奶白飄逸鬃毛帶金光、在祥雲裡穿梭'] };
+      poly: ['低多邊形', '每節都是明暗三角切面，像摺紙'], flat: ['扁平幾何', '直線、正圓、正三角、六角鱗，像建築圖'], cloud: ['雲中青龍', '青藍鱗身、奶白飄逸鬃毛帶金光、在祥雲裡穿梭'], geoqing: ['幾何青龍', '低多邊形切面＋青藍鱗、奶白金光三角鬃毛、深色金尖角、琥珀眼、幾何祥雲'] };
     const rows = (window.LOONG_ROWS || ['real', 'chibi', 'ink', 'gold']).map((k, i) => [k, '①②③④⑤⑥'[i] + ALL[k][0], ALL[k][1]]);
     const spine = (x0, y0, len, amp, n, ph) => Array.from({ length: n }, (_, i) => { const q = i / (n - 1); return [x0 - q * len, y0 + Math.sin(q * 6.5 + ph) * amp]; });
     rows.forEach(([st, name, desc], r) => {

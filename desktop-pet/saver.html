@@ -10,10 +10,14 @@
 <canvas id="c"></canvas>
 <script src="draw.js"></script>
 <script>
-  window.DRAGON_IMG = new Image();
-  window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
-  window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
-  window.DRAGON_IMG.src = 'assets/dragon/qinglong-512.png';
+  // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
+  window.DRAGON_ART = false;
+  if (window.DRAGON_ART) {
+    window.DRAGON_IMG = new Image();
+    window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.src = 'assets/dragon/qinglong-512.png';
+  } else window.DRAGON_READY = true;
 </script>
 <script>
 // 螢幕保護：不換畫面，只是在你的桌面上飄出東西來。透明、滑鼠穿透，桌面照常看得到。

@@ -11,10 +11,14 @@
 <script src="draw.js"></script>
 <script>
   // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
-  window.DRAGON_IMG = new Image();
-  window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
-  window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
-  window.DRAGON_IMG.src = 'assets/dragon/qinglong.png';
+  // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
+  window.DRAGON_ART = false;
+  if (window.DRAGON_ART) {
+    window.DRAGON_IMG = new Image();
+    window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.src = 'assets/dragon/qinglong.png';
+  } else window.DRAGON_READY = true;
 </script>
 <script>
 // 技能的全螢幕特效。主程序送來 { move, dur, dir, scale, species, robe, x, y, ground }，
