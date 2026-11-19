@@ -669,6 +669,20 @@
     const normal = (q) => { const p = route.at(q), p2 = route.at(q + 3), dx = p2[0] - p[0], dy = p2[1] - p[1], l = Math.hypot(dx, dy) || 1; return [p, -dy / l * up, dx / l * up, dx / l, dy / l]; };
     ctx.save();
     if (o.layer !== 'front') {
+      // 雲霧：一團團低多邊形的淡色雲，從身邊湧出、慢慢擴散變淡（每團是一圈扇形三角，深淺交錯）
+      const mist = o.mist == null ? 26 : o.mist, mc = ['#FFFFFF', '#EAF6F2', '#D4ECE6', '#F6F1E3', '#BFE3DA'];
+      for (let i = 0; i < mist; i++) {
+        const life = 2.2 + hash(i, 31) * 1.6, a = ((t / life + hash(i, 32)) % 1 + 1) % 1, g = 0.04 + hash(i, 33) * 0.95;
+        const q = qh - v * a * life - g * BL; if (qh - v * a * life < 0.05 * BL) continue;
+        const [p, nx, ny, tx, ty] = normal(q), side = hash(i, 34) < 0.5 ? -1 : 1, off = (0.02 + a * 0.06) * BL * side;
+        const x = p[0] + nx * off - tx * a * 60 * z, y = p[1] + ny * off - ty * a * 60 * z - a * 25 * z;
+        const R = (55 + hash(i, 35) * 90) * z * (0.6 + a * 0.7), m = 7 + Math.floor(hash(i, 36) * 4);
+        ctx.save(); ctx.translate(x, y); ctx.rotate((hash(i, 37) - 0.5) * 0.5 + a * (hash(i, 38) - 0.5));
+        ctx.globalAlpha = (o.alpha == null ? 1 : o.alpha) * Math.sin(a * Math.PI) * (0.3 + hash(i, 39) * 0.22);
+        const pts = []; for (let j = 0; j < m; j++) { const an = j / m * 6.283, rr = R * (0.65 + hash(i, 40 + j) * 0.45); pts.push([Math.cos(an) * rr * 1.6, Math.sin(an) * rr * (an > 3.14 ? 0.85 : 0.45)]); }   // 上面鼓、下面平，像雲
+        for (let j = 0; j < m; j++) { const P1 = pts[j], P2 = pts[(j + 1) % m]; ctx.beginPath(); ctx.moveTo((hash(i, 60) - 0.5) * R * 0.3, -R * 0.15); ctx.lineTo(P1[0], P1[1]); ctx.lineTo(P2[0], P2[1]); ctx.closePath(); ctx.fillStyle = mc[(j + i) % mc.length]; ctx.fill(); }
+        ctx.restore();
+      }
       const n = o.n == null ? 46 : o.n;
       for (let i = 0; i < n; i++) {
         const life = 1.1 + hash(i, 1) * 1.1, a = ((t / life + hash(i, 2)) % 1 + 1) % 1, g = 0.06 + hash(i, 3) * 0.9;
