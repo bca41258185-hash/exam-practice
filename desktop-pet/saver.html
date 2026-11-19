@@ -4,9 +4,16 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>螢幕保護</title>
-<style>html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; } canvas { display: block; width: 100vw; height: 100vh; }</style>
+<style>html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; } canvas { display: block; width: 100vw; height: 100vh; }
+#bar { position: fixed; top: 18px; right: 18px; display: flex; gap: 10px; z-index: 5; }
+#bar button { font: 600 16px "Microsoft JhengHei","PingFang TC",sans-serif; color: #4A3A2A; background: rgba(251,243,220,0.94); border: 2px solid #4A3A2A;
+  border-radius: 12px; padding: 9px 16px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
+#bar button:hover { background: #F5B82E; }
+#bar #off { font-size: 13px; padding: 9px 12px; color: #6A5A46; }
+</style>
 </head>
 <body>
+<div id="bar"><button id="close" title="收起螢幕保護">✕ 收起</button><button id="off" title="以後閒置時不再自動開">不要再自動開</button></div>
 <canvas id="c"></canvas>
 <script src="loong-shards.js"></script>
 <script src="loong-swim.js"></script>
@@ -295,10 +302,15 @@
     if (T - flash < 0.18) { ctx.globalAlpha = A * 0.22 * (1 - (T - flash) / 0.18); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
     ctx.restore();
     // 游標在可點的東西上，才接住滑鼠（其餘地方點擊照樣穿透到桌面）
-    const on = !!S.hit(mouse.x, mouse.y, T);
+    const on = !!S.hit(mouse.x, mouse.y, T) || overBar(mouse.x, mouse.y);
     if (on !== hot) { hot = on; api.clickable(on); document.body.style.cursor = on ? 'pointer' : 'default'; }
   }
   addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
+  // 收起／關閉的按鈕：游標在上面時視窗接住滑鼠
+  const bar = document.getElementById('bar');
+  function overBar(x, y) { const r = bar.getBoundingClientRect(); return x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6; }
+  document.getElementById('close').addEventListener('click', (e) => { e.stopPropagation(); api.exit(); });
+  document.getElementById('off').addEventListener('click', (e) => { e.stopPropagation(); if (api.off) api.off(); else api.exit(); });
   addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
   addEventListener('mousedown', (e) => { if (!S) return; const T = now(), h = S.hit(e.clientX, e.clientY, T); if (h) S.click(h, T); });
   api.onLeave(() => { if (!leaveAt) leaveAt = now(); });

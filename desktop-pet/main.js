@@ -70,7 +70,7 @@ function limits() {
   const a = area(), w = W(), pad = 58 * cfg.scale;
   return {
     xmin: a.x - pad, xmax: a.x + a.width - w + pad,
-    ymin: a.y - 40 * cfg.scale, ground: a.y + a.height - w + 12 * cfg.scale,
+    ymin: a.y - 40 * cfg.scale, ground: a.y + a.height - w + 2 * cfg.scale,   // 腳離工作列一點，影子不會被蓋住
   };
 }
 
@@ -363,7 +363,7 @@ function startPeek() {
   dir = pos.x - l.xmin < l.xmax - pos.x ? -1 : 1;
   set('peekout', 15000);
 }
-const KUNGFU = ['leap', 'hover', 'land', 'climb', 'hang', 'vanish', 'appear'];   // 輕功動作（都在空中，自己處理位置）
+const KUNGFU = ['leap', 'hover', 'land', 'swordland', 'climb', 'hang', 'vanish', 'appear'];   // 輕功動作（都在空中，自己處理位置）
 const BUSY = ['drag', 'fall', 'tribulation', 'roll', ...KUNGFU];
 
 // ---- 角色的故事：照境界一段一段說；同門在旁邊時，兩隻會聊彼此的關係
@@ -1206,7 +1206,7 @@ function tick() {
     throwInfo.top = Math.min(throwInfo.top, pos.y);
     // 被往上丟得很高：會御劍的話，在最高點召出飛劍接住自己，慢慢飄下來
     if (vel.y > 0 && !throwInfo.saved && can('roll') && l.ground - pos.y > 320 * k && Math.random() < 0.6) {
-      throwInfo.saved = true; set('land'); say('好險，御劍接住！', true);
+      throwInfo.saved = true; set('swordland'); say('好險，御劍接住！', true);   // 腳下真的出現飛劍，踩著降落
     } else if (pos.y >= l.ground) {
       pos.y = l.ground;
       if (vel.y > 9 * k) { vel.y = -vel.y * 0.45; vel.x *= 0.7; bounces++; }
@@ -1279,9 +1279,9 @@ function tick() {
         leap = { x0: pos.x, y0: pos.y, x1, y1: l.ground, t0: now(), dur: 650, after: true };
         set('leap', 650);
       }
-    } else if (state === 'land') {   // 輕輕飄下來
+    } else if (state === 'land' || state === 'swordland') {   // 輕輕飄下來（swordland：踩著飛劍）
       pos.y = Math.min(l.ground, pos.y + 7 * k);
-      if (pos.y >= l.ground) { pos.y = l.ground; set('idle', 1500); }
+      if (pos.y >= l.ground) { pos.y = l.ground; const sw = state === 'swordland'; set(sw ? 'happy' : 'idle', 1500); if (sw) say('收劍！', true); }
     }
   } else if (state === 'roll') {
     // 御劍飛行：飛在游標旁邊追著它跑（面向游標，不擋住游標）；時間到了慢慢降落
@@ -1565,7 +1565,7 @@ function menu() {
 function create() {
   loadCfg();
   const w = W(), a = screen.getPrimaryDisplay().workArea;
-  pos = { x: a.x + a.width - w - 80, y: a.y + a.height - w + 12 * cfg.scale };
+  pos = { x: a.x + a.width - w - 80, y: a.y + a.height - w + 2 * cfg.scale };
   win = new BrowserWindow({
     x: Math.round(pos.x), y: Math.round(pos.y), width: w, height: w,
     transparent: true, frame: false, resizable: false, movable: false,
@@ -1589,7 +1589,8 @@ function create() {
     if (todos().items.some((x) => x.text)) openScroll();
     // 測試用：PET_DEMO=chase 或 roll 啟動，兩秒後自動做那個動作（一般使用不會設這個）
     const demo = process.env.PET_DEMO;
-    if (demo === 'story') setTimeout(() => tellStory(true), 2500);
+    if (demo === 'saver') setTimeout(() => openSaver(true), 2000);
+    else if (demo === 'story') setTimeout(() => tellStory(true), 2500);
     else if (demo === 'pair') setTimeout(() => { openCompanion(); setTimeout(pairTalk, 2500); }, 1500);
     else if (demo === 'divine') setTimeout(() => { cfg.divine = null; divine(); }, 2500);
     else if (demo === 'demon') setTimeout(() => { lastDemon = 0; demon = { hp: 3, t0: now(), until: Date.now() + 45000, hitAt: 0 }; pushState(); sayLines([...Q.pick(DEMON_SAYS), '道友快點牠，打散心魔！'], 2600); }, 2500);
@@ -1648,6 +1649,7 @@ ipcMain.on('ult', (e) => { if (!fromComp(e)) startSkill('ult'); });
 ipcMain.on('wheel-pick', (_e, id) => wheelPick(String(id)));
 ipcMain.handle('saver-info', () => saverInfo());
 ipcMain.on('saver-exit', closeSaver);
+ipcMain.on('saver-off', () => { cfg.saver = 0; saveCfg(); closeSaver(); say('好，螢幕保護不自動開了（右鍵可再打開）', true); });
 ipcMain.on('saver-clickable', (_e, on) => { if (saverWin && !saverWin.isDestroyed()) saverWin.setIgnoreMouseEvents(!on, { forward: true }); });
 
 if (!app.requestSingleInstanceLock()) {
