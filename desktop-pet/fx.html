@@ -11,6 +11,7 @@
 <script src="loong-shards.js"></script>
 <script src="loong-swim.js"></script>
 <script src="draw.js"></script>
+<script src="fx-geo.js"></script>
 <script>
   // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
   // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
@@ -51,6 +52,9 @@
   }
   function mini(x, y, s, o) { ctx.save(); ctx.translate(x - 100 * s, y - 188 * s); ctx.scale(s, s); drawPet(ctx, Object.assign({ look: { x: 0, y: 0 }, mini: true }, o)); ctx.restore(); }
 
+  // 幾何風格的招式（fx-geo.js）；GEO_STYLE 改成 false 就退回下面的舊畫法
+  window.GEO_STYLE = true;
+  const ENV = { ctx, P: null, W: 0, H: 0 }, GEO = window.makeGeoFx ? window.makeGeoFx(ENV) : {};
   const FX = {
     // 靈貓．鈴音鎮魂：金色音波一圈圈盪到螢幕邊
     bellwave(u, A, k) {
@@ -239,7 +243,8 @@
     if (u >= D) { P = null; return; }
     const A = Math.min(1, u / 0.25) * Math.min(1, (D - u) / 0.5);
     ctx.save(); ctx.lineJoin = 'round';
-    try { (FX[P.move] || (() => {}))(u, A, P.scale || 1, D); } catch (e) { console.error(e); P = null; }
+    ENV.P = P; ENV.W = W; ENV.H = H;
+    try { ((window.GEO_STYLE && GEO[P.move]) || FX[P.move] || (() => {}))(u, A, P.scale || 1, D); } catch (e) { console.error(e); P = null; }
     ctx.restore();
     raf = requestAnimationFrame(frame);
   }
