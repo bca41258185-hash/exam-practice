@@ -8,6 +8,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="draw.js"></script>
 <script>
 // 螢幕保護：不換畫面，只是在你的桌面上飄出東西來。透明、滑鼠穿透，桌面照常看得到。
 // 五個角色各有一套（SCENES）：飄的東西、怎麼動、隔一陣子發生什麼、點了有什麼反應都不一樣。
@@ -243,13 +244,10 @@
         for (const o of things) if (T >= o.at) orb(o);
         // 小龍游過去
         const p = (T - this.swim) / 9;
-        if (p >= 0 && p <= 1.15) {
-          for (let i = 22; i >= 0; i--) {
-            const q = p - i * 0.012, x = -80 * K + q * (W + 160 * K), y = H * 0.42 + Math.sin(q * 14) * 70 * K, r = (i === 0 ? 17 : 14 - i * 0.42) * K;
-            if (i % 4 === 2) { ctx.fillStyle = GOLD; ctx.beginPath(); ctx.moveTo(x - 5 * K, y - r); ctx.lineTo(x, y - r - 9 * K); ctx.lineTo(x + 5 * K, y - r); ctx.closePath(); ctx.fill(); }
-            ctx.fillStyle = i % 2 ? '#9BE3B8' : '#7ED6A5'; ctx.strokeStyle = LINE; ctx.lineWidth = 2 * K; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill(); ctx.stroke();
-            if (i === 0) { ctx.fillStyle = GOLD; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x - 6 * K + s * 4 * K, y - 12 * K); ctx.lineTo(x - 16 * K + s * 7 * K, y - 34 * K); ctx.lineTo(x + 2 * K + s * 4 * K, y - 14 * K); ctx.closePath(); ctx.fill(); ctx.stroke(); } ctx.fillStyle = LINE; ctx.beginPath(); ctx.arc(x + 7 * K, y - 3 * K, 2.6 * K, 0, 6.283); ctx.fill(); }
-          }
+        if (p >= 0 && p <= 1.35) {
+          const pts = [];
+          for (let i = 0; i < 48; i++) { const q = p - i * 0.0062; pts.push([-120 * K + q * (W + 240 * K), H * 0.42 + Math.sin(q * 11) * 80 * K]); }
+          window.drawLoong(ctx, pts, 1.05 * K, T, { sg: 1 });
         }
       },
       hit(x, y) { const c = this.clouds.find((q) => Math.abs(x - q.x) < 100 * q.s && Math.abs(y - q.y) < 46 * q.s); if (c) return c; return things.find((o) => near(o, x, y)) || null; },

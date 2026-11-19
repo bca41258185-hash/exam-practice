@@ -151,25 +151,14 @@
     },
     // 小青龍．龍吟：一條大青龍從牠身上竄出來，在整個螢幕盤旋一圈，往天上飛走
     dragonrise(u, A, k, D) {
-      const path = (p) => { const q = clamp(p); return [P.x + Math.sin(q * 6.283 * 1.25) * W * 0.36 * Math.sin(q * Math.PI) + (W / 2 - P.x) * q * 0.6, P.y - q * (P.y + 220 * k) + Math.sin(q * 6.283 * 2.5) * 90 * k]; };
-      const head = (u / (D - 0.3)) * 1.25;
-      for (let i = 46; i >= 0; i--) {
-        const p = head - i * 0.011;
-        if (p < 0 || p > 1.02) continue;
-        const [x, y] = path(p), rr = (i === 0 ? 34 : 30 - i * 0.45) * k;
-        ctx.save(); ctx.globalAlpha = A * 0.92;
-        if (i % 4 === 2) { ctx.fillStyle = GOLD; ctx.beginPath(); ctx.moveTo(x - 8 * k, y - rr); ctx.lineTo(x, y - rr - 16 * k); ctx.lineTo(x + 8 * k, y - rr); ctx.closePath(); ctx.fill(); }
-        circle(x, y, rr, i % 2 ? '#9BE3B8' : '#7ED6A5', LINE, 2.4 * k);
-        if (i === 0) {
-          ctx.fillStyle = GOLD; ctx.strokeStyle = LINE; ctx.lineWidth = 2.4 * k;
-          for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + s * 12 * k, y - 24 * k); ctx.lineTo(x + s * 30 * k, y - 66 * k); ctx.lineTo(x + s * 26 * k, y - 20 * k); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-          circle(x - 12 * k, y - 4 * k, 5 * k, LINE); circle(x + 12 * k, y - 4 * k, 5 * k, LINE); circle(x - 10.5 * k, y - 6 * k, 1.8 * k, '#FFFFFF'); circle(x + 13.5 * k, y - 6 * k, 1.8 * k, '#FFFFFF');
-          ctx.strokeStyle = LINE; ctx.lineWidth = 2.4 * k; ctx.beginPath(); ctx.moveTo(x - 30 * k, y + 6 * k); ctx.quadraticCurveTo(x - 60 * k, y + 2 * k, x - 72 * k, y - 20 * k + Math.sin(u * 8) * 6 * k); ctx.moveTo(x + 30 * k, y + 6 * k); ctx.quadraticCurveTo(x + 60 * k, y + 2 * k, x + 72 * k, y - 20 * k - Math.sin(u * 8) * 6 * k); ctx.stroke();
-        }
-        ctx.restore();
-      }
+      // 往螢幕比較寬的那一側斜斜盤升，最後飛出畫面；水平方向一路往前，龍頭才不會倒過來
+      const sx = P.x < W / 2 ? 1 : -1, span = Math.max(P.x, W - P.x) + 300 * k;
+      const path = (q) => [P.x + sx * q * span, P.y - 20 * k - q * (P.y + 260 * k) + Math.sin(q * Math.PI * 4) * 110 * k * Math.min(1, q * 4)];
+      const head = (u / (D - 0.2)) * 1.3, pts = [];
+      for (let i = 0; i < 64; i++) { const q = head - i * 0.0068; if (q < 0) break; pts.push(path(q)); }
+      if (pts.length >= 6) { ctx.save(); ctx.globalAlpha *= A; window.drawLoong(ctx, pts, 1.9 * k, u, { sg: sx, pearl: true }); ctx.restore(); }
       const r = rng(71);
-      for (let i = 0; i < 30; i++) { const p = clamp(head - 0.05 - r() * 0.5); if (p <= 0) continue; const [x, y] = path(p); spark(x + (r() - 0.5) * 120 * k, y + (r() - 0.5) * 120 * k, (5 + r() * 7) * k, A * 0.7, i % 2 ? QI : GOLD); }
+      for (let i = 0; i < 34; i++) { const q = clamp(head - 0.05 - r() * 0.45); if (q <= 0) continue; const [x, y] = path(q); spark(x + (r() - 0.5) * 140 * k, y + (r() - 0.5) * 140 * k, (5 + r() * 7) * k, A * 0.7, i % 2 ? QI : GOLD); }
     },
   };
 
