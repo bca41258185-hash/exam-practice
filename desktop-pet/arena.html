@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>比劍擂台</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #end { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); font: 600 14px "Microsoft JhengHei", sans-serif; color: #FFF6DA;
+    background: rgba(40, 32, 22, 0.78); border: 1px solid rgba(245, 184, 46, 0.7); border-radius: 999px; padding: 6px 16px; cursor: pointer; }
+  #end:hover { background: rgba(70, 52, 28, 0.9); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="end" type="button">✕ 結束比劍（或按右鍵）</button>
+<script>
+// 比劍擂台：比劍的十秒內蓋滿整個螢幕的一層「幾乎透明」的布。
+// 用途一：點偏了也只會點在這層布上，不會點到桌面上的檔案或視窗。
+// 用途二：靈寵身邊會冒出金色的「破綻」圈，點中就是重擊；點在別處算落空。
+// 靈寵本人的視窗在這層上面，所以在牠身上來回揮照樣是比劍。
+(function () {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, targets = [], marks = [], t0 = performance.now();
+  const now = () => (performance.now() - t0) / 1000;
+  function size() { W = innerWidth; H = innerHeight; cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
+  addEventListener('resize', size); size();
+
+  // 主程序：{ kind: 'target', id, x, y, r, life } 新破綻；{ kind: 'clear' } 收掉
+  if (window.fx && window.fx.onArena) window.fx.onArena((c) => {
+    if (c.kind === 'target') targets.push({ id: c.id, x: c.x, y: c.y, r: c.r, life: c.life, at: now() });
+    else if (c.kind === 'clear') targets = [];
+  });
+
+  function hitAt(x, y) {
+    const T = now();
+    for (let i = targets.length - 1; i >= 0; i--) { const g = targets[i], p = (T - g.at) / g.life, r = g.r * (1 - p * 0.55); if (p < 1 && Math.hypot(x - g.x, y - g.y) < r + 10) return g; }
+    return null;
+  }
+  addEventListener('mousedown', (e) => {
+    if (e.button === 2) { if (window.fx && window.fx.arenaEnd) window.fx.arenaEnd(); return; }
+    if (e.button !== 0) return;
+    const g = hitAt(e.clientX, e.clientY), T = now();
+    if (g) { targets = targets.filter((x) => x !== g); marks.push({ x: g.x, y: g.y, at: T, hit: true }); }
+    else marks.push({ x: e.clientX, y: e.clientY, at: T, hit: false });
+    if (window.fx && window.fx.arenaClick) window.fx.arenaClick({ id: g ? g.id : null });
+  });
+  addEventListener('contextmenu', (e) => e.preventDefault());
+  document.getElementById('end').addEventListener('mousedown', (e) => { e.stopPropagation(); if (window.fx && window.fx.arenaEnd) window.fx.arenaEnd(); });
+
+  function frame() {
+    const T = now();
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // 那層布：很淡的暗色，看得出「進入擂台」，也接得住滑鼠（全透明的地方 Windows 會讓點擊穿過去）
+    ctx.fillStyle = 'rgba(10, 18, 24, 0.12)'; ctx.fillRect(0, 0, W, H);
+    // 破綻：金色劍紋圈，慢慢縮小、越來越急
+    targets = targets.filter((g) => T - g.at < g.life);
+    for (const g of targets) {
+      const p = (T - g.at) / g.life, r = g.r * (1 - p * 0.55), pop = Math.min(1, (T - g.at) / 0.15);
+      ctx.save(); ctx.translate(g.x, g.y); ctx.scale(pop, pop);
+      const glow = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.6); glow.addColorStop(0, `rgba(255,214,110,${0.45 - p * 0.2})`); glow.addColorStop(1, 'rgba(255,214,110,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = p > 0.7 ? '#FF6B5A' : '#F5B82E'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.stroke();
+      ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.lineDashOffset = -T * 40; ctx.beginPath(); ctx.arc(0, 0, r * 0.68, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+      ctx.rotate(Math.PI / 4 + T * 2);   // 中間一把小劍形的菱
+      ctx.fillStyle = '#FFF2C2'; ctx.beginPath(); ctx.moveTo(0, -r * 0.42); ctx.lineTo(r * 0.12, 0); ctx.lineTo(0, r * 0.42); ctx.lineTo(-r * 0.12, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.save(); ctx.font = '600 13px "Microsoft JhengHei"'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,246,218,0.95)'; ctx.strokeStyle = 'rgba(40,30,20,0.6)'; ctx.lineWidth = 3;
+      ctx.strokeText('破綻', g.x, g.y + r + 18); ctx.fillText('破綻', g.x, g.y + r + 18); ctx.restore();
+    }
+    // 點中：金色十字劍光；落空：灰色小字
+    marks = marks.filter((m) => T - m.at < 0.6);
+    for (const m of marks) {
+      const p = (T - m.at) / 0.6;
+      ctx.save(); ctx.globalAlpha = 1 - p; ctx.translate(m.x, m.y);
+      if (m.hit) {
+        ctx.strokeStyle = '#FFE08A'; ctx.lineCap = 'round'; ctx.lineWidth = 6 - p * 4;
+        for (const a of [0.6, -0.6]) { ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(-50 - p * 30, 0); ctx.lineTo(50 + p * 30, 0); ctx.stroke(); ctx.restore(); }
+        ctx.font = 'bold 26px "DFKai-SB","KaiTi",serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFE08A'; ctx.fillText('破！', 0, -36 - p * 20);
+      } else {
+        ctx.font = '600 14px "Microsoft JhengHei"'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(230,236,240,0.9)'; ctx.fillText('落空', 0, -10 - p * 14);
+      }
+      ctx.restore();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

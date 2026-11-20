@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>三仙歸洞</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script src="draw.js"></script>
+<script>
+// 三仙歸洞：靈寵當莊家，三個倒扣的茶杯藏一顆靈珠，洗完杯讓主人猜。
+// 畫面邏輯座標 460x300，視窗大小不同時等比縮放置中。
+(function () {
+  // 在一般瀏覽器打開時（沒有 window.game）用替身，方便預覽
+  const STUB = !window.game;
+  const game = window.game || {
+    info: async () => ({ species: 'cat', hat: 'none', robe: 'qing', gear: 'none', realm: 3, realmName: '元嬰' }),
+    result: (o) => console.log('[cups] result', JSON.stringify(o)),
+    close: () => console.log('[cups] close'),
+    setClickable: () => {},
+  };
+  if (STUB) document.body.style.background = '#2B2F36';
+
+  const W = 460, H = 300;
+  const INK = '#4A3A2A', PAPER = '#FBF3DC', GOLD = '#F5B82E', QI = '#59C9A5', RED = '#E5484D', EDGE = '#C9B48A';
+  const FONT = '"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif';
+  const KAI = '"DFKai-SB","KaiTi","BiauKai",serif';
+  const SX = [222, 307, 392];          // 三個杯位
+  const TRAY_Y = 222;                  // 杯口落在托盤上的高度
+  const CUP_H = 62, CUP_BOT = 37, CUP_TOP = 24;   // 杯高、杯口半寬、杯底半寬
+  const MAX_ROUNDS = 3, IDLE_LIMIT = 30;
+
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  let dpr = 1, view = { s: 1, ox: 0, oy: 0 };
+  function fit() {
+    dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth, h = window.innerHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const s = Math.min(w / W, h / H);
+    view = { s, ox: (w - W * s) / 2, oy: (h - H * s) / 2 };
+  }
+  window.addEventListener('resize', fit); fit();
+
+  let outfit = { species: 'cat' }, realm = 0;
+  let wins = 0, rounds = 0, ended = false;
+  let phase = 'load', phaseT = 0;      // load / show / shuffle / pick / reveal / done
+  let petState = 'idle', petT = 0;
+  let say = '', sayT = 0;
+  let cups = [], pearl = 0, picked = -1, won = false;
+  let swaps = [], swapI = 0, swapT = 0, swapDur = 0.42;
+  let mouse = { x: -99, y: -99 }, hover = -1, lastInput = 0, now = 0;
+  let buttons = [];
+
+  function setPhase(p) { phase = p; phaseT = 0; }
+  function setPet(s) { if (petState !== s) { petState = s; petT = 0; } }
+  function talk(text) { if (say !== text) { say = text; sayT = 0; } }
+
+  function newRound() {
+    cups = [0, 1, 2].map(i => ({ slot: i, x: SX[i], y: 0, lift: 0, lt: 0, front: 0 }));
+    pearl = Math.floor(Math.random() * 3); picked = -1; won = false; buttons = [];
+    const n = 4 + realm;
+    swapDur = Math.max(0.18, 0.42 - realm * 0.03);
+    swaps = []; let last = '';
+    for (let i = 0; i < n; i++) {
+      let a, b, key;
+      do { a = Math.floor(Math.random() * 3); b = (a + 1 + Math.floor(Math.random() * 2)) % 3; key = Math.min(a, b) + '-' + Math.max(a, b); }
+      while (key === last && Math.random() < 0.7);
+      last = key; swaps.push([a, b]);       // 杯位編號，不是杯子編號
+    }
+    swapI = 0; swapT = 0;
+    setPet('idle'); talk('靈珠在這杯底下，看好囉');
+    cups[pearl].lt = 1;
+    setPhase('show');
+  }
+
+  function finish() {
+    if (ended) return; ended = true;
+    try { game.result({ game: 'cups', wins, rounds }); } catch (e) {}
+    setTimeout(() => { try { game.close(); } catch (e) {} }, 60);
+  }
+
+  function cupAtSlot(slot) { return cups.findIndex(c => c.slot === slot); }
+  const ease = p => 0.5 - 0.5 * Math.cos(Math.PI * p);
+
+  function pick(i) {
+    if (phase !== 'pick' || i < 0) return;
+    picked = i; won = i === pearl; rounds++;
+    if (won) wins++;
+    cups[i].lt = 1;
+    if (won) { setPet('startle'); talk('道友好眼力！'); }
+    else { setPet('happy'); talk('哈哈，在這裡！'); }
+    setPhase('reveal');
+  }
+
+  function update(dt) {
+    phaseT += dt; petT += dt; sayT += dt;
+    if (phase === 'show') {
+      if (phaseT > 1.6) cups[pearl].lt = 0;
+      if (phaseT > 2.0) { setPhase('shuffle'); talk('看仔細了～'); }
+    } else if (phase === 'shuffle') {
+      swapT += dt;
+      const [sa, sb] = swaps[swapI];
+      const ia = cupAtSlot(sa), ib = cupAtSlot(sb);
+      const p = Math.min(1, swapT / swapDur), e = ease(p), arc = Math.sin(Math.PI * p);
+      const far = Math.abs(sa - sb) === 2 ? 1.35 : 1;
+      cups.forEach(c => { c.x = SX[c.slot]; c.y = 0; c.front = 0; });
+      cups[ia].x = SX[sa] + (SX[sb] - SX[sa]) * e; cups[ia].y = -24 * far * arc; cups[ia].front = -1;   // 從後面高高繞過
+      cups[ib].x = SX[sb] + (SX[sa] - SX[sb]) * e; cups[ib].y = 7 * far * arc; cups[ib].front = arc;    // 從前面低低滑過
+      if (p >= 1) {
+        cups[ia].slot = sb; cups[ib].slot = sa;
+        cups.forEach(c => { c.x = SX[c.slot]; c.y = 0; c.front = 0; });
+        swapI++; swapT = -0.04;
+        if (swapI >= swaps.length) { setPhase('pick'); talk('選哪一杯？'); lastInput = now; }
+      }
+    } else if (phase === 'pick') {
+      if (now - lastInput > IDLE_LIMIT) finish();
+    } else if (phase === 'reveal') {
+      if (!won && phaseT > 0.45) cups[pearl].lt = 1;
+      if (won && petState === 'startle' && petT > 1.2) { setPet('idle'); talk('哼…再來一局！'); }
+      if (phaseT > 0.9 && !buttons.length) {
+        if (rounds >= MAX_ROUNDS) {
+          setPhase('done'); setPet(wins >= 2 ? 'dizzy' : 'happy');
+          talk(`三局打完：道友贏了 ${wins} 局`);
+        } else {
+          buttons = [
+            { x: 186, y: 246, w: 120, h: 42, label: '再一局', main: true, act: () => newRound() },
+            { x: 318, y: 246, w: 120, h: 42, label: '不玩了', act: () => finish() },
+          ];
+          lastInput = now;
+        }
+      }
+      if (buttons.length && now - lastInput > IDLE_LIMIT) finish();
+    } else if (phase === 'done') {
+      if (phaseT > 2.6) finish();
+    }
+    for (const c of cups) c.lift += (c.lt - c.lift) * Math.min(1, dt * 12);
+    hover = hitCup(mouse.x, mouse.y);
+    const hb = buttons.some(b => inRect(b, mouse.x, mouse.y));
+    cv.style.cursor = (phase === 'pick' && hover >= 0) || hb ? 'pointer' : 'default';
+  }
+
+  // ---------- 繪圖 ----------
+  function rr(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  function drawPanel() {
+    ctx.save();
+    ctx.shadowColor = 'rgba(40,25,10,.35)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+    rr(5, 5, W - 10, H - 10, 18); ctx.fillStyle = PAPER; ctx.fill();
+    ctx.restore();
+    const g = ctx.createRadialGradient(90, 30, 10, 90, 30, 300);
+    g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    rr(5, 5, W - 10, H - 10, 18); ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = EDGE; ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `bold 21px ${KAI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('三仙歸洞', 20, 36);
+    ctx.font = `13px ${FONT}`; ctx.fillStyle = '#8A7658';
+    ctx.fillText(`第 ${Math.min(MAX_ROUNDS, rounds + (phase === 'reveal' || phase === 'done' ? 0 : 1))}／${MAX_ROUNDS} 局`, 20, 268);
+    ctx.fillText(`贏 ${wins} 局`, 20, 286);
+    ctx.textAlign = 'right'; ctx.font = `11px ${FONT}`; ctx.fillStyle = '#B0A080';
+    ctx.fillText('Esc 離開', W - 16, 24);
+  }
+
+  function drawTray() {
+    const x = 166, w = 284, y = TRAY_Y - 6;
+    ctx.save();
+    ctx.fillStyle = 'rgba(60,35,15,.18)'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + 24, w / 2 + 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(0, y, 0, y + 20);
+    g.addColorStop(0, '#C99059'); g.addColorStop(1, '#9A6638');
+    rr(x, y, w, 18, 8); ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.strokeStyle = 'rgba(90,55,25,.45)'; ctx.lineWidth = 1;   // 木紋
+    for (const k of [0.3, 0.62]) { ctx.beginPath(); ctx.moveTo(x + 12, y + 18 * k); ctx.bezierCurveTo(x + 90, y + 18 * k - 2, x + 180, y + 18 * k + 2, x + w - 12, y + 18 * k); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function drawPearl(x, alpha) {
+    if (alpha <= 0.02) return;
+    const y = TRAY_Y - 12, pulse = 1 + 0.08 * Math.sin(now * 5);
+    ctx.save(); ctx.globalAlpha = Math.min(1, alpha);
+    const g = ctx.createRadialGradient(x, y, 2, x, y, 30 * pulse);
+    g.addColorStop(0, 'rgba(255,236,160,.95)'); g.addColorStop(0.35, 'rgba(245,184,46,.45)'); g.addColorStop(1, 'rgba(89,201,165,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 30 * pulse, 0, Math.PI * 2); ctx.fill();
+    const b = ctx.createRadialGradient(x - 3, y - 4, 1, x, y, 11);
+    b.addColorStop(0, '#FFFFFF'); b.addColorStop(0.45, '#FFF2B8'); b.addColorStop(1, GOLD);
+    ctx.fillStyle = b; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = '#B8862A'; ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCup(c, i) {
+    const lift = c.lift * 58 + (phase === 'pick' && hover === i ? 4 : 0);
+    const sc = 1 + c.front * 0.06;
+    const bx = c.x, by = TRAY_Y + c.y - lift;          // 杯口（朝下）中心
+    // 影子
+    ctx.save(); ctx.fillStyle = `rgba(60,35,15,${0.22 - c.lift * 0.12})`;
+    ctx.beginPath(); ctx.ellipse(bx, TRAY_Y + 1, 36 * sc, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(bx, by); ctx.scale(sc, sc);
+    if (phase === 'pick' && hover === i) {
+      ctx.shadowColor = QI; ctx.shadowBlur = 16;
+    }
+    // 杯身：倒扣，杯口在下、杯足在上
+    const g = ctx.createLinearGradient(-CUP_BOT, 0, CUP_BOT, 0);
+    g.addColorStop(0, '#8FC3AE'); g.addColorStop(0.3, '#CFEADD'); g.addColorStop(0.65, '#A8D3C1'); g.addColorStop(1, '#6FA690');
+    ctx.beginPath();
+    ctx.moveTo(-CUP_BOT, 0);
+    ctx.bezierCurveTo(-CUP_BOT + 2, -CUP_H * 0.55, -CUP_TOP - 4, -CUP_H + 10, -CUP_TOP, -CUP_H + 6);
+    ctx.lineTo(CUP_TOP, -CUP_H + 6);
+    ctx.bezierCurveTo(CUP_TOP + 4, -CUP_H + 10, CUP_BOT - 2, -CUP_H * 0.55, CUP_BOT, 0);
+    ctx.quadraticCurveTo(0, 6, -CUP_BOT, 0);
+    ctx.closePath();
+    ctx.fillStyle = g; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 2.6; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.stroke();
+    // 杯足
+    rr(-15, -CUP_H - 2, 30, 9, 3); ctx.fillStyle = '#9CCBB7'; ctx.fill(); ctx.lineWidth = 2.2; ctx.stroke();
+    // 墨線紋
+    ctx.strokeStyle = 'rgba(46,80,66,.75)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-CUP_BOT + 5, -9); ctx.quadraticCurveTo(0, -5, CUP_BOT - 5, -9); ctx.stroke();
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(-14, -30); ctx.quadraticCurveTo(-7, -38, 0, -31); ctx.quadraticCurveTo(7, -24, 14, -32); ctx.stroke();
+    // 釉光
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-CUP_BOT + 10, -12); ctx.quadraticCurveTo(-CUP_BOT + 12, -36, -CUP_TOP + 3, -CUP_H + 13); ctx.stroke();
+    ctx.restore();
+    // 揭曉後在選中的杯子上方標記
+    if (picked === i && (phase === 'reveal' || phase === 'done')) {
+      ctx.save(); ctx.fillStyle = won ? QI : RED; ctx.font = `bold 15px ${FONT}`; ctx.textAlign = 'center';
+      ctx.globalAlpha = Math.min(1, c.lift * 1.5);
+      if (won) ctx.fillText('中！', bx + 26, TRAY_Y - 24);
+      else ctx.fillText('空', bx, TRAY_Y - 10);
+      ctx.restore();
+    }
+  }
+
+  function drawSay() {
+    if (!say) return;
+    const a = Math.min(1, sayT * 6);
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.font = `600 16px ${FONT}`;
+    const w = Math.min(290, ctx.measureText(say).width + 28), h = 34, x = 150, y = 50;
+    ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const r = 13;
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.lineTo(x + 40, y + h); ctx.lineTo(x - 4, y + h + 28); ctx.lineTo(x + 20, y + h);   // 尾巴指向左下的靈寵
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(say, x + 14, y + h / 2 + 1, w - 26);
+    ctx.restore();
+  }
+
+  function drawButtons() {
+    const a = Math.min(1, (phaseT - 0.9) * 6);
+    for (const b of buttons) {
+      const hov = inRect(b, mouse.x, mouse.y);
+      ctx.save(); ctx.globalAlpha = Math.max(0, a);
+      rr(b.x, b.y + (hov ? -1 : 0), b.w, b.h, 12);
+      ctx.fillStyle = b.main ? (hov ? '#F8C752' : GOLD) : (hov ? '#FFF1CC' : '#FFF7E2');
+      ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = b.main ? '#C9901A' : EDGE; ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = `bold 19px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1 + (hov ? -1 : 0));
+      ctx.restore();
+    }
+  }
+
+  function drawDealer(t) {
+    if (!window.drawPet) return;
+    const PX = -8, PY = 94, S = 0.75;
+    // 眼睛看著動的杯子或滑鼠
+    let tx = mouse.x, ty = mouse.y;
+    if (phase === 'shuffle' && swaps[swapI]) { const c = cups[cupAtSlot(swaps[swapI][0])]; if (c) { tx = c.x; ty = TRAY_Y - 30; } }
+    if (tx < 0) { tx = SX[1]; ty = TRAY_Y - 30; }
+    const look = { x: (tx - (PX + 100 * S)) / S, y: (ty - (PY + 150 * S)) / S };
+    ctx.save(); ctx.translate(PX, PY); ctx.scale(S, S);
+    try { window.drawPet(ctx, { state: petState, dir: 1, t, st: petT, outfit, look }); } catch (e) {}
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.ox, dpr * view.oy);
+    drawPanel();
+    drawTray();
+    drawDealer(now);
+    // 靈珠跟著它的杯子走，杯子掀起才看得到
+    if (cups.length) {
+      const pc = cups[pearl];
+      drawPearl(pc.x, phase === 'shuffle' ? 0 : pc.lift * 1.6);
+      // 後面的先畫，前面滑過的後畫
+      cups.map((c, i) => i).sort((a, b) => cups[a].front - cups[b].front).forEach(i => drawCup(cups[i], i));
+    }
+    drawSay();
+    drawButtons();
+  }
+
+  // ---------- 輸入 ----------
+  function toLogical(e) { return { x: (e.clientX - view.ox) / view.s, y: (e.clientY - view.oy) / view.s }; }
+  function inRect(b, x, y) { return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h; }
+  function hitCup(x, y) {
+    if (phase !== 'pick') return -1;
+    for (let i = 0; i < cups.length; i++) {
+      const c = cups[i];
+      if (Math.abs(x - c.x) <= 42 && y >= TRAY_Y - CUP_H - 14 - c.lift * 58 && y <= TRAY_Y + 10) return i;
+    }
+    return -1;
+  }
+  cv.addEventListener('mousemove', e => { mouse = toLogical(e); lastInput = now; });
+  cv.addEventListener('mouseleave', () => { mouse = { x: -99, y: -99 }; });
+  cv.addEventListener('mousedown', e => {
+    if (ended) return;
+    const p = toLogical(e); mouse = p; lastInput = now;
+    if (phase === 'pick') { pick(hitCup(p.x, p.y)); return; }
+    if (phase === 'done') { finish(); return; }
+    if (phase === 'reveal' && phaseT > 0.9) { const b = buttons.find(b => inRect(b, p.x, p.y)); if (b) b.act(); }
+  });
+  window.addEventListener('keydown', e => {
+    lastInput = now;
+    if (e.key === 'Escape') { finish(); return; }
+    if (phase === 'pick' && ['1', '2', '3'].includes(e.key)) pick(cupAtSlot(+e.key - 1));
+  });
+  window.addEventListener('contextmenu', e => e.preventDefault());
+
+  // ---------- 主迴圈 ----------
+  let prev = performance.now();
+  function frame(ms) {
+    const dt = Math.min(0.05, (ms - prev) / 1000); prev = ms; now += dt;
+    if (!ended) update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  (async () => {
+    try {
+      const info = await game.info();
+      if (info) { outfit = info; realm = Math.max(0, Math.min(8, info.realm | 0)); }
+    } catch (e) {}
+    const q = new URLSearchParams(location.search).get('realm');   // 預覽用：?realm=8
+    if (STUB && q != null) { realm = Math.max(0, Math.min(8, +q || 0)); outfit = Object.assign({}, outfit, { realm }); }
+    try { game.setClickable(true); } catch (e) {}
+    newRound();
+  })();
+  requestAnimationFrame(frame);
+
+  // 給預覽測試用
+  if (STUB) window.__cups = {
+    step(sec) { for (let k = 0; k < sec * 60 && !ended; k++) { now += 1 / 60; update(1 / 60); } render(); return this.state; },
+    get state() { return { phase, pearl, picked, won, wins, rounds, ended, cups: cups.map(c => ({ slot: c.slot, x: c.x })), buttons: buttons.map(b => b.label) }; } };
+})();
+</script>
+</body>
+</html>

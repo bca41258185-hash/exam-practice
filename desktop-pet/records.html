@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>修煉紀錄</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  html { background: #FBF3DC; min-height: 100%; }
+  body {
+    background: #FBF3DC;
+    background-image: radial-gradient(circle at 20% 6%, rgba(255,255,255,.6), transparent 55%),
+                      radial-gradient(circle at 90% 95%, rgba(190,160,110,.18), transparent 55%);
+    color: #4A3A2A; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+    padding: 14px 16px 16px; font-size: 15px; user-select: none; overflow-x: hidden;
+  }
+  .kai { font-family: "DFKai-SB", "KaiTi", serif; }
+
+  /* 1. 境界標題 */
+  .top { display: flex; align-items: center; gap: 12px; }
+  .bigseal {
+    flex: none; width: 46px; height: 46px; border: 2.5px solid #E5484D; border-radius: 8px;
+    color: #E5484D; background: rgba(229,72,77,.07); transform: rotate(-8deg);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "DFKai-SB", "KaiTi", serif; font-weight: bold; font-size: 15px; line-height: 1.05;
+    text-align: center; letter-spacing: 1px;
+  }
+  .realm { font-family: "DFKai-SB", "KaiTi", serif; font-size: 32px; font-weight: bold; letter-spacing: 3px; line-height: 1.1; }
+  .sub { font-size: 13px; color: #8A7658; margin-top: 2px; }
+  .xpline { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 5px; }
+  .xpline b { font-size: 20px; }
+  .xpline .of { color: #8A7658; font-size: 14px; }
+  .bar { height: 14px; border-radius: 7px; background: #EADFC2; border: 1px solid #D8C69C; overflow: hidden; }
+  .fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #F5B82E, #F8CF5E); width: 0; transition: width .5s; }
+  .left { margin-top: 6px; font-size: 15px; color: #2F8A6C; font-weight: bold; }
+  .barwrap { position: relative; }
+  .mark { position: absolute; top: 0; height: 14px; width: 2px; background: rgba(120,90,40,.45); }
+  .marks { position: relative; height: 16px; margin-top: 2px; font-size: 11px; color: #8A7658; }
+  .marks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .marks span.on { color: #C9901A; font-weight: bold; }
+
+  /* 今天的修為 */
+  .day b { font-size: 20px; }
+  .rows { margin-top: 6px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .row .nm { flex: none; width: 96px; }
+  .row .tr { flex: 1; height: 9px; border-radius: 5px; background: #EADFC2; overflow: hidden; }
+  .row .tr i { display: block; height: 100%; border-radius: 5px; background: #59C9A5; }
+  .row.cap .tr i { background: #F5B82E; }
+  .row.cap.full .tr i { background: #C9901A; }
+  .row .v { flex: none; width: 74px; text-align: right; color: #6B5A44; font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12px; color: #8A7658; margin: 8px 0 2px; }
+  .late { margin-top: 8px; padding: 6px 10px; border-radius: 8px; background: #F3E3DF; color: #9A3B34; font-size: 13px; }
+  .week { display: flex; align-items: flex-end; gap: 6px; height: 96px; margin-top: 4px; }
+  .week .c { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+  .week .c i { display: block; width: 100%; max-width: 34px; border-radius: 4px 4px 0 0; background: #D8C69C; min-height: 2px; }
+  .week .c.now i { background: #F5B82E; }
+  .week .c .x { font-size: 11px; color: #6B5A44; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+  .week .c .d { font-size: 11px; color: #8A7658; margin-top: 3px; }
+
+  h2 {
+    font-family: "DFKai-SB", "KaiTi", serif; font-size: 19px; margin: 16px 0 8px;
+    border-top: 1px dashed #C9B48A; padding-top: 12px;
+  }
+
+  /* 2. 修煉成果 */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .tile {
+    background: #FFFBEF; border: 1px solid #E2D2AE; border-radius: 10px;
+    padding: 8px 4px 7px; text-align: center; min-width: 0;
+  }
+  .tile .n { font-size: 22px; font-weight: bold; line-height: 1.15; word-break: keep-all; }
+  .tile .n small { font-size: 12px; font-weight: normal; color: #8A7658; margin: 0 1px; }
+  .tile .l { font-size: 12px; color: #8A7658; margin-top: 3px; }
+
+  /* 3. 九重境界 */
+  ol { list-style: none; margin: 0; padding: 0; }
+  ol li {
+    display: flex; align-items: center; gap: 10px; padding: 7px 9px; margin-bottom: 5px;
+    border-radius: 9px; border: 1px solid #E2D2AE; background: #FFFBEF;
+  }
+  ol li .mk {
+    flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: bold; border: 2px solid #C9B48A; color: #B5A27E; background: #F4ECD6;
+  }
+  ol li.got .mk { border-color: #C9901A; background: #F5B82E; color: #fff; }
+  ol li .bd { flex: 1; min-width: 0; }
+  ol li .nm { font-family: "DFKai-SB", "KaiTi", serif; font-size: 17px; font-weight: bold; }
+  ol li .nd { font-size: 12px; color: #8A7658; margin-left: 6px; font-family: "Microsoft JhengHei", sans-serif; font-weight: normal; }
+  ol li .ul { font-size: 13px; color: #6B5A44; line-height: 1.35; word-break: break-all; }
+  ol li .tag { flex: none; font-size: 12px; color: #8A7658; text-align: right; }
+  ol li.cur { border: 2px solid #59C9A5; background: #ECF8F1; padding: 6px 8px; }
+  ol li.cur .tag { color: #2F8A6C; font-weight: bold; }
+  ol li.lock { background: #F3ECDA; border-color: #E4D8BB; }
+  ol li.lock .nm, ol li.lock .ul { color: #A8987A; }
+
+  /* 4. 修為從哪來 */
+  ul.src { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  ul.src li { display: flex; gap: 8px; padding: 5px 2px; border-bottom: 1px dotted #DCCBA6; }
+  ul.src li:last-child { border-bottom: 0; }
+  ul.src .w { flex: 1; min-width: 0; }
+  ul.src .g { flex: none; color: #2F8A6C; font-weight: bold; }
+
+  .foot { margin-top: 16px; text-align: center; }
+  button {
+    font: inherit; color: #4A3A2A; cursor: pointer; border-radius: 10px;
+    border: 2px solid #C9901A; background: #F5B82E; padding: 8px 40px; font-size: 16px; font-weight: bold;
+  }
+  button:hover { background: #F8C752; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="bigseal" id="seal">修<br>煉</div>
+  <div>
+    <div class="realm" id="realm"></div>
+    <div class="sub">修煉紀錄</div>
+  </div>
+</div>
+<div class="xpline"><span><span id="xpline-label">修為 </span><b id="xp"></b></span><span class="of" id="of"></span></div>
+<div class="barwrap"><div class="bar"><div class="fill" id="fill"></div></div><div id="markbox"></div></div>
+<div class="marks" id="marks"></div>
+<div class="left" id="left"></div>
+
+<h2>今天的修為</h2>
+<div class="day">今天 <b id="dayxp"></b> 修為</div>
+<div class="rows" id="by"></div>
+<div class="hint">每日上限（滿了照樣能用、能玩，只是不再加修為）</div>
+<div class="rows" id="caps"></div>
+<div class="late" id="late" hidden>現在過了宵禁時間：熬夜用電腦不長修為，早點歇息。</div>
+
+<h2>近七天</h2>
+<div class="week" id="week"></div>
+
+<h2>修煉成果</h2>
+<div class="grid" id="grid"></div>
+
+<h2>本命技能</h2>
+<ol id="skills"></ol>
+
+<h2>九重境界</h2>
+<ol id="realms"></ol>
+
+<h2>修為從哪來</h2>
+<ul class="src" id="src"></ul>
+
+<div class="foot"><button id="close">關閉</button></div>
+
+<script>
+(function () {
+  if (typeof window.ui === 'undefined') {   // 瀏覽器預覽用的假資料（網址加 #done 看圓滿）
+    const NAMES = ['煉氣', '築基', '金丹', '元嬰', '化神', '煉虛', '合體', '大乘', '渡劫'];
+    const NEED = [0, 100, 400, 1000, 1600, 2400, 3300, 4400, 5200];
+    const UNL = ['點、拖、甩、吟詩', '傳音符提醒', '今日三件事', '起身休息提醒', '護眼遠眺', '御劍飛行', '天雷閃躲', '出招', '全部功法'];
+    function fake() {
+      const done = location.hash === '#done' || window.previewDone === true;
+      const xp = done ? 6000 : 1234, realm = done ? 8 : 3;
+      return { records: {
+        realm, realmName: NAMES[realm], done, xp, title: done ? '飛升第二重天' : NAMES[realm] + '中期',
+        marks: done ? [] : [1, 2, 3].map((k) => ({ name: ['', '中期', '後期', '巔峰'][k], at: NEED[realm] + (NEED[realm + 1] - NEED[realm]) * k / 4 })),
+        heaven: { n: done ? 2 : 0, max: 9, step: 1500, merit: done ? 3620 : 0, into: done ? 620 : 0 },
+        today: { total: 412, by: [{ name: '專注工作', xp: 260 }, { name: '今日三件事', xp: 90 }, { name: '切磋與小遊戲', xp: 32 }, { name: '起身休息', xp: 30 }] },
+        week: [320, 610, 0, 0, 540, 780, 412].map((v, i) => ({ date: '2026-11-' + (13 + i), xp: v, min: v })),
+        caps: [{ name: '專注工作', used: 260, max: 480 }, { name: '切磋與小遊戲', used: 32, max: 60 }, { name: '摸頭', used: 30, max: 30 }, { name: '靈丹', used: 30, max: 90 }],
+        late: false,
+        skills: [{ kind: '絕技', name: '鈴音鎮魂', desc: '搖響師父的鈴鐺，音波一圈圈盪開；心魔在場時直接震散', need: '金丹', got: true },
+          { kind: '奧義', name: '九命貓影', desc: '化出三道貓影繞身疾走', need: '合體', got: done },
+          { kind: '天賦', name: '守山', desc: '你離開時牠閉關的修為上限 120 → 200', need: '', got: true }],
+        cur: done ? 6000 : NEED[realm], next: done ? 6000 : NEED[realm + 1],
+        realms: NAMES.map((name, i) => ({ name, need: NEED[i], unlock: UNL[i], got: xp >= NEED[i] })),
+        stats: done ? { days: 64, streak: 12, bestStreak: 20, todayMin: 312, totalMin: 18420, todosDone: 150, allDone: 41, breaks: 220, gazes: 380, dodges: 27, strikes: 96, demons: 14 }
+                    : { days: 3, streak: 3, bestStreak: 3, todayMin: 125, totalMin: 980, todosDone: 7, allDone: 2, breaks: 5, gazes: 9, dodges: 1, strikes: 0, demons: 1 },
+        sources: [
+          { what: '在電腦前用（離開不算）', gain: '每分鐘 +1' },
+          { what: '劃掉一件今日要事', gain: '+20' },
+          { what: '三件事全部完成', gain: '再 +50' },
+          { what: '起身休息', gain: '+10' },
+          { what: '護眼遠眺 20 秒', gain: '+5' },
+        ],
+      } };
+    }
+    window.ui = { get: async () => fake(), close: () => console.log('ui.close'), resize: () => {},
+      onRefresh: (fn) => { window.addEventListener('hashchange', fn); window.addEventListener('preview-refresh', fn); } };
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const num = (v) => Math.max(0, Math.round(Number(v) || 0));
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  // 數字＋小單位，例如「2 小時 5 分」
+  function numParts(parts) {
+    const box = el('div', 'n');
+    parts.forEach(([n, unit]) => { box.appendChild(document.createTextNode(String(n))); if (unit) box.appendChild(el('small', null, unit)); });
+    return box;
+  }
+  function hm(min) {
+    min = num(min);
+    const h = Math.floor(min / 60), m = min % 60;
+    if (!h) return [[m, '分']];
+    if (!m) return [[h, '小時']];
+    return [[h, '小時'], [m, '分']];
+  }
+
+  async function render() {
+    const d = await window.ui.get();
+    const r = (d && d.records) || {};
+    const realms = Array.isArray(r.realms) ? r.realms : [];
+    const xp = num(r.xp), cur = num(r.cur), next = num(r.next);
+    const idx = num(r.realm);
+    const m_at = (m) => m.at;
+
+    // 1. 標題與進度（圓滿之後進度條改成功德：滿一條飛升一重天）
+    const hv = r.heaven || {}, fmt = (v) => num(v).toLocaleString('zh-TW');
+    $('realm').textContent = String(r.title || (r.done ? '渡劫圓滿' : String(r.realmName || '') + '期'));
+    $('seal').textContent = '';
+    $('seal').append(document.createTextNode(r.done ? '圓' : '修'), el('br'), document.createTextNode(r.done ? '滿' : '煉'));
+    const markbox = $('markbox'), marks = $('marks'); markbox.textContent = ''; marks.textContent = '';
+    if (r.done) {
+      const top = num(hv.n) >= num(hv.max);
+      $('xpline-label').textContent = '功德 ';
+      $('xp').textContent = fmt(hv.merit);
+      $('of').textContent = top ? '九重天圓滿' : '本重 ' + fmt(hv.into) + ' ／ ' + fmt(hv.step);
+      $('fill').style.width = (top ? 100 : Math.min(100, num(hv.into) / Math.max(1, num(hv.step)) * 100)) + '%';
+      $('left').textContent = top ? '九重天到頂，功德仍會繼續累計' : '再 ' + fmt(num(hv.step) - num(hv.into)) + ' 功德，飛升第 ' + (num(hv.n) + 1) + ' 重天';
+    } else {
+      $('xpline-label').textContent = '修為 ';
+      $('xp').textContent = fmt(xp);
+      $('of').textContent = '／ ' + fmt(next);
+      const span = Math.max(1, next - cur), pct = Math.min(100, Math.max(0, (xp - cur) / span * 100));
+      $('fill').style.width = pct + '%';
+      (Array.isArray(r.marks) ? r.marks : []).forEach((m) => {
+        const at = Math.min(100, Math.max(0, (num(m.at) - cur) / span * 100));
+        const tick = el('div', 'mark'); tick.style.left = at + '%'; markbox.appendChild(tick);
+        const lab = el('span', xp >= num(m.at) ? 'on' : '', String(m.name || '')); lab.style.left = at + '%'; marks.appendChild(lab);
+      });
+      const nextMark = (Array.isArray(r.marks) ? r.marks : []).find((m) => xp < num(m.at));
+      const nx = realms[idx + 1];
+      $('left').textContent = (nextMark ? '再 ' + fmt(Math.ceil(num(m_at(nextMark)) - xp)) + ' 到' + String(nextMark.name) + '；' : '')
+        + '再 ' + fmt(Math.max(0, next - xp)) + ' 修為突破' + (nx ? String(nx.name) : '圓滿');
+    }
+
+    // 今天的修為：各來源、每日上限
+    const t = r.today || {};
+    $('dayxp').textContent = fmt(t.total);
+    const by = $('by'); by.textContent = '';
+    const list = Array.isArray(t.by) ? t.by : [], maxBy = Math.max(1, ...list.map((x) => num(x.xp)));
+    if (!list.length) by.appendChild(el('div', 'hint', '今天還沒有進帳，動動滑鼠就開始了'));
+    list.forEach((x) => {
+      const row = el('div', 'row'), tr = el('div', 'tr'), bar = el('i'); bar.style.width = (num(x.xp) / maxBy * 100) + '%'; tr.appendChild(bar);
+      row.append(el('span', 'nm', String(x.name || '')), tr, el('span', 'v', '+' + fmt(x.xp))); by.appendChild(row);
+    });
+    const caps = $('caps'); caps.textContent = '';
+    (Array.isArray(r.caps) ? r.caps : []).forEach((c) => {
+      const full = num(c.used) >= num(c.max);
+      const row = el('div', 'row cap' + (full ? ' full' : '')), tr = el('div', 'tr'), bar = el('i'); bar.style.width = Math.min(100, num(c.used) / Math.max(1, num(c.max)) * 100) + '%'; tr.appendChild(bar);
+      row.append(el('span', 'nm', String(c.name || '')), tr, el('span', 'v', full ? '已滿 ' + fmt(c.max) : fmt(c.used) + '／' + fmt(c.max))); caps.appendChild(row);
+    });
+    $('late').hidden = !r.late;
+
+    // 近七天
+    const wk = $('week'); wk.textContent = '';
+    const days = Array.isArray(r.week) ? r.week : [], maxDay = Math.max(1, ...days.map((x) => num(x.xp)));
+    days.forEach((x, i) => {
+      const c = el('div', 'c' + (i === days.length - 1 ? ' now' : '')), bar = el('i'); bar.style.height = Math.round(num(x.xp) / maxDay * 62) + 'px';
+      const md = String(x.date || '').split('-');
+      c.append(el('div', 'x', fmt(x.xp)), bar, el('div', 'd', i === days.length - 1 ? '今天' : (md.length === 3 ? Number(md[1]) + '/' + Number(md[2]) : ''))); wk.appendChild(c);
+    });
+
+    // 2. 修煉成果
+    const s = r.stats || {};
+    const tiles = [
+      ['修煉天數', [[num(s.days), '天']]],
+      ['連續修煉', [[num(s.streak), '天']]],
+      ['最長連續', [[num(s.bestStreak), '天']]],
+      ['今天在電腦前', hm(s.todayMin)],
+      ['累計修煉時間', hm(s.totalMin)],
+      ['劃掉的事', [[num(s.todosDone), '件']]],
+      ['三件全成的天數', [[num(s.allDone), '天']]],
+      ['起身休息', [[num(s.breaks), '次']]],
+      ['護眼遠眺', [[num(s.gazes), '次']]],
+      ['閃過天雷', [[num(s.dodges), '次']]],
+      ['出招次數', [[num(s.strikes), '次']]],
+      ['打散心魔', [[num(s.demons), '次']]],
+    ];
+    const grid = $('grid'); grid.textContent = '';
+    tiles.forEach(([label, parts]) => {
+      const t = el('div', 'tile'); t.append(numParts(parts), el('div', 'l', label)); grid.appendChild(t);
+    });
+
+    // 本命技能：絕技、奧義、天賦
+    const sk = $('skills'); sk.textContent = '';
+    (Array.isArray(r.skills) ? r.skills : []).forEach((x) => {
+      const li = el('li', x.got ? 'got' : 'lock');
+      li.appendChild(el('div', 'mk', String(x.kind || '').slice(0, 1)));
+      const bd = el('div', 'bd'); const nm = el('div', 'nm', String(x.name || '')); nm.appendChild(el('span', 'nd', String(x.kind || '')));
+      bd.append(nm, el('div', 'ul', String(x.desc || ''))); li.appendChild(bd);
+      if (!x.got) li.appendChild(el('div', 'tag', String(x.need || '') + '解鎖'));
+      sk.appendChild(li);
+    });
+
+    // 3. 九重境界
+    const ol = $('realms'); ol.textContent = '';
+    realms.forEach((it, i) => {
+      const got = !!it.got, isCur = !r.done && i === idx;
+      const li = el('li', got ? 'got' : 'lock');
+      if (isCur || (r.done && i === realms.length - 1)) li.classList.add('cur');
+      li.appendChild(el('div', 'mk', got ? '✓' : String(i + 1)));
+      const bd = el('div', 'bd');
+      const nm = el('div', 'nm', String(it.name || ''));
+      nm.appendChild(el('span', 'nd', num(it.need) ? num(it.need).toLocaleString('zh-TW') + ' 修為' : '起點'));
+      bd.append(nm, el('div', 'ul', '解鎖：' + String(it.unlock || '')));
+      li.appendChild(bd);
+      let tag = '';
+      if (isCur) tag = '目前';
+      else if (r.done && i === realms.length - 1) tag = num(hv.n) ? '飛升 ' + num(hv.n) + ' 重天' : '圓滿';
+      else if (!got) tag = '還差 ' + Math.max(0, num(it.need) - xp).toLocaleString('zh-TW');
+      if (tag) li.appendChild(el('div', 'tag', tag));
+      ol.appendChild(li);
+    });
+
+    // 4. 修為從哪來
+    const ul = $('src'); ul.textContent = '';
+    (Array.isArray(r.sources) ? r.sources : []).forEach((x) => {
+      const li = el('li'); li.append(el('span', 'w', String(x.what || '')), el('span', 'g', String(x.gain || ''))); ul.appendChild(li);
+    });
+  }
+
+  $('close').addEventListener('click', () => window.ui.close());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.ui.close(); });
+  window.ui.onRefresh(render);
+  render();
+})();
+</script>
+</body>
+</html>

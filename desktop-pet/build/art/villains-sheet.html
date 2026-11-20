@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- 反派一覽：每種反派在 come / fight / flee / down / 受傷 的樣子，深色與淺色背景各一組，最下面放一隻狐仙比大小 -->
+<body style="margin:0;background:#222;overflow:hidden">
+<canvas id="c"></canvas>
+<script src="../../draw.js"></script>
+<script src="../../villains.js"></script>
+<script>
+const TYPES = ['wolf', 'rat', 'crow', 'monkey', 'owl', 'jiao', 'heart'];
+const COLS = [['come', 'come', false], ['fight', 'fight', false], ['flee', 'flee', false], ['down', 'down', false], ['hurt', 'fight', true], ['steal', 'steal', false]];
+const Q = new URLSearchParams(location.search), S = +(Q.get('s') || 1), CW = 150 * S, CH = 170 * S, LW = 92, TOP = 34;
+const ONLY = Q.get('types') ? Q.get('types').split(',') : null, BGS = Q.get('bg') === 'light' ? [[0, '#FBF3DC']] : Q.get('bg') === 'dark' ? [[0, '#23202E']] : [[0, '#23202E'], [1, '#FBF3DC']];
+const cv = document.getElementById('c');
+const ROWS = (ONLY || TYPES).concat(ONLY ? [] : ['pet']);
+const W = LW + CW * COLS.length * BGS.length + 10, H = TOP + CH * ROWS.length + 10;
+cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const FONT = '"Microsoft JhengHei","PingFang TC",sans-serif';
+ctx.fillStyle = '#FBF3DC'; ctx.fillRect(0, 0, W, H);
+for (const [bi, bg] of BGS) {
+  const x0 = LW + bi * CW * COLS.length;
+  ctx.fillStyle = bg; ctx.fillRect(x0, 0, CW * COLS.length, H);
+  ctx.fillStyle = bg === '#FBF3DC' ? '#4A3A2A' : '#E8DCC0'; ctx.font = '600 14px ' + FONT; ctx.textAlign = 'center';
+  COLS.forEach(([lab], ci) => ctx.fillText(lab, x0 + ci * CW + CW / 2, 22));
+}
+ROWS.forEach((type, ri) => {
+  const y = TOP + ri * CH;
+  ctx.fillStyle = '#4A3A2A'; ctx.font = '600 15px ' + FONT; ctx.textAlign = 'left';
+  const info = (window.VILLAIN_INFO || {})[type];
+  ctx.fillText(info ? info.name : '狐仙(比例)', 8, y + CH / 2);
+  ctx.font = '12px ' + FONT; ctx.fillText(type + (info && info.boss ? ' 頭目' : ''), 8, y + CH / 2 + 18);
+  for (let bi = 0; bi < BGS.length; bi++) COLS.forEach(([lab, state, hurt], ci) => {
+    const fx = LW + (bi * COLS.length + ci) * CW + CW / 2, fy = y + CH - 22 * S;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(128,128,128,0.25)'; ctx.beginPath(); ctx.moveTo(fx - CW / 2 + 6, fy); ctx.lineTo(fx + CW / 2 - 6, fy); ctx.stroke();
+    if (type === 'pet') {
+      ctx.translate(fx - 100 * S, fy - 188 * S); ctx.scale(S, S);
+      drawPet(ctx, { state: 'idle', dir: 1, t: 1, st: 1, outfit: { species: 'fox', hat: 'none', robe: 'qing', gear: 'none' } });
+    } else {
+      ctx.translate(fx, fy); ctx.scale(S, S);
+      drawVillain(ctx, type, { t: 1.3 + ci * 0.37, st: state === 'down' ? 2 : state === 'fight' && !hurt ? 0.6 : 1.1, dir: 1, state, hurt, hp: 3, max: 10 });
+    }
+    ctx.restore();
+  });
+});
+document.title = 'ready'; window.SHEET_SIZE = [W, H];
+</script>

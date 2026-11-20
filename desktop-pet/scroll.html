@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>今日三件事</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body {
+    width: 240px; padding: 6px 4px; overflow: hidden; user-select: none;
+    color: #4A3A2A; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif; font-size: 15px;
+  }
+  .rod {
+    height: 16px; border-radius: 8px; position: relative; z-index: 2;
+    background: linear-gradient(#B07A45, #8A5A2E 45%, #6B4220);
+    box-shadow: 0 2px 3px rgba(60,35,15,.35);
+  }
+  .rod::before, .rod::after {
+    content: ''; position: absolute; top: -2px; width: 14px; height: 20px; border-radius: 6px;
+    background: linear-gradient(#E0B061, #A8742E); border: 1px solid #6B4220;
+  }
+  .rod::before { left: -3px; } .rod::after { right: -3px; }
+  .paper {
+    margin: -4px 8px; padding: 10px 12px 10px; position: relative; z-index: 1;
+    background:
+      repeating-linear-gradient(0deg, rgba(150,110,60,.035) 0 2px, transparent 2px 5px),
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.6), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(200,160,100,.22), transparent 60%),
+      #FBF3DC;
+    box-shadow: inset 6px 0 8px -6px rgba(120,80,30,.35), inset -6px 0 8px -6px rgba(120,80,30,.35);
+  }
+  header { -webkit-app-region: drag; cursor: move; text-align: center; padding: 4px 0 8px; border-bottom: 1px solid rgba(74,58,42,.25); margin-bottom: 6px; }
+  header .t { font-family: "DFKai-SB", "KaiTi", serif; font-size: 21px; font-weight: bold; letter-spacing: 2px; }
+  header .d { font-size: 12px; color: #8A7658; }
+  button, input, .row { -webkit-app-region: no-drag; }
+  .row {
+    display: flex; align-items: center; gap: 9px; padding: 8px 4px; border-radius: 8px;
+    cursor: pointer; position: relative; min-height: 42px;
+  }
+  .row:hover { background: rgba(89,201,165,.12); }
+  .seal {
+    flex: none; width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid #4A3A2A; background: #FFFBEF; position: relative;
+  }
+  .row.done .seal { border-color: #E5484D; background: #E5484D; }
+  .row.done .seal::after {
+    content: ''; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px;
+    border: solid #fff; border-width: 0 3px 3px 0; transform: rotate(45deg);
+  }
+  .txt { flex: 1; min-width: 0; word-break: break-all; line-height: 1.35; position: relative; }
+  .row.done .txt { color: #8A7658; text-decoration: line-through; text-decoration-color: #4A3A2A; text-decoration-thickness: 2px; }
+  .stamp {
+    flex: none; width: 30px; height: 30px; border: 2px solid #E5484D; border-radius: 6px;
+    color: #E5484D; font-family: "DFKai-SB", "KaiTi", serif; font-weight: bold; font-size: 20px;
+    display: flex; align-items: center; justify-content: center; transform: rotate(-12deg);
+    background: rgba(229,72,77,.06); opacity: .9;
+  }
+  .stamp.anim { animation: stamp .45s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes stamp { 0% { transform: scale(2.4) rotate(-30deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1) rotate(-12deg); opacity: .9; } }
+  .allDone { text-align: center; color: #2F8A6C; font-weight: bold; padding: 6px 0 2px; font-family: "DFKai-SB", "KaiTi", serif; font-size: 17px; }
+  .foot { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+  button {
+    font: inherit; font-size: 14px; color: #4A3A2A; cursor: pointer; border-radius: 9px;
+    border: 2px solid #C9B48A; background: #FFF7E2; padding: 5px 14px;
+  }
+  button:hover { background: #FFF1CC; }
+  button.main { background: #F5B82E; border-color: #C9901A; font-weight: bold; }
+  button.main:hover { background: #F8C752; }
+  input[type=text] {
+    width: 100%; font: inherit; font-size: 15px; color: #4A3A2A; margin: 4px 0;
+    padding: 8px 9px; border: 2px solid #C9B48A; border-radius: 9px; background: #FFFBEF; outline: none;
+  }
+  input[type=text]:focus { border-color: #59C9A5; }
+  .num { font-size: 12px; color: #8A7658; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="rod"></div>
+<div class="paper">
+  <header><div class="t">今日三件事</div><div class="d" id="date"></div></header>
+  <div id="main"></div>
+</div>
+<div class="rod"></div>
+
+<script>
+(function () {
+  if (typeof window.ui === 'undefined') {   // 瀏覽器預覽用的假資料
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    let todos = { date: d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()),
+      items: [{ text: '交出浴室大樣圖', done: true }, { text: '回業主電話', done: false }, { text: '', done: false }] };
+    if (location.hash === '#empty') todos = { date: '2026-01-01', items: [] };
+    window.ui = {
+      get: async () => ({ notes: [], todos: JSON.parse(JSON.stringify(todos)) }),
+      saveNotes: async (n) => n,
+      saveTodos: async (t) => (todos = JSON.parse(JSON.stringify(t))),
+      toggle: async (i) => { todos.items[i].done = !todos.items[i].done; return JSON.parse(JSON.stringify(todos)); },
+      close: () => console.log('ui.close'), resize: (h) => console.log('ui.resize', h), onRefresh: () => {},
+    };
+  }
+
+  const main = document.getElementById('main');
+  const pad = (n) => String(n).padStart(2, '0');
+  function today() { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function blank() { return [0, 1, 2].map(() => ({ text: '', done: false })); }
+  function norm(t) {
+    const items = blank();
+    if (t && t.date === today() && Array.isArray(t.items)) {
+      t.items.slice(0, 3).forEach((it, i) => { items[i] = { text: String((it && it.text) || ''), done: !!(it && it.done) }; });
+    }
+    return items;
+  }
+  const hasAny = (items) => items.some((it) => it.text.trim());
+
+  let items = blank();
+  let mode = 'edit';
+  let justStamped = -1;
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fit() { requestAnimationFrame(() => window.ui.resize(Math.ceil(document.body.scrollHeight))); }
+
+  function render() {
+    const d = new Date();
+    document.getElementById('date').textContent = (d.getMonth() + 1) + '月' + d.getDate() + '日';
+    main.textContent = '';
+    if (mode === 'view') renderView(); else renderEdit();
+    fit();
+  }
+
+  function renderView() {
+    items.forEach((it, i) => {
+      if (!it.text.trim()) return;
+      const row = el('div', 'row' + (it.done ? ' done' : ''));
+      row.appendChild(el('div', 'seal'));
+      row.appendChild(el('div', 'txt', it.text));
+      if (it.done) row.appendChild(el('div', 'stamp' + (i === justStamped ? ' anim' : ''), '成'));
+      row.title = it.done ? '再按一下取消完成' : '做完了就按一下';
+      row.addEventListener('click', async () => {
+        const res = await window.ui.toggle(i);
+        const nextItems = res ? norm(res) : items;
+        justStamped = nextItems[i].done && !items[i].done ? i : -1;
+        items = nextItems;
+        render();
+      });
+      main.appendChild(row);
+    });
+    const filled = items.filter((it) => it.text.trim());
+    if (filled.length && filled.every((it) => it.done)) main.appendChild(el('div', 'allDone', '三件都完成了！'));
+    const foot = el('div', 'foot');
+    const edit = el('button', '', '改'); edit.addEventListener('click', () => { mode = 'edit'; render(); });
+    const hide = el('button', '', '收起'); hide.addEventListener('click', () => window.ui.close());
+    foot.append(edit, hide); main.appendChild(foot);
+    justStamped = -1;
+  }
+
+  function renderEdit() {
+    const ph = ['第一件最重要的事', '第二件事', '第三件事'];
+    const inputs = items.map((it, i) => {
+      main.appendChild(el('div', 'num', (i + 1) + '.'));
+      const inp = el('input'); inp.type = 'text'; inp.maxLength = 24; inp.placeholder = ph[i]; inp.value = it.text;
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (i < 2) inputs[i + 1].focus(); else save(); } });
+      main.appendChild(inp); return inp;
+    });
+    const foot = el('div', 'foot');
+    const ok = el('button', 'main', '寫好了'); ok.addEventListener('click', save);
+    const cancel = el('button', '', '取消');
+    cancel.addEventListener('click', () => { if (hasAny(items)) { mode = 'view'; render(); } else window.ui.close(); });
+    foot.append(ok, cancel); main.appendChild(foot);
+    setTimeout(() => inputs[0].focus(), 0);
+
+    async function save() {
+      const next = inputs.map((inp, i) => {
+        const text = inp.value.trim().slice(0, 24);
+        return { text, done: !!text && text === items[i].text && items[i].done };
+      });
+      const res = await window.ui.saveTodos({ date: today(), items: next });
+      items = res && res.items ? norm(res) : next;
+      mode = hasAny(items) ? 'view' : 'edit';
+      render();
+    }
+  }
+
+  async function load(keepMode) {
+    const d = await window.ui.get();
+    items = norm(d && d.todos);
+    if (!keepMode || !hasAny(items)) mode = hasAny(items) ? 'view' : 'edit';
+    render();
+  }
+  window.ui.onRefresh(() => { if (mode === 'view') load(true); });   // 編輯中不打斷
+  load(false);
+})();
+</script>
+</body>
+</html>

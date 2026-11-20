@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>比劍</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+  body { font-family: "Microsoft JhengHei", "PingFang TC", sans-serif; color: #4A3A2A; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #end {
+    position: fixed; left: 30px; top: 0; width: 300px; height: 100%;
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  }
+  #end.show { display: flex; }
+  #endTitle { font-family: "DFKai-SB", "KaiTi", serif; font-size: 34px; font-weight: bold; text-shadow: 0 0 6px #FFF8E6, 0 0 2px #FFF8E6; }
+  #endInfo { font-size: 16px; text-align: center; line-height: 1.5; }
+  #end button {
+    font: inherit; font-size: 19px; font-weight: bold; color: #4A3A2A; cursor: inherit;
+    width: 180px; padding: 9px 0; border-radius: 12px; border: 2px solid #C9B48A; background: #FFF7E2;
+  }
+  #end button:hover { background: #FFF1CC; }
+  #again { background: #F5B82E !important; border-color: #C9901A !important; }
+  #again:hover { background: #F8C752 !important; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="end">
+  <div id="endTitle">勝！</div>
+  <div id="endInfo"></div>
+  <button id="again">再比一場</button>
+  <button id="quit">收劍</button>
+</div>
+<script src="draw.js"></script>
+<script>
+(async function () {
+  // ---- 沒有 Electron 時（一般瀏覽器預覽）用假的 game ----
+  const STUB = !window.game;
+  if (STUB) {
+    const q = new URLSearchParams(location.search);
+    document.documentElement.style.background = '#2B2F36';
+    window.game = {
+      info: async () => ({ species: q.get('species') || 'fox', hat: q.get('hat') || 'none', robe: q.get('robe') || 'qing', gear: 'none', realm: +(q.get('realm') || 2) }),
+      result: (o) => { console.log('game.result', JSON.stringify(o)); window.__lastResult = o; },
+      close: () => { console.log('game.close'); document.body.innerHTML = '<p style="color:#ccc;text-align:center;margin-top:150px">（視窗已關閉）</p>'; },
+      setClickable: (on) => console.log('setClickable', on),
+    };
+  }
+  const game = window.game;
+  game.setClickable(true);
+
+  const W = 600, H = 360;
+  const INK = '#4A3A2A', GOLD = '#F5B82E', QI = '#59C9A5', RED = '#E5484D', PAPER = '#FBF3DC';
+  const NAMES = { cat: '靈貓', fox: '狐仙', rabbit: '玉兔', panda: '熊貓', dragon: '小青龍' };
+  const FONT = '"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif';
+
+  let info = {};
+  try { info = (await game.info()) || {}; } catch (e) { info = {}; }
+  const realm = Math.max(0, Math.min(8, +info.realm || 0));
+  const outfit = { species: info.species || 'cat', hat: info.hat || 'none', robe: info.robe || 'qing', gear: info.gear || 'none', realm };
+  const petName = NAMES[outfit.species] || '靈寵';
+
+  // 速度隨境界：越高越快，但預告至少 0.45 秒
+  const TELE = Math.max(0.45, 0.72 - realm * 0.033);
+  const GRACE = 0.22;                       // 預告結束後還能擋的寬限
+  const PAUSE = Math.max(0.55, 0.95 - realm * 0.05);
+  const OPEN_BLOCK = 1.5, OPEN_MISS = 1.0;  // 破綻時間（擋下比較長）
+  const PLAYER_MAX = 5, PET_MAX = 40;
+
+  // ---- 版面 ----
+  const LANES = [
+    { name: '上路', y0: 74, y1: 154 },
+    { name: '中路', y0: 154, y1: 234 },
+    { name: '下路', y0: 234, y1: 314 },
+  ];
+  const LX0 = 26, LX1 = 336;
+  const PS = 1.1, PX = 368, PY = 330 - 188 * PS;      // 靈寵畫在右邊，腳在 y=330
+  const PET_BOX = { x0: 380, y0: 176, x1: 584, y1: 344 };
+  const HAND = { x: PX + 66 * PS, y: PY + 150 * PS };
+
+  // ---- 畫布 ----
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  let sc = 1, ox = 0, oy = 0;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr);
+    sc = Math.min(innerWidth / W, innerHeight / H);
+    ox = (innerWidth - W * sc) / 2; oy = (innerHeight - H * sc) / 2;
+    ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * ox, dpr * oy);
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---- 劍形游標 ----
+  function swordCursor(glow) {
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const g = c.getContext('2d');
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    if (glow) { g.shadowColor = '#7FFFD4'; g.shadowBlur = 6; }
+    // 劍身：尖端在左上 (4,4)
+    g.beginPath(); g.moveTo(3, 3); g.lineTo(10, 5.5); g.lineTo(22, 18); g.lineTo(18, 22); g.lineTo(5.5, 10); g.closePath();
+    g.fillStyle = glow ? '#E6FFF6' : '#E4F1F6'; g.fill();
+    g.lineWidth = 1.6; g.strokeStyle = glow ? '#2F9C7E' : INK; g.stroke();
+    g.shadowBlur = 0;
+    g.beginPath(); g.moveTo(5, 5); g.lineTo(20, 20); g.lineWidth = 1; g.strokeStyle = glow ? '#59C9A5' : '#9FB7C2'; g.stroke();
+    // 護手（金）
+    g.beginPath(); g.moveTo(15, 26); g.lineTo(26, 15); g.lineWidth = 4.5; g.strokeStyle = INK; g.stroke();
+    g.lineWidth = 2.8; g.strokeStyle = GOLD; g.stroke();
+    // 劍柄與劍穗
+    g.beginPath(); g.moveTo(21.5, 21.5); g.lineTo(28, 28); g.lineWidth = 4; g.strokeStyle = INK; g.stroke();
+    g.lineWidth = 2.2; g.strokeStyle = '#8B5A3C'; g.stroke();
+    g.beginPath(); g.arc(29, 29, 2, 0, Math.PI * 2); g.fillStyle = RED; g.fill();
+    return 'url(' + c.toDataURL() + ') 4 4, crosshair';
+  }
+  const CUR = swordCursor(false), CUR_GLOW = swordCursor(true);
+  let curNow = '';
+  function setCursor(glow) { const v = glow ? CUR_GLOW : CUR; if (v !== curNow) { curNow = v; document.body.style.cursor = v; } }
+  setCursor(false);
+
+  // ---- 遊戲狀態 ----
+  let S;
+  let maxCombo = 0, blocks = 0, lastWin = false, finishedOne = false, reported = false;
+  function newMatch() {
+    S = {
+      phase: 'intro', pt: 0, php: PLAYER_MAX, ehp: PET_MAX,
+      lane: 1, blocked: false, lock: 0, charge: false, combo: 0, openLen: OPEN_BLOCK,
+      petState: 'idle', petSt: 0, shake: 0, hurtFlash: 0, petKick: 0, bubble: null, endAt: 0,
+    };
+    document.getElementById('end').classList.remove('show');
+    setCursor(false);
+  }
+  const fx = [];      // 火花、飄字
+  function petSet(st) { S.petState = st; S.petSt = 0; }
+  function sparks(x, y, n, col) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 220;
+      fx.push({ k: 'sp', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: 0.35 + Math.random() * 0.3, age: 0, col: col || (i % 2 ? GOLD : '#FFF2B0') });
+    }
+  }
+  function floatText(x, y, text, col, size) { fx.push({ k: 'tx', x, y, text, col, size: size || 26, life: 0.8, age: 0 }); }
+
+  function startAttack() {
+    S.phase = 'tele'; S.pt = 0; S.blocked = false; S.lock = 0;
+    S.lane = Math.floor(Math.random() * 3);
+    petSet('idle');
+  }
+  function openWindow(len) { S.phase = 'open'; S.pt = 0; S.openLen = len; S.combo = 0; }
+  function endMatch(win) {
+    S.phase = 'end'; S.pt = 0; lastWin = win; finishedOne = true;
+    setCursor(false);
+    if (win) { petSet('dizzy'); S.bubble = null; }
+    else { petSet('happy'); S.bubble = { text: '承讓承讓～', t: 0 }; }
+    setTimeout(() => {
+      const end = document.getElementById('end');
+      document.getElementById('endTitle').textContent = win ? '你贏了！' : '惜敗一招';
+      document.getElementById('endTitle').style.color = win ? '#2F8A6C' : RED;
+      document.getElementById('endInfo').innerHTML = '最高連擊 ×' + maxCombo + '　擋下 ' + blocks + ' 招';
+      end.classList.add('show');
+    }, 900);
+  }
+
+  // ---- 輸入 ----
+  let lastInput = performance.now();
+  function toLocal(e) { return { x: (e.clientX - ox) / sc, y: (e.clientY - oy) / sc }; }
+  function inPet(p) { return p.x >= PET_BOX.x0 && p.x <= PET_BOX.x1 && p.y >= PET_BOX.y0 && p.y <= PET_BOX.y1; }
+  function laneAt(p) {
+    if (p.x < LX0 - 10 || p.x > LX1 + 30) return -1;
+    for (let i = 0; i < 3; i++) if (p.y >= LANES[i].y0 && p.y < LANES[i].y1) return i;
+    return -1;
+  }
+  cv.addEventListener('pointerdown', (e) => {
+    lastInput = performance.now();
+    if (e.button !== 0) return;
+    const p = toLocal(e);
+    if ((S.phase === 'tele' || S.phase === 'strike') && !S.blocked && S.lock <= 0) {
+      const l = laneAt(p);
+      if (l === S.lane) {
+        S.blocked = true; blocks++; S.charge = true;
+        sparks(p.x, p.y, 16); floatText(p.x, p.y - 20, '鏘！', GOLD, 36);
+        petSet('startle'); S.petKick = 1;
+        setCursor(true);
+        S.phase = 'blockpause'; S.pt = 0;
+      } else if (l >= 0) {
+        S.lock = 0.3; floatText(p.x, p.y - 10, '不是這路', '#8A7658', 18);
+      }
+    } else if (S.phase === 'open' && inPet(p)) {
+      S.combo++; maxCombo = Math.max(maxCombo, S.combo);
+      let dmg = 1;
+      if (S.charge) { dmg = 3; S.charge = false; setCursor(false); floatText(p.x, p.y - 34, '重擊！', QI, 34); sparks(p.x, p.y, 20, QI); }
+      S.ehp = Math.max(0, S.ehp - dmg);
+      sparks(p.x, p.y, 7);
+      floatText(p.x + (Math.random() - 0.5) * 20, p.y - 6, '-' + dmg, RED, 20);
+      petSet('startle'); S.petKick = 1;
+      if (S.ehp <= 0) endMatch(true);
+    }
+  });
+  addEventListener('keydown', (e) => { lastInput = performance.now(); if (e.key === 'Escape') finish(); });
+  document.getElementById('again').addEventListener('click', () => { lastInput = performance.now(); newMatch(); });
+  document.getElementById('quit').addEventListener('click', finish);
+  addEventListener('contextmenu', (e) => e.preventDefault());
+
+  function finish() {
+    if (reported) return; reported = true;
+    try { game.result({ game: 'duel', win: finishedOne ? lastWin : false, combo: maxCombo, blocks }); } catch (e) {}
+    try { game.close(); } catch (e) {}
+  }
+
+  // ---- 更新 ----
+  function update(dt) {
+    S.pt += dt; S.petSt += dt;
+    S.lock = Math.max(0, S.lock - dt);
+    S.shake = Math.max(0, S.shake - dt);
+    S.hurtFlash = Math.max(0, S.hurtFlash - dt);
+    S.petKick = Math.max(0, S.petKick - dt * 5);
+    if (S.bubble) S.bubble.t += dt;
+    if ((S.petState === 'startle' && S.petSt > 0.45) && S.phase !== 'end') petSet('idle');
+
+    if (S.phase === 'intro' && S.pt > 1.3) startAttack();
+    else if (S.phase === 'tele' && S.pt >= TELE) { S.phase = 'strike'; S.pt = 0; petSet('strike'); }
+    else if (S.phase === 'strike' && S.pt >= GRACE) {
+      // 沒擋到
+      S.php -= 1; S.shake = 0.35; S.hurtFlash = 0.35;
+      floatText(140, (LANES[S.lane].y0 + LANES[S.lane].y1) / 2, '中劍！', RED, 30);
+      if (S.php <= 0) endMatch(false);
+      else { petSet('idle'); openWindow(OPEN_MISS); }
+    }
+    else if (S.phase === 'blockpause' && S.pt >= 0.22) openWindow(OPEN_BLOCK);
+    else if (S.phase === 'open' && S.pt >= S.openLen) {
+      if (S.charge) { S.charge = false; setCursor(false); }
+      S.phase = 'rest'; S.pt = 0;
+    }
+    else if (S.phase === 'rest' && S.pt >= PAUSE) startAttack();
+    else if (S.phase === 'end') {
+      if (lastWin && S.petState === 'dizzy' && S.petSt > 1.5) { petSet('idle'); S.bubble = { text: '道友劍法高明！', t: 0 }; }
+    }
+
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i]; f.age += dt;
+      if (f.k === 'sp') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 500 * dt; }
+      else f.y -= 30 * dt;
+      if (f.age >= f.life) fx.splice(i, 1);
+    }
+    if (performance.now() - lastInput > 60000) finish();
+  }
+
+  // ---- 繪圖小工具 ----
+  function rrect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function outlinedText(text, x, y, size, col, align) {
+    ctx.font = 'bold ' + size + 'px ' + FONT; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(3, size / 6); ctx.strokeStyle = '#FFFDF4'; ctx.strokeText(text, x, y);
+    ctx.fillStyle = col; ctx.fillText(text, x, y);
+  }
+  function jadeBar(x, y, w, label, hp, max, col, right) {
+    ctx.font = 'bold 16px ' + FONT; ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK; ctx.textAlign = right ? 'right' : 'left';
+    ctx.fillText(label, right ? x + w : x, y);
+    const by = y + 12, bh = 14;
+    rrect(x, by, w, bh, 7); ctx.fillStyle = '#E9DFC4'; ctx.fill();
+    const f = Math.max(0, hp / max);
+    if (f > 0) {
+      const fw = Math.max(bh, w * f);
+      ctx.save(); rrect(right ? x + w - fw : x, by, fw, bh, 7); ctx.clip();
+      const g = ctx.createLinearGradient(0, by, 0, by + bh);
+      g.addColorStop(0, '#FFFFFF'); g.addColorStop(0.25, col); g.addColorStop(1, shade(col));
+      ctx.fillStyle = g; ctx.fillRect(x, by, w, bh);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x, by + 2, w, 3);
+      ctx.restore();
+    }
+    rrect(x, by, w, bh, 7); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    // 玉節
+    ctx.strokeStyle = 'rgba(74,58,42,0.35)'; ctx.lineWidth = 1;
+    const seg = max <= 10 ? max : 10;
+    for (let i = 1; i < seg; i++) { const sx = x + w * i / seg; ctx.beginPath(); ctx.moveTo(sx, by + 2); ctx.lineTo(sx, by + bh - 2); ctx.stroke(); }
+    ctx.font = 'bold 13px ' + FONT; ctx.fillStyle = INK; ctx.textAlign = right ? 'left' : 'right';
+    ctx.fillText(hp + ' / ' + max, right ? x : x + w, y);
+  }
+  function shade(hex) {
+    const n = parseInt(hex.slice(1), 16), r = (n >> 16) * 0.65, g = ((n >> 8) & 255) * 0.65, b = (n & 255) * 0.65;
+    return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')';
+  }
+  function drawSword(x, y, ang, len, glow) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (glow) { ctx.shadowColor = QI; ctx.shadowBlur = 14; }
+    ctx.beginPath(); ctx.moveTo(8, -4); ctx.lineTo(len - 10, -3.5); ctx.lineTo(len, 0); ctx.lineTo(len - 10, 3.5); ctx.lineTo(8, 4); ctx.closePath();
+    ctx.fillStyle = '#E4F1F6'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(len - 12, 0); ctx.lineWidth = 1; ctx.strokeStyle = '#9FB7C2'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -10); ctx.lineTo(6, 10); ctx.lineWidth = 6; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.lineWidth = 3.6; ctx.strokeStyle = GOLD; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-12, 0); ctx.lineWidth = 6; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.lineWidth = 3.6; ctx.strokeStyle = '#8B5A3C'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13, 0); ctx.quadraticCurveTo(-20, 6, -16, 14); ctx.lineWidth = 2.4; ctx.strokeStyle = RED; ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---- 畫面 ----
+  function draw(now) {
+    const t = now / 1000;
+    ctx.save();
+    ctx.clearRect(-ox / sc - 2, -oy / sc - 2, innerWidth / sc + 4, innerHeight / sc + 4);
+    if (S.shake > 0) ctx.translate((Math.random() - 0.5) * 14 * S.shake / 0.35, (Math.random() - 0.5) * 10 * S.shake / 0.35);
+
+    // 底：半透明羊皮紙擂台
+    rrect(6, 6, W - 12, H - 12, 22);
+    ctx.fillStyle = 'rgba(251,243,220,1)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#C9B48A'; ctx.stroke();
+    if (S.hurtFlash > 0) { rrect(6, 6, W - 12, H - 12, 22); ctx.fillStyle = 'rgba(229,72,77,' + (S.hurtFlash * 0.7) + ')'; ctx.fill(); }
+
+    // 血條
+    jadeBar(26, 24, 250, '你', S.php, PLAYER_MAX, QI, false);
+    jadeBar(324, 24, 250, petName, S.ehp, PET_MAX, GOLD, true);
+
+    // 三路
+    for (let i = 0; i < 3 && S.phase !== 'end'; i++) {
+      const L = LANES[i];
+      rrect(LX0, L.y0 + 3, LX1 - LX0, L.y1 - L.y0 - 6, 14);
+      ctx.fillStyle = 'rgba(201,180,138,0.10)'; ctx.fill();
+      ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(138,118,88,0.45)'; ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = 'bold 15px ' + FONT; ctx.fillStyle = 'rgba(138,118,88,0.8)'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(L.name, LX0 + 10, L.y0 + 18);
+    }
+
+    // 預告：紅光閃弧
+    if (S.phase === 'tele' || S.phase === 'strike') {
+      const L = LANES[S.lane], cy = (L.y0 + L.y1) / 2;
+      const p = S.phase === 'tele' ? S.pt / TELE : 1;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 28);
+      rrect(LX0, L.y0 + 3, LX1 - LX0, L.y1 - L.y0 - 6, 14);
+      ctx.fillStyle = 'rgba(229,72,77,' + (0.16 + 0.14 * pulse + 0.15 * p) + ')'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = RED; ctx.stroke();
+      // 劍光弧
+      ctx.save();
+      ctx.globalAlpha = 0.55 + 0.45 * pulse;
+      ctx.beginPath(); ctx.ellipse(LX1 + 6, cy, 64, 32, 0, Math.PI * 0.6, Math.PI * 1.4);
+      ctx.lineWidth = 8 + p * 6; ctx.strokeStyle = RED; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#FFE1E1'; ctx.stroke();
+      ctx.restore();
+      outlinedText(L.name + '！', 150, cy - 4, 36, RED);
+      // 剩餘時間條
+      const left = 1 - Math.min(1, p);
+      rrect(80, cy + 20, 140, 7, 3.5); ctx.fillStyle = 'rgba(74,58,42,0.18)'; ctx.fill();
+      if (left > 0) { rrect(80, cy + 20, 140 * left, 7, 3.5); ctx.fillStyle = RED; ctx.fill(); }
+    }
+
+    // 靈寵
+    ctx.save();
+    const kick = S.petKick * 10;
+    const lunge = S.phase === 'strike' ? -Math.sin(Math.min(1, S.pt / GRACE) * Math.PI) * 26 : (S.phase === 'tele' ? Math.min(1, S.pt / TELE) * 8 : 0);
+    let bow = 0;
+    if (S.phase === 'end' && lastWin && S.petState === 'idle') bow = Math.min(1, S.petSt / 0.4) * 0.28 * (S.petSt < 2.2 ? 1 : Math.max(0, 1 - (S.petSt - 2.2) / 0.4));
+    ctx.translate(PX + kick + lunge, PY);
+    if (bow) { ctx.translate(100 * PS, 188 * PS); ctx.rotate(-bow); ctx.translate(-100 * PS, -188 * PS); }
+    ctx.scale(PS, PS);
+    const moves = ['palm', 'flick', 'circle'];
+    drawPet(ctx, {
+      state: S.petState, dir: -1, t, st: S.petSt,
+      outfit: Object.assign({}, outfit, { move: moves[S.lane], gear: 'none' }),   // 手上的配件換成擂台的劍
+      look: { x: -60, y: 0 },
+      bubble: S.bubble ? { text: S.bubble.text, age: Math.min(S.bubble.t, 1) } : null,
+    });
+    ctx.restore();
+
+    // 靈寵手上的劍
+    {
+      let ang = -Math.PI * 0.78, len = 74, hx = HAND.x + kick + lunge, hy = HAND.y;
+      if (S.phase === 'tele') {
+        const L = LANES[S.lane], cy = (L.y0 + L.y1) / 2;
+        const aim = Math.atan2(cy - hy, 150 - hx);
+        const back = aim + 0.9 * (S.lane === 2 ? -1 : 1);   // 往後蓄勢
+        ang = -Math.PI * 0.78 + (back - (-Math.PI * 0.78)) * Math.min(1, S.pt / (TELE * 0.6));
+      } else if (S.phase === 'strike') {
+        const L = LANES[S.lane], cy = (L.y0 + L.y1) / 2;
+        ang = Math.atan2(cy - hy, 150 - hx); len = 74 + Math.sin(Math.min(1, S.pt / GRACE) * Math.PI) * 30;
+      } else if (S.phase === 'open' || S.phase === 'blockpause') {
+        ang = Math.PI * 0.8 + Math.sin(t * 20) * 0.06;   // 劍被盪開，垂向左下
+      } else if (S.phase === 'end') {
+        ang = lastWin ? Math.PI * 0.6 : -Math.PI * 0.62;
+      }
+      drawSword(hx, hy, ang, len, S.phase === 'strike');
+    }
+
+    // 破綻
+    if (S.phase === 'open') {
+      const left = 1 - S.pt / S.openLen;
+      ctx.save();
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 16);
+      rrect(PET_BOX.x0, PET_BOX.y0, PET_BOX.x1 - PET_BOX.x0, PET_BOX.y1 - PET_BOX.y0, 26);
+      ctx.setLineDash([10, 7]); ctx.lineWidth = 3; ctx.strokeStyle = GOLD; ctx.stroke();
+      ctx.restore();
+      outlinedText('破綻！快連點' + petName, 482, PET_BOX.y0 - 20, 20, '#C9901A');
+      rrect(412, PET_BOX.y0 - 4, 140, 7, 3.5); ctx.fillStyle = 'rgba(74,58,42,0.18)'; ctx.fill();
+      rrect(412, PET_BOX.y0 - 4, 140 * Math.max(0, left), 7, 3.5); ctx.fillStyle = GOLD; ctx.fill();
+      if (S.charge) outlinedText('劍意蓄滿：第一下是重擊', 182, 250, 18, '#2F8A6C');
+    }
+    if (S.combo >= 2 && (S.phase === 'open' || (S.phase === 'rest' && S.pt < 0.6) || (S.phase === 'end' && S.pt < 0.8))) {
+      outlinedText('連擊 ×' + S.combo, 182, 194, 44, '#C9901A');
+    }
+
+    // 提示
+    let hint = '';
+    if (S.phase === 'intro') hint = '';
+    else if (S.phase === 'tele' || S.phase === 'strike') hint = '看紅光在哪一路，就點那一路擋下';
+    else if (S.phase === 'rest') hint = '小心，下一招要來了';
+    if (hint) { ctx.font = '14px ' + FONT; ctx.fillStyle = '#8A7658'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(hint, 182, 332); }
+    if (S.phase === 'intro') {
+      outlinedText('比劍！', 182, 170, 46, INK);
+      ctx.font = '15px ' + FONT; ctx.fillStyle = '#8A7658'; ctx.textAlign = 'center';
+      ctx.fillText('紅光出現就點那一路擋下', 182, 212);
+      ctx.fillText('擋下後趁破綻連點' + petName, 182, 234);
+    }
+
+    // 火花與飄字
+    for (const f of fx) {
+      const a = 1 - f.age / f.life;
+      if (f.k === 'sp') {
+        ctx.globalAlpha = a; ctx.fillStyle = f.col;
+        ctx.beginPath(); ctx.arc(f.x, f.y, 2 + 2.5 * a, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.globalAlpha = Math.min(1, a * 2);
+        outlinedText(f.text, f.x, f.y, f.size, f.col);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  newMatch();
+  if (STUB) window.__duel = () => S;
+  let last = performance.now();
+  function frame(now) {
+    if (reported) return;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); draw(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

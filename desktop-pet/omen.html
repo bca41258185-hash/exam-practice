@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>天降祥瑞</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+  body.preview { background: #1E2433; }
+  body.hot { cursor: pointer; }
+  canvas { position: fixed; left: 0; top: 0; display: block; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+// 天降祥瑞：透明、滑鼠穿透的全螢幕視窗。主程序用 game.onStart({kind}) 叫它演一次，演完 game.close()。
+(function () {
+  const LINE = '#4A3A2A', GOLD = '#F5B82E', QI = '#59C9A5', RED = '#E5484D';
+  const KINDS = ['koi', 'crane', 'rainbow', 'meteor'];
+  const preview = typeof window.game === 'undefined';
+  if (preview) {   // 瀏覽器預覽用：依序演四種，背景塗深色
+    document.body.classList.add('preview');
+    const only = (location.hash || '').slice(1);
+    const queue = KINDS.includes(only) ? [only] : KINDS.slice();
+    let startFn = null;
+    window.game = {
+      onStart: (fn) => { startFn = fn; setTimeout(() => queue.length && fn({ kind: queue.shift() }), 300); },
+      result: (o) => console.log('[game.result]', JSON.stringify(o)),
+      close: () => { console.log('[game.close]'); if (queue.length) setTimeout(() => { started = false; startFn({ kind: queue.shift() }); }, 600); },
+      setClickable: (on) => console.log('[game.setClickable]', on),
+    };
+  }
+  const game = window.game;
+
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+  function fit() {
+    DPR = window.devicePixelRatio || 1; W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    rainbowCache = null;
+  }
+  window.addEventListener('resize', fit);
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const ease = (x) => x * x * (3 - 2 * x);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  // 淡入淡出：開頭 a 秒、結尾 b 秒
+  const fade = (t, dur, a, b) => clamp(Math.min(t / a, (dur - t) / b), 0, 1);
+
+  let scene = null, started = false, raf = 0, last = 0, clickable = false;
+  const mouse = { x: -999, y: -999 };
+
+  function setClick(on) {
+    if (on === clickable) return;
+    clickable = on; game.setClickable(on);
+    document.body.classList.toggle('hot', on);
+  }
+
+  // ---------- 小工具 ----------
+  function sparkle(x, y, r, color, a) {   // 四角小星
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y); ctx.quadraticCurveTo(x, y, x, y - r); ctx.fill(); ctx.restore();
+  }
+  function glow(x, y, r, color, a) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  function pill(text, x, y, a) {   // 羊皮紙小字條
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.font = 'bold 15px "Microsoft JhengHei", "PingFang TC", sans-serif';
+    const w = ctx.measureText(text).width + 22, h = 28;
+    ctx.fillStyle = '#FBF3DC'; ctx.strokeStyle = GOLD; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, 14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = LINE; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 1);
+    ctx.restore();
+    return { x: x - w / 2, y: y - h / 2, w, h };
+  }
+
+  // ---------- 金色錦鯉 ----------
+  function koiScene() {
+    const dir = Math.random() < 0.5 ? 1 : -1, dur = 8;
+    const s = { dur, t: 0, dir, ripples: [], drops: [], nextRip: 0, leap: -1, x: 0, y: 0, ang: 0, hit: null };
+    s.pos = (t) => {
+      const p = t / dur, base = H - 120;
+      const x = dir > 0 ? lerp(-90, W + 90, p) : lerp(W + 90, -90, p);
+      const y = base + Math.sin(t * 1.6) * 10;
+      const dy = Math.cos(t * 1.6) * 16;   // 斜率，用來轉身體
+      return { x, y, ang: Math.atan2(dy, (W + 180) / dur) };
+    };
+    s.update = (dt) => {
+      s.t += dt;
+      if (s.leap < 0) {
+        const p = s.pos(s.t); s.x = p.x; s.y = p.y; s.ang = p.ang;
+        if (s.t >= s.nextRip) { s.ripples.push({ x: s.x - dir * 34, y: s.y + 6, age: 0 }); s.nextRip = s.t + 0.32; }
+        s.hit = { x: s.x - dir * 10, y: s.y, r: 62 };
+        if (s.t > dur) return false;
+      } else {
+        const lt = s.t - s.leap, LD = 1.3;
+        const jx = lerp(0, dir * 110, lt / LD), jy = -Math.sin(Math.PI * clamp(lt / LD, 0, 1)) * 150;
+        s.x = s.lx + jx; s.y = s.ly + jy;
+        s.ang = Math.atan2(-Math.cos(Math.PI * clamp(lt / LD, 0, 1)) * 150 * Math.PI / LD, dir * 110 / LD) * dir;
+        if (lt > LD && !s.landed) { s.landed = true; splash(s, s.x, s.ly, 22); s.ripples.push({ x: s.x, y: s.ly + 6, age: 0, big: true }); }
+        s.hit = null;
+        if (lt > LD + 1.4) return false;
+      }
+      for (const r of s.ripples) r.age += dt;
+      s.ripples = s.ripples.filter((r) => r.age < (r.big ? 1.6 : 1.8));
+      for (const d of s.drops) { d.age += dt; d.vy += 520 * dt; d.x += d.vx * dt; d.y += d.vy * dt; }
+      s.drops = s.drops.filter((d) => d.age < 1.1 && !(d.vy > 0 && d.y > H - 112));   // 落回水面就消失
+      return true;
+    };
+    s.click = () => {
+      if (s.leap >= 0) return;
+      game.result({ game: 'omen', kind: 'koi', clicked: true });
+      s.leap = s.t; s.lx = s.x; s.ly = s.y;
+      splash(s, s.x, s.y, 18); s.ripples.push({ x: s.x, y: s.y + 6, age: 0, big: true });
+    };
+    s.draw = () => {
+      const a = s.leap >= 0 ? 1 : fade(s.t, dur, 0.8, 0.8);
+      for (const r of s.ripples) {
+        const life = r.big ? 1.6 : 1.8, k = r.age / life;
+        ctx.save(); ctx.globalAlpha = a * (1 - k) * 0.55; ctx.strokeStyle = r.big ? '#FFFFFF' : QI; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(r.x, r.y, 8 + k * (r.big ? 80 : 46), 2 + k * (r.big ? 16 : 9), 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      if (s.leap >= 0) glow(s.x, s.y, 90, 'rgba(255,220,120,.6)', 0.5);
+      drawKoi(s.x, s.y, s.ang, s.dir, s.t, a);
+      for (const d of s.drops) {
+        ctx.save(); ctx.globalAlpha = (1 - d.age / 1.1) * 0.9; ctx.fillStyle = d.gold ? GOLD : '#DFF6EF';
+        ctx.strokeStyle = 'rgba(74,58,42,.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+      }
+      if (s.leap >= 0) {
+        const lt = s.t - s.leap;
+        for (let i = 0; i < 6; i++) {
+          const an = i / 6 * Math.PI * 2 + lt * 2, rr = 50 + lt * 30;
+          sparkle(s.x + Math.cos(an) * rr, s.y + Math.sin(an) * rr * 0.7, 6, GOLD, clamp(1.6 - lt, 0, 1));
+        }
+      }
+    };
+    return s;
+  }
+  function splash(s, x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const an = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = 120 + Math.random() * 200;
+      s.drops.push({ x, y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, r: 2 + Math.random() * 3, age: 0, gold: Math.random() < 0.3 });
+    }
+  }
+  function drawKoi(x, y, ang, dir, t, a) {
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale(dir * 1.3, 1.3); ctx.rotate(ang * dir);
+    const sw = Math.sin(t * 7);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = LINE; ctx.lineWidth = 2.5;
+    // 尾鰭：飄逸的兩片
+    ctx.save(); ctx.translate(-34, 0); ctx.rotate(sw * 0.28);
+    // 外層薄紗：比尾鰭更長、更飄
+    const sw2 = Math.sin(t * 7 - 1.2);
+    ctx.fillStyle = 'rgba(255,222,140,.72)'; ctx.strokeStyle = 'rgba(201,144,26,.6)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(0, -2);
+    ctx.bezierCurveTo(-20, -14, -44, -36 + sw2 * 8, -62, -26 + sw2 * 10);
+    ctx.bezierCurveTo(-50, -14 + sw2 * 4, -46, -4, -50, 0);
+    ctx.bezierCurveTo(-46, 4, -50, 14 - sw2 * 4, -62, 26 - sw2 * 10);
+    ctx.bezierCurveTo(-44, 36 - sw2 * 8, -20, 14, 0, 2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = LINE; ctx.lineWidth = 2.5;
+    ctx.fillStyle = 'rgba(255,214,120,.9)';
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-14, -6, -30, -26 + sw * 4, -42, -22 + sw * 6);
+    ctx.bezierCurveTo(-34, -10, -30, -2, -34, 0);
+    ctx.bezierCurveTo(-30, 2, -34, 10, -42, 22 - sw * 6);
+    ctx.bezierCurveTo(-30, 26 - sw * 4, -14, 6, 0, 0);
+    ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(201,144,26,.6)'; ctx.lineWidth = 1.2;
+    for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-4, 0); ctx.quadraticCurveTo(-20, k * 8, -36, k * (18 - k * sw * 4)); ctx.stroke(); }
+    ctx.restore();
+    // 胸鰭
+    ctx.fillStyle = 'rgba(255,224,150,.9)'; ctx.strokeStyle = LINE; ctx.lineWidth = 2;
+    ctx.save(); ctx.translate(12, 10); ctx.rotate(0.6 + sw * 0.25);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-4, 16, -20, 14 + sw * 3); ctx.quadraticCurveTo(-12, 4, 0, 0);
+    ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(-14, 11); ctx.rotate(0.5 - sw * 0.2);   // 腹鰭
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-4, 10, -14, 9); ctx.quadraticCurveTo(-8, 3, 0, 0);
+    ctx.fill(); ctx.stroke(); ctx.restore();
+    // 背鰭
+    ctx.beginPath(); ctx.moveTo(14, -15); ctx.quadraticCurveTo(0, -28 - sw * 2, -18, -12); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 身體
+    const g = ctx.createLinearGradient(0, -18, 0, 18);
+    g.addColorStop(0, '#F2A81E'); g.addColorStop(0.55, '#F8CF5A'); g.addColorStop(1, '#FFF0C2');
+    ctx.fillStyle = g; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(40, 0);
+    ctx.bezierCurveTo(38, -16, 14, -19, -6, -14);
+    ctx.bezierCurveTo(-22, -10, -30, -4, -36, 0);
+    ctx.bezierCurveTo(-30, 4, -22, 10, -6, 14);
+    ctx.bezierCurveTo(14, 19, 38, 16, 40, 0);
+    ctx.fill(); ctx.stroke();
+    // 鱗片
+    ctx.strokeStyle = 'rgba(201,144,26,.55)'; ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) for (let j = -1; j <= 1; j++) {
+      ctx.beginPath(); ctx.arc(18 - i * 11, j * 7, 5, -Math.PI / 2.4, Math.PI / 2.4); ctx.stroke();
+    }
+    // 紅斑
+    ctx.fillStyle = 'rgba(229,72,77,.55)';
+    ctx.beginPath(); ctx.ellipse(4, -9, 9, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+    // 眼、鬚、腮紅
+    ctx.fillStyle = LINE; ctx.beginPath(); ctx.arc(29, -4, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(29.8, -4.8, 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,180,168,.7)'; ctx.beginPath(); ctx.ellipse(24, 4, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(38, 4); ctx.quadraticCurveTo(46, 8 + sw * 2, 44, 16); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- 仙鶴 ----------
+  function craneScene() {
+    const dir = Math.random() < 0.5 ? 1 : -1, dur = 9, n = 3 + Math.floor(Math.random() * 3);
+    const birds = [];
+    for (let i = 0; i < n; i++) {
+      const rank = Math.ceil(i / 2), side = i % 2 ? -1 : 1;
+      birds.push({ dx: -rank * 105, dy: i === 0 ? 0 : side * rank * 52, ph: Math.random() * 6, sc: i === 0 ? 1.2 : 1.1 });
+    }
+    const s = { dur, t: 0, hit: null };
+    s.update = (dt) => (s.t += dt) < dur;
+    s.draw = () => {
+      const p = s.t / dur, a = fade(s.t, dur, 1, 1.2), span = W + 420;
+      const lx = dir > 0 ? -160 + p * span : W + 160 - p * span, ly = Math.max(H * 0.2, 170) + Math.sin(s.t * 0.7) * 12;
+      for (const b of birds) {
+        const bx = lx + b.dx * dir, by = ly + b.dy + Math.sin(s.t * 1.3 + b.ph) * 5;
+        drawCrane(bx, by, dir, s.t * 4.2 + b.ph, b.sc, a);
+      }
+    };
+    return s;
+  }
+  function drawCrane(x, y, dir, ph, sc, a) {
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale(dir * sc, sc);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
+    const f = Math.sin(ph);   // -1 下 ～ 1 上
+    // 腿往後拖
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(-14, 2); ctx.lineTo(-44, 6); ctx.moveTo(-14, 4); ctx.lineTo(-42, 10); ctx.stroke();
+    // 遠側翅膀
+    wing(f, -1);
+    // 身體
+    ctx.fillStyle = '#FFFFFF'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(-2, 0, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 黑尾羽
+    ctx.fillStyle = '#3B3640';
+    ctx.beginPath(); ctx.moveTo(-16, -3); ctx.quadraticCurveTo(-28, -2, -30, 4); ctx.quadraticCurveTo(-22, 6, -16, 4); ctx.fill();
+    // 長脖子與頭
+    ctx.strokeStyle = LINE; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(12, -2); ctx.quadraticCurveTo(26, -6, 36, -4); ctx.stroke();
+    ctx.strokeStyle = '#3B3640'; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(12, -2); ctx.quadraticCurveTo(26, -6, 36, -4); ctx.stroke();
+    ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = LINE; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.ellipse(39, -4.5, 5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = RED; ctx.beginPath(); ctx.arc(39.5, -8, 2.4, 0, Math.PI * 2); ctx.fill();   // 丹頂
+    ctx.strokeStyle = '#C9A46A'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(43.5, -4); ctx.lineTo(53, -2.5); ctx.stroke();   // 嘴
+    ctx.fillStyle = LINE; ctx.beginPath(); ctx.arc(40.5, -5, 0.9, 0, Math.PI * 2); ctx.fill();
+    // 近側翅膀
+    wing(f, 1);
+    ctx.restore();
+  }
+  function wing(f, near) {
+    // 側面看：翅根貼在背上，翅尖隨拍動上下，遠側的翅膀相位相反一點、顏色淡一點
+    const amp = 40 * (near > 0 ? 1 : 0.8), ty = -4 - f * amp, tx = -24 - Math.abs(f) * 4;
+    const wx = 4, wy = -4 + (ty + 4) * 0.5;   // 翅膀的「手腕」，讓前緣有個彎
+    const ang = Math.atan2(ty - wy, tx - wx);
+    ctx.save(); ctx.globalAlpha *= near > 0 ? 1 : 0.7;
+    // 末端黑色飛羽：三根長羽毛像手指散開，先畫，讓白翅膀蓋住根部
+    ctx.fillStyle = '#3B3640';
+    for (let i = 0; i < 3; i++) {
+      const a = ang + (i - 1) * 0.22 * Math.sign(f || 1);
+      ctx.save(); ctx.translate(lerp(wx, tx, 0.75), lerp(wy, ty, 0.75)); ctx.rotate(a);
+      ctx.beginPath(); ctx.ellipse(6, 0, 12, 3.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    ctx.fillStyle = near > 0 ? '#FFFFFF' : '#E4E9F0'; ctx.strokeStyle = LINE; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(10, -3);
+    ctx.quadraticCurveTo(12, wy * 0.6, wx, wy);
+    ctx.quadraticCurveTo(lerp(wx, tx, 0.5), lerp(wy, ty, 0.5) - f * 3, lerp(wx, tx, 0.85), lerp(wy, ty, 0.85));
+    // 後緣：一片片羽毛的小弧
+    const ex = lerp(wx, tx, 0.85), ey = lerp(wy, ty, 0.85), bx = -16, by = -1;
+    for (let i = 1; i <= 4; i++) {
+      const px = lerp(ex, bx, i / 4), py = lerp(ey, by, i / 4);
+      const qx = lerp(ex, bx, (i - 0.5) / 4) - 4, qy = lerp(ey, by, (i - 0.5) / 4) + (f >= 0 ? 3 : -3);
+      ctx.quadraticCurveTo(qx, qy, px, py);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- 彩虹 ----------
+  let rainbowCache = null;
+  function buildRainbow() {
+    const R = Math.min(W * 0.42, H * 0.62), cx = W / 2, cy = H * 0.72;
+    const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height;
+    const g = c.getContext('2d'); g.scale(DPR, DPR);
+    const cols = ['#FF8A8A', '#FFB86B', '#FFE27A', '#9BE39B', '#7FD3E8', '#8FA8F0', '#C3A2EE'];
+    g.filter = 'blur(3px)';
+    cols.forEach((col, i) => {
+      g.strokeStyle = col; g.lineWidth = 11; g.beginPath(); g.arc(cx, cy, R - i * 10, Math.PI, Math.PI * 2); g.stroke();
+    });
+    g.filter = 'none';
+    g.globalCompositeOperation = 'destination-in';   // 兩腳往下淡掉
+    const m = g.createLinearGradient(0, cy - R, 0, cy);
+    m.addColorStop(0, 'rgba(0,0,0,1)'); m.addColorStop(0.55, 'rgba(0,0,0,.85)'); m.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = m; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-over';
+    for (const sx of [-1, 1]) cloud(g, cx + sx * (R - 30), cy - R * 0.12, 1);   // 兩朵小雲
+    rainbowCache = c;
+  }
+  function cloud(g, x, y, k) {
+    g.save(); g.fillStyle = 'rgba(255,255,255,.9)'; g.strokeStyle = 'rgba(74,58,42,.35)'; g.lineWidth = 2;
+    g.beginPath();
+    g.arc(x - 26 * k, y + 4, 16 * k, Math.PI * 0.5, Math.PI * 1.5);
+    g.arc(x - 8 * k, y - 10, 20 * k, Math.PI, Math.PI * 1.9);
+    g.arc(x + 18 * k, y - 4, 17 * k, Math.PI * 1.2, Math.PI * 2.1);
+    g.arc(x + 30 * k, y + 6, 12 * k, Math.PI * 1.5, Math.PI * 0.5);
+    g.closePath(); g.fill(); g.stroke(); g.restore();
+  }
+  function rainbowScene() {
+    const dur = 7, s = { dur, t: 0, hit: null };
+    s.update = (dt) => (s.t += dt) < dur;
+    s.draw = () => {
+      if (!rainbowCache) buildRainbow();
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 0.6 * ease(fade(s.t, dur, 1.8, 1.8));
+      ctx.drawImage(rainbowCache, 0, 0); ctx.restore();
+    };
+    return s;
+  }
+
+  // ---------- 流星 ----------
+  function meteorScene() {
+    const dur = 6, fromRight = Math.random() < 0.5;
+    const x0 = fromRight ? W * 0.86 : W * 0.14, x1 = fromRight ? W * 0.3 : W * 0.7;
+    const y0 = H * 0.07, y1 = H * 0.36;
+    const s = { dur, t: 0, bits: [], burst: -1, hit: null, x: x0, y: y0, label: null };
+    s.update = (dt) => {
+      s.t += dt;
+      if (s.burst < 0) {
+        const p = s.t / dur; s.x = lerp(x0, x1, p); s.y = lerp(y0, y1, p);
+        if (Math.random() < dt * 30) s.bits.push({ x: s.x + (Math.random() - 0.5) * 10, y: s.y + (Math.random() - 0.5) * 10, vx: 0, vy: 12, age: 0, life: 1 + Math.random() * 0.8, r: 2 + Math.random() * 3 });
+        if (s.t > dur) return false;
+      } else if (s.t - s.burst > 1.3) return false;
+      for (const b of s.bits) { b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt; b.vx *= 0.97; b.vy *= 0.97; }
+      s.bits = s.bits.filter((b) => b.age < b.life);
+      s.hit = s.burst < 0 && fade(s.t, dur, 0.6, 0.6) > 0.2 ? { x: s.x, y: s.y, r: 48, box: s.label } : null;
+      return true;
+    };
+    s.click = () => {
+      if (s.burst >= 0) return;
+      game.result({ game: 'omen', kind: 'meteor', clicked: true });
+      s.burst = s.t;
+      for (let i = 0; i < 28; i++) {
+        const an = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 160;
+        s.bits.push({ x: s.x, y: s.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, age: 0, life: 0.8 + Math.random() * 0.5, r: 3 + Math.random() * 4 });
+      }
+    };
+    s.draw = () => {
+      const a = s.burst >= 0 ? clamp(1 - (s.t - s.burst) / 1.3, 0, 1) : fade(s.t, dur, 0.6, 0.6);
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      if (s.burst < 0) {   // 尾巴
+        const tl = 190, tx = s.x - ux * tl, ty = s.y - uy * tl;
+        const g = ctx.createLinearGradient(s.x, s.y, tx, ty);
+        g.addColorStop(0, 'rgba(255,246,210,.95)'); g.addColorStop(0.4, 'rgba(245,184,46,.45)'); g.addColorStop(1, 'rgba(245,184,46,0)');
+        ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = g; ctx.lineCap = 'round';
+        ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - ux * 90, s.y - uy * 90); ctx.stroke();
+        ctx.restore();
+      }
+      for (const b of s.bits) sparkle(b.x, b.y, b.r * (1 - b.age / b.life * 0.5), b.r > 4 ? GOLD : '#FFF6D2', a * (1 - b.age / b.life));
+      const tw = 1 + Math.sin(s.t * 12) * 0.12;
+      glow(s.x, s.y, 54 * tw, 'rgba(255,226,140,.95)', a * 0.85);
+      sparkle(s.x, s.y, 20 * tw, '#FFFDF2', a);
+      sparkle(s.x, s.y, 9, GOLD, a);
+      if (s.burst < 0) {
+        const lx = clamp(s.x + 10, 90, W - 90), ly = s.y + 44;
+        s.label = pill('流星！點我許願', lx, ly, a * (0.85 + Math.sin(s.t * 3) * 0.15));
+      } else {
+        const k = clamp((s.t - s.burst) / 1.3, 0, 1);
+        pill('願望收到了', s.x, s.y + 44 - k * 20, 1 - k);
+      }
+    };
+    return s;
+  }
+
+  const MAKERS = { koi: koiScene, crane: craneScene, rainbow: rainbowScene, meteor: meteorScene };
+
+  function overHit(h) {
+    if (!h) return false;
+    if (Math.hypot(mouse.x - h.x, mouse.y - h.y) <= h.r) return true;
+    const b = h.box;
+    return !!b && mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h;
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
+    const alive = scene.update(dt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!alive) { finish(); return; }
+    scene.draw();
+    setClick(overHit(scene.hit));
+    raf = requestAnimationFrame(frame);
+  }
+  function finish() {
+    cancelAnimationFrame(raf); raf = 0; scene = null;
+    setClick(false);
+    game.close();
+  }
+
+  window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  window.addEventListener('mouseleave', () => { mouse.x = mouse.y = -999; });
+  window.addEventListener('mousedown', (e) => {
+    mouse.x = e.clientX; mouse.y = e.clientY;
+    if (scene && scene.click && overHit(scene.hit)) scene.click();
+  });
+
+  game.onStart((arg) => {
+    if (started) return;   // 只演一次（預覽模式會重設）
+    const kind = arg && MAKERS[arg.kind] ? arg.kind : 'koi';
+    started = true; fit();
+    game.setClickable(false); clickable = false;
+    scene = MAKERS[kind]();
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  });
+
+  if (preview) {   // 預覽檢查用：__omen.go('koi', 3) 停在第 3 秒；__omen.step(0.5) 再往前；__omen.tap(x,y) 模擬點擊
+    window.__omen = {
+      go(kind, sec) { cancelAnimationFrame(raf); started = true; fit(); scene = MAKERS[kind](); this.step(sec || 0); },
+      step(sec) {
+        cancelAnimationFrame(raf);
+        for (let i = 0; i < Math.round(sec * 60); i++) if (scene && !scene.update(1 / 60)) { scene = null; return 'ended'; }
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        scene.draw(); setClick(overHit(scene.hit));
+        return scene.hit && { x: Math.round(scene.hit.x), y: Math.round(scene.hit.y), clickable };
+      },
+      big(ph) {   // 放大畫一隻鶴和一條魚，看細節
+        cancelAnimationFrame(raf); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        [-1.2, 0, 1.2].forEach((p, i) => drawCrane(140 + i * 260, 130, 1, (ph || 0) + p, 3, 1));
+        drawKoi(W / 2, 340, 0, 1, 0.3, 1);
+      },
+      tap(x, y) { mouse.x = x; mouse.y = y; if (scene.click && overHit(scene.hit)) { scene.click(); return 'clicked'; } return 'miss'; },
+    };
+  }
+})();
+</script>
+</body>
+</html>

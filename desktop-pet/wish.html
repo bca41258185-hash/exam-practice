@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>流星許願</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  html { background: #FBF3DC; min-height: 100%; }
+  body {
+    background: #FBF3DC;
+    background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.55), transparent 60%),
+                      radial-gradient(circle at 90% 90%, rgba(190,160,110,.18), transparent 55%);
+    color: #4A3A2A; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+    padding: 14px 16px 16px; font-size: 15px; user-select: none;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  h1 { font-family: "DFKai-SB", "KaiTi", serif; font-size: 24px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .star { width: 26px; height: 26px; flex: none; }
+  textarea {
+    width: 100%; height: 70px; resize: none; border: 2px solid #C9B48A; border-radius: 10px;
+    background: #FFFBEF; color: #4A3A2A; font: inherit; font-size: 16px; padding: 8px 10px; outline: none;
+  }
+  textarea:focus { border-color: #59C9A5; }
+  .count { text-align: right; font-size: 12px; color: #8A7658; margin-top: 2px; }
+  .count.full { color: #E5484D; }
+  button {
+    width: 100%; margin-top: 4px; padding: 11px; font: inherit; font-size: 19px; font-weight: bold; cursor: pointer;
+    border-radius: 10px; border: 2px solid #C9901A; background: #F5B82E; color: #4A3A2A; letter-spacing: 4px;
+  }
+  button:hover { background: #F8C752; }
+  button:disabled { opacity: .6; cursor: default; }
+  .msg { min-height: 20px; font-size: 14px; margin: 6px 0 0; text-align: center; }
+  .msg.ok { color: #2F8A6C; font-weight: bold; } .msg.err { color: #E5484D; }
+  h2 { font-family: "DFKai-SB", "KaiTi", serif; font-size: 18px; margin: 8px 0 6px; border-top: 1px dashed #C9B48A; padding-top: 10px; }
+  body > * { flex: none; }
+  body > ul { list-style: none; margin: 0; padding: 0 2px 0 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  li {
+    display: flex; gap: 8px; align-items: baseline; background: #FFFBEF; border: 1px solid #E2D2AE;
+    border-left: 5px solid #F5B82E; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px;
+  }
+  li .d { flex: none; font-size: 13px; color: #2F8A6C; font-weight: bold; min-width: 38px; }
+  li .txt { flex: 1; min-width: 0; word-break: break-all; }
+  .empty { color: #8A7658; font-size: 14px; text-align: center; padding: 8px 0; }
+</style>
+</head>
+<body>
+<h1>
+  <svg class="star" viewBox="0 0 26 26" aria-hidden="true">
+    <path d="M13 2.5 L15.8 9.4 L23.2 9.9 L17.5 14.6 L19.3 21.8 L13 17.8 L6.7 21.8 L8.5 14.6 L2.8 9.9 L10.2 9.4 Z"
+          fill="#F5B82E" stroke="#4A3A2A" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="10.5" cy="12.5" r="1.1" fill="#4A3A2A"/><circle cx="15.5" cy="12.5" r="1.1" fill="#4A3A2A"/>
+  </svg>
+  流星許願
+</h1>
+
+<textarea id="txt" maxlength="40" placeholder="許個願吧"></textarea>
+<div class="count" id="count">0 / 40</div>
+<button id="go">許願</button>
+<div class="msg" id="msg"></div>
+
+<h2>願望簿</h2>
+<ul id="list"></ul>
+
+<script>
+(function () {
+  if (typeof window.game === 'undefined') {   // 瀏覽器預覽用的假資料
+    const now = Date.now();
+    window.game = {
+      wishes: async () => [
+        { text: '考上建築師', at: now - 2 * 86400000 },
+        { text: '家人身體健康，平平安安', at: now - 9 * 86400000 },
+      ],
+      result: (o) => console.log('[game.result]', JSON.stringify(o)),
+      close: () => console.log('[game.close]'),
+    };
+  }
+  const game = window.game;
+  const $ = (id) => document.getElementById(id);
+  const txt = $('txt'), go = $('go'), msg = $('msg');
+  let done = false;
+
+  function updateCount() {
+    const n = txt.value.length;
+    $('count').textContent = n + ' / 40';
+    $('count').classList.toggle('full', n >= 40);
+  }
+  function md(at) { const d = new Date(at); return (d.getMonth() + 1) + '/' + d.getDate(); }
+
+  async function load() {
+    let list = [];
+    try { list = (await game.wishes()) || []; } catch (e) { list = []; }
+    list = list.slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+    const ul = $('list'); ul.textContent = '';
+    if (!list.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = '還沒有許過願。看到流星時，記得點它。'; ul.appendChild(e); return;
+    }
+    for (const w of list) {
+      const li = document.createElement('li');
+      const d = document.createElement('span'); d.className = 'd'; d.textContent = w.at ? md(w.at) : '';
+      const t = document.createElement('span'); t.className = 'txt'; t.textContent = w.text;
+      li.append(d, t); ul.appendChild(li);
+    }
+  }
+
+  go.addEventListener('click', () => {
+    if (done) return;
+    const text = txt.value.trim().slice(0, 40);
+    if (!text) { msg.textContent = '先寫下你的願望'; msg.className = 'msg err'; txt.focus(); return; }
+    done = true; go.disabled = true; txt.disabled = true;
+    game.result({ game: 'wish', text });
+    msg.textContent = '願望收好了'; msg.className = 'msg ok';
+    setTimeout(() => game.close(), 1200);
+  });
+  txt.addEventListener('input', () => { updateCount(); if (!done) msg.textContent = ''; });
+  txt.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go.click(); } });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') game.close(); });
+
+  updateCount(); load(); txt.focus();
+})();
+</script>
+</body>
+</html>

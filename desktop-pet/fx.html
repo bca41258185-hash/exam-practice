@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>全螢幕特效</title>
+<style>html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; } canvas { display: block; width: 100vw; height: 100vh; }</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="loong-shards.js"></script>
+<script src="loong-swim.js"></script>
+<script src="draw.js"></script>
+<script src="fx-geo.js"></script>
+<script>
+  // 龍吟用的青龍插畫，先載好（預告片算圖會等 window.DRAGON_READY）
+  // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
+  window.DRAGON_ART = false;
+  if (window.DRAGON_ART) {
+    window.DRAGON_IMG = new Image();
+    window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.src = 'assets/dragon/qinglong.png';
+  } else window.DRAGON_READY = true;
+</script>
+<script>
+// 技能的全螢幕特效。主程序送來 { move, dur, dir, scale, species, robe, x, y, ground }，
+// x、y 是角色身體中心在這個視窗裡的位置。這個視窗蓋滿螢幕、透明、滑鼠穿透。
+/* global drawPet */
+(function () {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let P = null, t0 = 0, raf = 0, W = 0, H = 0;
+  const GOLD = '#F5B82E', LINE = '#4A3A2A', QI = '#59C9A5';
+  function size() { W = innerWidth; H = innerHeight; cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
+  addEventListener('resize', size); size();
+  function rng(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  function circle(x, y, r, fill, stroke, lw) { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, 6.283); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); } }
+  function spark(x, y, r, a, color) {
+    ctx.save(); ctx.globalAlpha *= clamp(a); ctx.fillStyle = color; ctx.translate(x, y); ctx.beginPath();
+    for (let i = 0; i < 8; i++) { const an = i * Math.PI / 4, rr = i % 2 ? r * 0.32 : r; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  function flame(x, y, s, c0, c1) {
+    ctx.fillStyle = c0; ctx.beginPath(); ctx.moveTo(x, y - 26 * s); ctx.quadraticCurveTo(x + 18 * s, y - 4 * s, x, y + 14 * s); ctx.quadraticCurveTo(x - 18 * s, y - 4 * s, x, y - 26 * s); ctx.fill();
+    ctx.fillStyle = c1; ctx.beginPath(); ctx.moveTo(x, y - 10 * s); ctx.quadraticCurveTo(x + 8 * s, y + 2 * s, x, y + 10 * s); ctx.quadraticCurveTo(x - 8 * s, y + 2 * s, x, y - 10 * s); ctx.fill();
+  }
+  function cloud(x, y, s, color) {
+    ctx.fillStyle = color; ctx.beginPath();
+    ctx.arc(x - 60 * s, y + 6 * s, 34 * s, 0, 6.283); ctx.arc(x - 18 * s, y - 16 * s, 44 * s, 0, 6.283); ctx.arc(x + 38 * s, y - 6 * s, 38 * s, 0, 6.283); ctx.arc(x + 74 * s, y + 12 * s, 26 * s, 0, 6.283);
+    ctx.rect(x - 86 * s, y + 6 * s, 180 * s, 34 * s); ctx.fill();
+  }
+  function mini(x, y, s, o) { ctx.save(); ctx.translate(x - 100 * s, y - 188 * s); ctx.scale(s, s); drawPet(ctx, Object.assign({ look: { x: 0, y: 0 }, mini: true }, o)); ctx.restore(); }
+
+  // 幾何風格的招式（fx-geo.js）；GEO_STYLE 改成 false 就退回下面的舊畫法
+  window.GEO_STYLE = true;
+  const ENV = { ctx, P: null, W: 0, H: 0 }, GEO = window.makeGeoFx ? window.makeGeoFx(ENV) : {};
+  const FX = {
+    // 靈貓．鈴音鎮魂：金色音波一圈圈盪到螢幕邊
+    bellwave(u, A, k) {
+      const far = Math.hypot(W, H);
+      for (let i = 0; i < 6; i++) {
+        const p = (u - i * 0.28) / 1.5;
+        if (p <= 0 || p >= 1) continue;
+        ctx.save(); ctx.globalAlpha = A * (1 - p) * 0.9; ctx.strokeStyle = GOLD; ctx.shadowColor = GOLD; ctx.shadowBlur = 18; ctx.lineWidth = (7 - p * 5) * k;
+        ctx.beginPath(); ctx.ellipse(P.x, P.y, 40 * k + p * far * 0.75, 34 * k + p * far * 0.62, 0, 0, 6.283); ctx.stroke(); ctx.restore();
+      }
+      const r = rng(11);
+      for (let i = 0; i < 26; i++) { const a = r() * 6.283, d = (u * 260 + r() * 500) % (far * 0.6), q = d / (far * 0.6); spark(P.x + Math.cos(a) * d, P.y + Math.sin(a) * d * 0.8, 7 * k, A * (1 - q), GOLD); }
+    },
+    // 靈貓．九命貓影：九道貓影貼著地面往螢幕兩邊衝出去再折回來
+    shadows(u, A, k, D) {
+      for (let i = 0; i < 9; i++) {
+        const side = i % 2 ? 1 : -1, reach = (0.25 + (i / 9) * 0.75) * Math.max(P.x, W - P.x);
+        const ph = clamp((u - i * 0.07) / (D - 0.7)) * Math.PI * 2, off = Math.sin(ph) * reach * side;   // 衝出去、折回來、再衝到另一邊
+        const x = P.x + off, hop = Math.abs(Math.sin(u * 9 + i)) * 26 * k;
+        ctx.save(); ctx.globalAlpha = A * 0.55;
+        mini(x, P.ground - hop, 0.75 * k, { state: 'chase', dir: Math.cos(ph) * side >= 0 ? 1 : -1, t: u * 1.4 + i, st: u, outfit: { species: P.species, hat: 'none', robe: P.robe, gear: 'none', realm: 0 } });
+        ctx.restore();
+        for (let j = 1; j < 5; j++) spark(x - Math.sign(off || 1) * j * 22 * k, P.ground - 30 * k - hop, (6 - j) * k, A * 0.5, QI);
+      }
+    },
+    // 狐仙．狐火：九團狐火繞身，然後螺旋飛向螢幕四周，最後炸成光點
+    foxfire(u, A, k, D) {
+      const far = Math.hypot(W, H) * 0.55;
+      for (let i = 0; i < 9; i++) {
+        const out = clamp((u - 0.6) / (D - 1.1)), a = u * 3.2 + i * 6.283 / 9, r = 70 * k + out * out * far;
+        const x = P.x + Math.cos(a) * r, y = P.y + Math.sin(a) * r * 0.62, fl = 1 + Math.sin(u * 22 + i) * 0.14;
+        ctx.save(); ctx.globalAlpha = A; ctx.shadowColor = '#6FD3FF'; ctx.shadowBlur = 26;
+        for (let j = 5; j > 0; j--) { const aj = a - j * 0.09; ctx.globalAlpha = A * (0.5 - j * 0.08); circle(P.x + Math.cos(aj) * r, P.y + Math.sin(aj) * r * 0.62, (9 - j) * k, '#4FB6FF'); }
+        ctx.globalAlpha = A; flame(x, y, (1.1 + out * 0.9) * k * fl, '#4FB6FF', '#E6FBFF');
+        ctx.restore();
+      }
+      const b = (u - (D - 0.7)) / 0.7;
+      if (b > 0) { const r = rng(5); for (let i = 0; i < 70; i++) spark(r() * W, r() * H, (4 + r() * 8) * k, (1 - b) * (0.4 + r() * 0.6), i % 3 ? '#6FD3FF' : '#FFFFFF'); }
+    },
+    // 狐仙．千面幻化：兩陣大煙，中間滿天星
+    morph(u, A, k) {
+      for (const at of [0.2, 3.0]) {
+        const p = (u - at) / 0.9;
+        if (p <= 0 || p >= 1) continue;
+        for (let i = 0; i < 16; i++) { const a = i * 0.7 + at, d = (30 + p * 260) * k * (0.6 + (i % 4) * 0.15); ctx.globalAlpha = (1 - p) * 0.9; circle(P.x + Math.cos(a) * d, P.y - 10 * k + Math.sin(a) * d * 0.7, (46 - p * 18) * k, '#FFFFFF'); }
+      }
+      ctx.globalAlpha = 1;
+      const r = rng(23);
+      for (let i = 0; i < 40; i++) { const x = r() * W, y = r() * H, tw = 0.5 + 0.5 * Math.sin(u * 5 + i); spark(x, y, (5 + r() * 9) * k, A * tw * 0.8, ['#FFD6E8', '#FFF4C4', '#D9C8F2'][i % 3]); }
+    },
+    // 玉兔．玉杵搗藥：金色丹丸像噴泉一樣彈出來，落地彈兩下
+    pound(u, A, k) {
+      const r = rng(31), bx = P.x + P.dir * 50 * k, gy = P.ground;
+      for (let i = 0; i < 34; i++) {
+        const born = r() * 1.5, tt = u - born, vx = (r() - 0.5) * W * 0.5, vy = -(380 + r() * 520) * k, g = 1500 * k;
+        if (tt < 0) continue;
+        let x = bx + vx * tt, y = gy - 10 * k + vy * tt + 0.5 * g * tt * tt;
+        if (y > gy) { const over = (y - gy) % (160 * k); y = gy - Math.abs(Math.sin(over / (160 * k) * Math.PI)) * 40 * k * Math.max(0, 1 - tt / 2.2); }
+        ctx.save(); ctx.globalAlpha = A; ctx.shadowColor = GOLD; ctx.shadowBlur = 12; circle(x, y, 9 * k, GOLD, LINE, 2 * k); circle(x - 3 * k, y - 3 * k, 2.6 * k, '#FFF6D0'); ctx.restore();
+      }
+    },
+    // 玉兔．月華：整個螢幕暗下來，一輪大滿月升起，月光灑落，滿天光點
+    moonlight(u, A, k) {
+      ctx.save(); ctx.globalAlpha = A * 0.34; ctx.fillStyle = '#0B1630'; ctx.fillRect(0, 0, W, H); ctx.restore();
+      const rise = clamp(u / 1.1), mx = P.x, my = Math.max(140 * k, P.y - 420 * k) + (1 - rise) * 160 * k, mr = 110 * k;
+      ctx.save(); ctx.globalAlpha = A * 0.22; ctx.fillStyle = '#FFF4C4';
+      ctx.beginPath(); ctx.moveTo(mx - mr * 0.7, my); ctx.lineTo(mx + mr * 0.7, my); ctx.lineTo(mx + 420 * k, H); ctx.lineTo(mx - 420 * k, H); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = A; const g = ctx.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 3);
+      g.addColorStop(0, 'rgba(255,244,196,0.35)'); g.addColorStop(1, 'rgba(255,244,196,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mx, my, mr * 3, 0, 6.283); ctx.fill();
+      circle(mx, my, mr, '#FFF4C4'); ctx.fillStyle = 'rgba(214,190,140,0.5)';
+      for (const [dx, dy, rr] of [[-0.3, -0.2, 0.17], [0.25, 0.15, 0.11], [-0.05, 0.4, 0.08]]) { ctx.beginPath(); ctx.arc(mx + dx * mr, my + dy * mr, rr * mr, 0, 6.283); ctx.fill(); }
+      ctx.restore();
+      const r = rng(41);
+      for (let i = 0; i < 60; i++) { const x = r() * W, sp = 40 + r() * 80, y = (r() * H + u * sp) % H; spark(x + Math.sin(u + i) * 12, y, (3 + r() * 6) * k, A * (0.4 + 0.5 * Math.sin(u * 3 + i)), '#FFF4C4'); }
+    },
+    // 熊貓．掌勺：一道火柱往上竄，食材飛到半空再落下
+    wok(u, A, k) {
+      const bx = P.x + P.dir * 52 * k, gy = P.y;
+      ctx.save(); const g = ctx.createLinearGradient(0, H, 0, H - 260 * k); g.addColorStop(0, `rgba(255,138,76,${0.28 * A})`); g.addColorStop(1, 'rgba(255,138,76,0)'); ctx.fillStyle = g; ctx.fillRect(0, H - 260 * k, W, 260 * k); ctx.restore();
+      const r = rng(53);
+      for (let i = 0; i < 46; i++) { const p = (u * (0.8 + r() * 0.8) + r()) % 1, sx = (r() - 0.5) * 70 * k; ctx.save(); ctx.globalAlpha = A * (1 - p); flame(bx + sx * (1 + p), gy - p * (300 + r() * 380) * k, (1.5 - p) * k * (0.7 + r()), i % 2 ? '#FF8A4C' : '#FFC23C', '#FFF2B0'); ctx.restore(); }
+      for (let i = 0; i < 22; i++) {
+        const born = r() * 1.2, tt = (u - born) % 2.4, vx = (r() - 0.5) * 520 * k, vy = -(520 + r() * 420) * k;
+        if (u < born) continue;
+        const x = bx + vx * tt, y = gy - 20 * k + vy * tt + 0.5 * 1300 * k * tt * tt;
+        if (y > H) continue;
+        ctx.save(); ctx.globalAlpha = A; circle(x, y, (7 + (i % 3) * 2) * k, ['#7CC878', '#E5484D', GOLD, '#FFFFFF'][i % 4], LINE, 2 * k); ctx.restore();
+      }
+    },
+    // 熊貓．太極推手：一輪太極從身前轉開，越轉越大蓋過整個螢幕，最後化成一圈波紋
+    taiji(u, A, k, D) {
+      const far = Math.hypot(W, H) * 0.6, p = clamp(u / (D - 0.6)), r = 30 * k + p * p * far, a = A * (0.85 - p * 0.6);
+      ctx.save(); ctx.translate(P.x + P.dir * 60 * k * (1 - p), P.y); ctx.rotate(u * 2.6); ctx.globalAlpha = a;
+      circle(0, 0, r, '#FFFFFF', LINE, 3 * k);
+      ctx.fillStyle = '#3B3640'; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2); ctx.arc(0, r / 2, r / 2, Math.PI / 2, -Math.PI / 2, true); ctx.arc(0, -r / 2, r / 2, Math.PI / 2, -Math.PI / 2); ctx.fill();
+      circle(0, -r / 2, r / 7, '#FFFFFF'); circle(0, r / 2, r / 7, '#3B3640');
+      ctx.restore();
+      for (let i = 0; i < 3; i++) { const q = (u - 0.5 - i * 0.5) / 1.6; if (q > 0 && q < 1) { ctx.save(); ctx.globalAlpha = A * (1 - q) * 0.8; circle(P.x, P.y, 60 * k + q * far, null, i % 2 ? '#3B3640' : '#FFFFFF', (6 - q * 4) * k); ctx.restore(); } }
+    },
+    // 小青龍．喚雨：螢幕上方飄來幾朵雲，整個螢幕下雨，地上起漣漪
+    rain(u, A, k) {
+      ctx.save(); ctx.globalAlpha = A * 0.16; ctx.fillStyle = '#16304A'; ctx.fillRect(0, 0, W, H); ctx.restore();
+      const r = rng(61);
+      ctx.save(); ctx.strokeStyle = '#8FDCFF'; ctx.lineCap = 'round';
+      for (let i = 0; i < 180; i++) { const x = r() * (W + 200) - 100, sp = 700 + r() * 500, y = (r() * H + u * sp) % H, len = (16 + r() * 22) * k; ctx.globalAlpha = A * (0.35 + r() * 0.5); ctx.lineWidth = (1.6 + r() * 1.6) * k; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - len * 0.22, y + len); ctx.stroke(); }
+      ctx.restore();
+      for (let i = 0; i < 12; i++) { const x = r() * W, p = (u * 1.3 + r()) % 1; ctx.save(); ctx.globalAlpha = A * (1 - p) * 0.7; ctx.strokeStyle = '#8FDCFF'; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.ellipse(x, P.ground + (r() - 0.5) * 20 * k, p * 46 * k, p * 10 * k, 0, 0, 6.283); ctx.stroke(); ctx.restore(); }
+      ctx.save(); ctx.globalAlpha = A * 0.92; const n = Math.ceil(W / (300 * k)) + 2;
+      for (let i = 0; i < n; i++) cloud(((i * 300 * k + u * 40 * k) % (n * 300 * k)) - 200 * k, (60 + (i % 3) * 34) * k, (1.5 + (i % 2) * 0.4) * k, i % 2 ? '#7E8CA3' : '#9AA9BD');
+      ctx.restore();
+    },
+    // 小青龍．龍吟：一條大青龍從牠身上竄出來，在整個螢幕盤旋一圈，往天上飛走
+    // 小青龍．龍吟：一條畫好的青龍（assets/dragon/qinglong.png）從牠身邊的雲裡浮現，呼吸、發光，最後往上飛走
+    // 圖還沒載好時，退回程式畫的龍
+    dragonrise(u, A, k, D) {
+      if (window.LOONG_SWIM && !window.DRAGON_ART) return FX.dragonriseSwim(u, A, k, D);
+      if ((window.LOONG_STYLE || 'shard') === 'shard' && !window.DRAGON_ART) return FX.dragonriseShard(u, A, k, D);
+      const img = window.DRAGON_IMG;
+      if (!img || !img.complete || !img.naturalWidth) return FX.dragonriseVector(u, A, k, D);
+      const inT = 0.9, outT = 0.9, pin = clamp(u / inT), pout = clamp((u - (D - outT)) / outT);
+      const ease = (x) => 1 - Math.pow(1 - x, 3);
+      const h = Math.min(H * 0.9, 1100 * k), w = h * img.naturalWidth / img.naturalHeight;
+      const cx = P.x + (W / 2 - P.x) * 0.55, cy0 = H * 0.5;
+      const cy = cy0 + (1 - ease(pin)) * H * 0.35 - pout * pout * H * 0.6 + Math.sin(u * 1.6) * 10 * k;
+      const sc = (0.55 + 0.45 * ease(pin)) * (1 + 0.015 * Math.sin(u * 2.2)) * (1 + pout * 0.08);
+      const al = A * Math.min(1, pin * 1.4) * (1 - pout);
+      // 背後一團金光
+      ctx.save(); ctx.globalAlpha = al * 0.8;
+      const g = ctx.createRadialGradient(cx, cy - h * 0.18, 10, cx, cy - h * 0.18, h * 0.6);
+      g.addColorStop(0, 'rgba(255,226,150,0.55)'); g.addColorStop(0.5, 'rgba(255,214,120,0.18)'); g.addColorStop(1, 'rgba(255,214,120,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+      // 龍
+      ctx.save(); ctx.globalAlpha = al; ctx.translate(cx, cy); ctx.rotate(Math.sin(u * 1.1) * 0.02); ctx.scale(sc, sc);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h); ctx.restore();
+      // 身邊飄的金光與花瓣
+      const r = rng(71);
+      for (let i = 0; i < 40; i++) {
+        const a0 = r() * 6.283, rr = h * (0.25 + r() * 0.35), q = (u * (0.2 + r() * 0.3) + r()) % 1;
+        spark(cx + Math.cos(a0) * rr * 0.6, cy + Math.sin(a0) * rr - q * 120 * k, (4 + r() * 6) * k, al * Math.sin(q * Math.PI) * 0.9, i % 3 ? GOLD : '#FFB38A');
+      }
+    },
+    // 會游的碎片龍：從角色身邊鑽出來，邊游邊拼好，一路扭著身體往斜上方游出畫面
+    dragonriseSwim(u, A, k, D) {
+      // 從角色身下鑽出（腳下先亮起六角陣）→ 一條比螢幕還寬的龍掃過大 S 形 → 最後整條炸成碎片、亮一圈幾何陣
+      const sx = P.x < W / 2 ? 1 : -1, X = (f) => (sx > 0 ? f : 1 - f) * W, BL = Math.min(W * 1.05, 2000 * k);
+      const route = window.makeRoute(window.loongSpine([[P.x, P.y], [P.x + sx * 0.08 * W, H * 0.42], [X(0.42), H * 0.24], [X(0.62), H * 0.5], [X(0.82), H * 0.62], [X(0.98), H * 0.4], [X(1.12), H * 0.2]], 160));
+      const ease = (x) => x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2, outT = 0.85, end = D - outT;
+      const f = clamp(u / end), q0 = 0.1 * BL, q1 = route.total * 0.97, qh = q0 + (q1 - q0) * (0.35 * f + 0.65 * ease(f)) + Math.max(0, u - end) * 260 * k;
+      const v = (q1 - q0) / end;
+      const scatter = u < 0.7 ? Math.pow(1 - u / 0.7, 2) : u > end ? Math.pow(clamp((u - end) / outT), 1.25) : 0;
+      ctx.save(); ctx.globalAlpha *= A;
+      window.drawHexBurst(ctx, P.x, P.y - 10 * k, 200 * k, clamp(u / 1.1), { alpha: 0.85 });
+      window.drawSwimFx(ctx, route, qh, BL, { t: u, v, mirror: sx < 0, layer: 'back', alpha: 1 - scatter });
+      window.drawShardSwim(ctx, route, qh, BL, { t: u, amp: 0.03, mirror: sx < 0, scatter, glint: 0.9 * (1 - scatter) });
+      window.drawSwimFx(ctx, route, qh, BL, { t: u, mirror: sx < 0, layer: 'front', alpha: 1 - scatter });
+      if (u > end - 0.1) { const [hx, hy] = route.at(qh - BL * 0.35); window.drawHexBurst(ctx, hx, hy, 300 * k, clamp((u - end + 0.1) / (outT + 0.1)), { alpha: 0.8 }); }
+      ctx.restore();
+    },
+    // 碎片龍：碎片從四面八方飛來拼成一條 S 形盤繞的龍，停留時微微呼吸，最後碎裂散開
+    dragonriseShard(u, A, k, D) {
+      const inT = 1.2, outT = 0.9, ease = (x) => 1 - Math.pow(1 - x, 3);
+      const scatter = u < inT ? 1 - ease(clamp(u / inT)) : u > D - outT ? Math.pow(clamp((u - (D - outT)) / outT), 1.5) : 0;
+      const h = Math.min(H * 0.82, 980 * k), w = h * ((window.LOONG_SHARDS || {}).aspect || 0.56), side = P.x < W / 2 ? 1 : -1;
+      const ox = clamp(P.x + side * w * 0.35, w / 2 + 20, W - w / 2 - 20) - w / 2, oy = (H - h) / 2;
+      ctx.save(); ctx.globalAlpha *= A;
+      // 拼好的那一刻，背後亮一下
+      const flashA = u > inT - 0.15 && u < inT + 0.6 ? 1 - Math.abs(u - inT - 0.1) / 0.5 : 0;
+      if (flashA > 0) { const g = ctx.createRadialGradient(ox + w / 2, oy + h / 2, 10, ox + w / 2, oy + h / 2, h * 0.6); g.addColorStop(0, `rgba(160,230,220,${0.35 * flashA})`); g.addColorStop(1, 'rgba(160,230,220,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+      window.drawShardDragon(ctx, ox + w / 2, oy + h / 2, h, { flip: side < 0, scatter, t: u });
+      ctx.restore();
+    },
+    dragonriseVector(u, A, k, D) {
+      const sx = P.x < W / 2 ? 1 : -1, span = Math.max(P.x, W - P.x) + 300 * k;
+      const path = (q) => [P.x + sx * q * span, P.y - 20 * k - q * (P.y + 260 * k) + Math.sin(q * Math.PI * 4) * 110 * k * Math.min(1, q * 4)];
+      const head = (u / (D - 0.2)) * 1.3, pts = [];
+      for (let i = 0; i < 64; i++) { const q = head - i * 0.0068; if (q < 0) break; pts.push(path(q)); }
+      if (pts.length >= 6) { ctx.save(); ctx.globalAlpha *= A; window.drawLoong(ctx, pts, 1.9 * k, u, { sg: sx, pearl: true }); ctx.restore(); }
+    },
+  };
+
+  function frame(now) {
+    if (!P) return;
+    const u = (now - t0) / 1000, D = P.dur / 1000;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (u >= D) { P = null; return; }
+    const A = Math.min(1, u / 0.25) * Math.min(1, (D - u) / 0.5);
+    ctx.save(); ctx.lineJoin = 'round';
+    ENV.P = P; ENV.W = W; ENV.H = H;
+    try { ((window.GEO_STYLE && GEO[P.move]) || FX[P.move] || (() => {}))(u, A, P.scale || 1, D); } catch (e) { console.error(e); P = null; }
+    ctx.restore();
+    raf = requestAnimationFrame(frame);
+  }
+  function play(arg) { cancelAnimationFrame(raf); size(); P = arg; t0 = performance.now(); raf = requestAnimationFrame(frame); }
+  window.fxPreview = (arg, u) => { size(); P = arg; t0 = performance.now() - u * 1000; cancelAnimationFrame(raf); frame(performance.now()); cancelAnimationFrame(raf); };   // 測試與對照圖用：畫出第 u 秒的畫面
+  if (window.fx) window.fx.onPlay(play);
+})();
+</script>
+</body>
+</html>

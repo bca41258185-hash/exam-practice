@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>螢幕保護</title>
+<style>html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; } canvas { display: block; width: 100vw; height: 100vh; }
+#bar { position: fixed; top: 18px; right: 18px; display: flex; gap: 10px; z-index: 5; }
+#bar button { font: 600 16px "Microsoft JhengHei","PingFang TC",sans-serif; color: #4A3A2A; background: rgba(251,243,220,0.94); border: 2px solid #4A3A2A;
+  border-radius: 12px; padding: 9px 16px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
+#bar button:hover { background: #F5B82E; }
+#bar #off { font-size: 13px; padding: 9px 12px; color: #6A5A46; }
+</style>
+</head>
+<body>
+<div id="bar"><button id="close" title="收起螢幕保護">✕ 收起</button><button id="off" title="以後閒置時不再自動開">不要再自動開</button></div>
+<canvas id="c"></canvas>
+<script src="loong-shards.js"></script>
+<script src="loong-swim.js"></script>
+<script src="draw.js"></script>
+<script src="villains.js"></script>
+<script>
+  // 想改用畫好的青龍插畫（assets/dragon/），把 DRAGON_ART 改成 true；目前用程式畫的幾何青龍
+  window.DRAGON_ART = false;
+  if (window.DRAGON_ART) {
+    window.DRAGON_IMG = new Image();
+    window.DRAGON_IMG.onload = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.onerror = () => { window.DRAGON_READY = true; };
+    window.DRAGON_IMG.src = 'assets/dragon/qinglong-512.png';
+  } else window.DRAGON_READY = true;
+</script>
+<script>
+// 螢幕保護：不換畫面，只是在你的桌面上飄出東西來。透明、滑鼠穿透，桌面照常看得到。
+// 五個角色各有一套（SCENES）：飄的東西、怎麼動、隔一陣子發生什麼、點了有什麼反應都不一樣。
+//   靈貓「守山夜」    螢火蟲會被游標吸引；角落掛著師父的鈴鐺，隔一陣子響一聲；螢幕下緣走過一排貓掌印
+//   狐仙「狐火燈會」  狐火排成陣（圓、兩列、散開）輪流變換；點到一團，全部「噗」一聲換陣
+//   玉兔「月宮桂落」  月亮慢慢從左走到右；桂花落下，游標一攪就打轉；點月亮灑下一陣桂花
+//   熊貓「竹林灶火」  兩側長出竹子、落竹葉；熱騰騰的包子冒著蒸氣往上飄，點了就吃掉
+//   小青龍「雲海聽雨」幾朵雲飄過，雲下小雨、水珠上升；隔一陣子一條小龍游過；點雲會打雷下大雨
+// 你回來之後還會多演十幾秒才慢慢散掉。只有游標正好在可點的東西上才接住滑鼠。
+(function () {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const api = window.fx || { info: async () => ({ outfit: { species: location.hash.slice(1) || 'cat' } }), exit: () => console.log('exit'), clickable: () => {}, onLeave: () => {} };
+  let W = 0, H = 0, K = 1, sp = 'cat', S = null, things = [], bursts = [], mouse = { x: -9999, y: -9999 }, leaveAt = 0, born = 0, hot = false, flash = -9;
+  const LINGER = 14, FADE = 4, GOLD = '#F5B82E', LINE = '#4A3A2A';
+  let INFO = {}, lastPlay = 0;
+  function play() { leaveAt = 0; if (now() - lastPlay > 2.5) { lastPlay = now(); if (api.play) api.play(); } }   // 正在玩：螢幕保護先別散
+  function size() { W = innerWidth; H = innerHeight; K = Math.max(0.7, Math.min(1.5, H / 1080)); cv.width = Math.round(W * devicePixelRatio); cv.height = Math.round(H * devicePixelRatio); }
+  addEventListener('resize', size); size();
+  let clock = null;   // 預告片算圖時由外面指定時間（saverDraw），平常是 null
+  const rnd = (a, b) => a + Math.random() * (b - a), now = () => (clock == null ? performance.now() / 1000 : clock), clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const count = (per, lo, hi) => Math.max(lo, Math.min(hi, Math.round(W * H / per)));
+  function spark(x, y, r, a, color) {
+    ctx.save(); ctx.globalAlpha *= clamp(a); ctx.fillStyle = color; ctx.translate(x, y); ctx.beginPath();
+    for (let i = 0; i < 8; i++) { const an = i * Math.PI / 4, rr = i % 2 ? r * 0.32 : r; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  function burst(x, y, color, big) { bursts.push({ x, y, at: now(), color, big }); }
+  function cloudShape(x, y, s, color) {
+    ctx.fillStyle = color; ctx.beginPath();
+    ctx.arc(x - 60 * s, y + 6 * s, 34 * s, 0, 6.283); ctx.arc(x - 18 * s, y - 16 * s, 44 * s, 0, 6.283); ctx.arc(x + 38 * s, y - 6 * s, 38 * s, 0, 6.283); ctx.arc(x + 74 * s, y + 12 * s, 26 * s, 0, 6.283);
+    ctx.rect(x - 86 * s, y + 6 * s, 180 * s, 34 * s); ctx.fill();
+  }
+  // 會飄的小東西：o = { x, y, vx, vy, r, ph, at }，離開螢幕就從邊上再進來
+  function mk(vx, vy, r, extra) { return Object.assign({ x: rnd(0, W), y: rnd(0, H), vx, vy, r: r * K, ph: rnd(0, 6.28), spin: rnd(-1, 1), px: 0, py: 0, at: 0 }, extra); }
+  function reenter(o, T) { if (o.vy > 4) { o.y = -30; o.x = rnd(0, W); } else if (o.vy < -4) { o.y = H + 30; o.x = rnd(0, W); } else { o.x = Math.random() < 0.5 ? -30 : W + 30; o.y = rnd(0, H); } o.px = o.py = 0; o.at = T; }
+  // force > 0 閃開游標；< 0 被游標吸引；swirl 是繞著游標打轉。回傳 true 表示飄出螢幕了
+  function drift(o, T, dt, force, swirl) {
+    const dx = o.x - mouse.x, dy = o.y - mouse.y, d = Math.hypot(dx, dy), R = 190 * K;
+    if (d < R && d > 0.1) {
+      const f = (1 - d / R) * force * K;
+      o.px += dx / d * f * dt; o.py += dy / d * f * dt;
+      if (swirl) { o.px += -dy / d * swirl * (1 - d / R) * K * dt; o.py += dx / d * swirl * (1 - d / R) * K * dt; }
+    }
+    o.px *= 1 - Math.min(1, dt * 2); o.py *= 1 - Math.min(1, dt * 2);
+    o.x += (o.vx * K + Math.sin(T * 0.7 + o.ph) * 16 * K + o.px) * dt; o.y += (o.vy * K + Math.cos(T * 0.6 + o.ph) * 8 * K + o.py) * dt;
+    return o.x < -70 || o.x > W + 70 || o.y < -70 || o.y > H + 70;
+  }
+  const near = (o, x, y) => Math.hypot(o.x - x, o.y - y) < Math.max(26 * K, o.r * 1.8);
+
+  function firefly(o, T, boost) {
+    const a = clamp(0.45 + 0.5 * Math.sin(T * 2.2 + o.ph) + boost), r = o.r, g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, r * 3.2);
+    g.addColorStop(0, `rgba(214,255,170,${a})`); g.addColorStop(0.35, `rgba(150,240,160,${a * 0.45})`); g.addColorStop(1, 'rgba(150,240,160,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, r * 3.2, 0, 6.283); ctx.fill();
+    ctx.fillStyle = `rgba(255,255,220,${a})`; ctx.beginPath(); ctx.arc(o.x, o.y, r * 0.38, 0, 6.283); ctx.fill();
+  }
+  function foxfire(x, y, r, T, ph) {
+    const s = r / 16 * (1 + Math.sin(T * 16 + ph) * 0.1);
+    ctx.save(); ctx.translate(x, y); ctx.shadowColor = '#6FD3FF'; ctx.shadowBlur = 20; ctx.globalAlpha *= 0.92;
+    ctx.fillStyle = '#4FB6FF'; ctx.beginPath(); ctx.moveTo(0, -26 * s); ctx.quadraticCurveTo(18 * s, -4 * s, 0, 14 * s); ctx.quadraticCurveTo(-18 * s, -4 * s, 0, -26 * s); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#E6FBFF'; ctx.beginPath(); ctx.moveTo(0, -10 * s); ctx.quadraticCurveTo(8 * s, 2 * s, 0, 10 * s); ctx.quadraticCurveTo(-8 * s, 2 * s, 0, -10 * s); ctx.fill(); ctx.restore();
+  }
+  function blade(o, T, leaf) {   // 花瓣或竹葉
+    ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(T * (0.7 + o.spin * 0.6) + o.ph); ctx.globalAlpha *= 0.92;
+    const l = o.r * (leaf ? 2.2 : 1.6), w = l * (leaf ? 0.26 : 0.42);
+    ctx.fillStyle = leaf ? '#7CC878' : o.gold ? '#FFD45A' : '#F5C95A'; ctx.strokeStyle = leaf ? '#3E7A45' : '#C9901A'; ctx.lineWidth = 1.4 * K;
+    ctx.beginPath(); ctx.moveTo(-l / 2, 0); ctx.quadraticCurveTo(0, -w, l / 2, 0); ctx.quadraticCurveTo(0, w, -l / 2, 0); ctx.fill(); ctx.stroke();
+    if (leaf) { ctx.beginPath(); ctx.moveTo(-l / 2, 0); ctx.lineTo(l / 2, 0); ctx.stroke(); }
+    ctx.restore();
+  }
+  function orb(o) {
+    const g = ctx.createRadialGradient(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.1, o.x, o.y, o.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)'); g.addColorStop(0.5, 'rgba(159,232,255,0.35)'); g.addColorStop(1, 'rgba(127,212,255,0.6)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, 6.283); ctx.fill(); ctx.strokeStyle = 'rgba(127,212,255,0.9)'; ctx.lineWidth = 1.5 * K; ctx.stroke();
+  }
+
+  const SCENES = {
+    // ── 靈貓「守山夜」──
+    cat: {
+      name: '守山夜',
+      init(T) { things = Array.from({ length: count(70000, 12, 34) }, () => mk(rnd(-14, 14), rnd(-10, 10), rnd(5, 9))); this.ring = T + 5; this.rings = []; this.paws = T + 4; this.bright = -9;
+        this.jar = 0; this.jarAt = -9; this.pounce = -9; this.claws = []; this.stars = []; this.rise = null; this.born = T; },
+      // 抓螢火蟲：把螢火蟲（會跟著游標）趕到靈貓身邊，牠一撲就收進身邊的燈籠；收滿 12 隻，燈籠飄上天變成一顆星
+      lantern() { if (!petPos) return null; const side = petPos.x > W - 220 * K ? -1 : 1; return { x: petPos.x + side * 78 * K, y: petPos.y + 2 * K }; },
+      catchStep(T, dt) {
+        if (!petPos) return;
+        const cx = petPos.x, cy = petPos.y - 36 * K, L = this.lantern();
+        for (const o of things) {
+          if (o.caught) {   // 被撲到：沿弧線飛進燈籠
+            const p = clamp((T - o.caught) / 0.65), sx = o.cx, sy = o.cy, mx = (sx + L.x) / 2, my = Math.min(sy, L.y) - 70 * K;
+            o.x = (1 - p) * (1 - p) * sx + 2 * (1 - p) * p * mx + p * p * L.x; o.y = (1 - p) * (1 - p) * sy + 2 * (1 - p) * p * my + p * p * (L.y - 18 * K);
+            if (p >= 1) { o.caught = 0; o.r = 0; this.jar += 1; this.jarAt = T; burst(L.x, L.y - 18 * K, '#D6FFAA'); reenter(o, T + rnd(2, 5)); o.r = rnd(5, 9) * K;
+              if (this.jar >= 12 && !this.rise) { this.rise = { at: T, x: L.x, y: L.y }; api.report && api.report({ kind: 'catjar' }); } }
+            continue;
+          }
+          if (T < o.at || this.rise) continue;
+          const dd = Math.hypot(o.x - cx, o.y - cy);
+          if (dd < 240 * K && dd > 1) { o.px += (cx - o.x) / dd * 90 * K * dt; o.py += (cy - o.y) / dd * 90 * K * dt; }   // 靈貓盯著看：附近的螢火蟲慢慢被吸過來
+          if (T - this.pounce < 0.9) continue;
+          if (dd < 130 * K) {   // 靠夠近了：撲！
+            this.pounce = T; o.caught = T; o.cx = o.x; o.cy = o.y;
+            this.claws.push({ x: o.x, y: o.y, at: T, d: o.x < cx ? -1 : 1 });
+            api.report && api.report({ kind: 'catch', x: o.x, y: o.y });
+            break;
+          }
+        }
+        this.claws = this.claws.filter((c) => T - c.at < 0.6);
+        if (this.rise && T - this.rise.at > 3.2) { this.stars.push({ x: this.rise.x, y: H * rnd(0.08, 0.3), at: T }); this.rise = null; this.jar = 0; }
+        if (this.stars.length > 9) this.stars.shift();
+      },
+      drawCatch(T) {
+        for (const s of this.stars) { const tw = 0.6 + 0.4 * Math.sin(T * 2 + s.x); ctx.save(); ctx.globalAlpha *= clamp((T - s.at) / 1) * tw; ctx.fillStyle = '#FFF3B0'; ctx.translate(s.x, s.y);
+          ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = (i % 2 ? 3 : 11) * K; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+        for (const c of this.claws) {   // 三道金色爪痕
+          const p = (T - c.at) / 0.6; ctx.save(); ctx.globalAlpha *= 1 - p; ctx.strokeStyle = '#FFE08A'; ctx.lineCap = 'round'; ctx.lineWidth = (5 - p * 3) * K;
+          for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(c.x - c.d * 30 * K + i * 12 * K, c.y - 34 * K); ctx.quadraticCurveTo(c.x + i * 14 * K, c.y, c.x + c.d * 26 * K + i * 12 * K, c.y + 30 * K); ctx.stroke(); }
+          ctx.restore();
+        }
+        const L = this.rise ? { x: this.rise.x, y: this.rise.y - Math.pow(clamp((T - this.rise.at) / 3.2), 1.6) * (this.rise.y - H * 0.2) } : this.lantern();
+        if (!L) return;
+        const n = this.rise ? 12 : this.jar, lit = n / 12, pulse = clamp(1 - (T - this.jarAt) / 0.5);
+        const g = ctx.createRadialGradient(L.x, L.y - 18 * K, 4, L.x, L.y - 18 * K, (40 + lit * 80) * K);
+        g.addColorStop(0, `rgba(214,255,170,${0.15 + lit * 0.5 + pulse * 0.3})`); g.addColorStop(1, 'rgba(214,255,170,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(L.x, L.y - 18 * K, (40 + lit * 80) * K, 0, 6.283); ctx.fill();
+        ctx.save(); ctx.translate(L.x, L.y - 18 * K); ctx.rotate(Math.sin(T * 1.6) * 0.06); ctx.scale(1.45, 1.45);
+        ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 2 * K; ctx.beginPath(); ctx.moveTo(0, -24 * K); ctx.lineTo(0, -36 * K); ctx.stroke();   // 提把
+        ctx.fillStyle = '#7A4A2A'; ctx.fillRect(-12 * K, -26 * K, 24 * K, 5 * K); ctx.fillRect(-12 * K, 20 * K, 24 * K, 5 * K);
+        ctx.fillStyle = `rgba(${Math.round(250 - lit * 30)},${Math.round(236 + lit * 19)},${Math.round(200 - lit * 40)},0.92)`;
+        ctx.beginPath(); ctx.ellipse(0, 0, 18 * K, 22 * K, 0, 0, 6.283); ctx.fill(); ctx.strokeStyle = 'rgba(122,74,42,0.6)'; ctx.lineWidth = 1.2 * K;
+        for (const dx of [-9, 0, 9]) { ctx.beginPath(); ctx.ellipse(0, 0, Math.abs(dx) * K + 0.5, 22 * K, 0, 0, 6.283); ctx.stroke(); }
+        for (let i = 0; i < n; i++) { const a = T * (1 + i * 0.13) + i * 2.1; ctx.fillStyle = 'rgba(240,255,200,0.95)'; ctx.beginPath(); ctx.arc(Math.cos(a) * 9 * K, Math.sin(a * 1.3) * 12 * K, 2.2 * K, 0, 6.283); ctx.fill(); }
+        // 肉球印記
+        ctx.fillStyle = 'rgba(229,120,140,0.75)'; ctx.beginPath(); ctx.ellipse(0, 4 * K, 4.5 * K, 3.6 * K, 0, 0, 6.283); ctx.fill();
+        for (const [dx, dy] of [[-5, -3], [-1.8, -6], [1.8, -6], [5, -3]]) { ctx.beginPath(); ctx.arc(dx * K, dy * K, 1.5 * K, 0, 6.283); ctx.fill(); }
+        ctx.restore();
+        if (!this.rise) { ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+          const t = `螢火 ${n} / 12`; ctx.strokeText(t, L.x, L.y + 26 * K); ctx.fillText(t, L.x, L.y + 26 * K); ctx.restore(); }
+        if (T - this.born < 10 && !this.jar) { ctx.save(); ctx.globalAlpha *= clamp((10 - (T - this.born)) / 2); ctx.font = `600 ${Math.round(16 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 4; const t = '螢火蟲會跟著游標，把牠們趕到靈貓身邊';
+          ctx.strokeText(t, W / 2, H * 0.12); ctx.fillText(t, W / 2, H * 0.12); ctx.restore(); }
+      },
+      bell() { return { x: W - 130 * K, y: 96 * K, r: 22 * K }; },
+      ringBell(T) { this.rings.push(T); this.ring = T + rnd(10, 16); this.bright = T; },
+      step(T, dt) {
+        if (T > this.ring) this.ringBell(T);
+        this.rings = this.rings.filter((t) => T - t < 3);
+        if (T > this.paws + 24) this.paws = T;
+        for (const o of things) if (!o.caught && drift(o, T, dt, -260, 140)) reenter(o, T);   // 螢火蟲會湊過來繞著游標
+        this.catchStep(T, dt);
+      },
+      draw(T) {
+        const b = this.bell(), dtb = T - this.bright, sw = Math.sin(T * 1.3) * 0.12 + (dtb < 1.2 ? Math.sin(dtb * 26) * 0.35 * (1 - dtb / 1.2) : 0);
+        for (const t of this.rings) for (let i = 0; i < 3; i++) { const p = (T - t - i * 0.3) / 2.2; if (p > 0 && p < 1) { ctx.save(); ctx.globalAlpha *= (1 - p) * 0.75; ctx.strokeStyle = GOLD; ctx.lineWidth = (4 - p * 3) * K; ctx.beginPath(); ctx.arc(b.x, b.y, 26 * K + p * 300 * K, 0, 6.283); ctx.stroke(); ctx.restore(); } }
+        ctx.save(); ctx.translate(b.x, 0); ctx.rotate(sw); ctx.strokeStyle = '#C0392B'; ctx.lineWidth = 3 * K; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, b.y - 20 * K); ctx.stroke();
+        ctx.translate(0, b.y); ctx.lineWidth = 2.4 * K; ctx.fillStyle = GOLD; ctx.strokeStyle = LINE; ctx.shadowColor = GOLD; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.arc(0, 0, b.r, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-b.r * 0.8, 0); ctx.lineTo(b.r * 0.8, 0); ctx.moveTo(0, 0); ctx.lineTo(0, b.r * 0.8); ctx.stroke();
+        ctx.fillStyle = '#FFF6D0'; ctx.beginPath(); ctx.arc(-b.r * 0.35, -b.r * 0.4, b.r * 0.18, 0, 6.283); ctx.fill(); ctx.restore();
+        // 貓掌印：從左走到右，一步一步印上去再淡掉
+        const n = Math.floor(W / (86 * K));
+        for (let i = 0; i < n; i++) {
+          const age = T - this.paws - i * 0.42; if (age < 0 || age > 7) continue;
+          ctx.save(); ctx.globalAlpha *= clamp(age * 4) * clamp((7 - age) / 3) * 0.6; ctx.fillStyle = '#6B5A44'; ctx.translate(40 * K + i * 86 * K, H - (i % 2 ? 46 : 78) * K); ctx.rotate(0.25);
+          ctx.beginPath(); ctx.ellipse(0, 4 * K, 11 * K, 9 * K, 0, 0, 6.283); ctx.fill();
+          for (const [dx, dy] of [[-11, -8], [-4, -14], [4, -14], [11, -8]]) { ctx.beginPath(); ctx.ellipse(dx * K, dy * K, 4 * K, 5 * K, 0, 0, 6.283); ctx.fill(); }
+          ctx.restore();
+        }
+        const boost = clamp(1 - dtb / 2) * 0.6;
+        for (const o of things) if (T >= o.at && o.r > 0) firefly(o, T, boost);
+        this.drawCatch(T);
+      },
+      hit(x, y) { const b = this.bell(); if (Math.hypot(x - b.x, y - b.y) < b.r * 1.6) return 'bell'; return things.find((o) => near(o, x, y)) || null; },
+      click(h, T) { if (h === 'bell') { this.ringBell(T); burst(this.bell().x, this.bell().y, GOLD, true); } else { burst(h.x, h.y, '#B8F5A0'); reenter(h, T + rnd(1.5, 4)); } },
+    },
+    // ── 狐仙「狐火燈會」──
+    fox: {
+      name: '狐火燈會',
+      // 狐火：一團團亮起、燒一陣、熄掉，再在別處亮起；越來越多。有一些聚到狐仙身後，排成狐尾（時間越久尾巴越多，最多九條）
+      init(T) {
+        this.t0 = T; this.form = 0; this.next = T + 16; this.max = count(60000, 16, 36);
+        things = []; for (let i = 0; i < 4; i++) things.push(this.flame(T + i * 0.5, false));
+      },
+      flame(T, tail) {
+        const o = mk(0, 0, rnd(12, 18)); o.born = T + rnd(0, 0.8); o.dur = rnd(4, 9); o.tail = tail;
+        o.x = rnd(0.1, 0.9) * W; o.y = rnd(0.15, 0.85) * H; return o;
+      },
+      tails(T) { return Math.min(9, 1 + Math.floor((T - this.t0) / 18)); },
+      // 第 k 條尾巴上的第 j 團（0 根部～5 尾尖）：從狐仙身後往上、往後彎，九條展開成扇形，輕輕擺
+      tailSlot(k, n, j, T, spin) {
+        const P = petPos || { x: W * 0.8, y: H - 80 * K, dir: -1 }, d = P.dir < 0 ? -1 : 1;
+        // 像狐仙自己的尾巴一樣，以身體為中心往上、往兩側對稱展開（一條時稍微偏向身後）
+        const rootX = P.x - (n === 1 ? d * 26 * K : 0), rootY = P.y - 4 * K, fan = Math.min(2.95, 0.42 * (n - 1));   // 九條時張開成大半圓，最外側的尾巴不會掉到地面下
+        const base = -Math.PI / 2 - (n === 1 ? d * 0.6 : 0) + (spin || 0), ang = base + (n > 1 ? (k - (n - 1) / 2) * fan / (n - 1) : 0);
+        const t = (j + 1) / 6, L = (190 + n * 16) * K, side = Math.cos(ang) < 0 ? -1 : 1;   // 尾巴拉長，狐火之間留空隙
+        const sway = Math.sin(T * 1.6 + k * 0.9) * 0.28 * t, curl = side * 0.85 * t * t;   // 尾尖往外捲
+        const a = ang + sway + curl;
+        const x = rootX + Math.cos(ang) * L * t * 0.5 + Math.cos(a) * L * t * 0.5, y = rootY + Math.sin(ang) * L * t * 0.5 + Math.sin(a) * L * t * 0.5;
+        return [Math.max(14 * K, Math.min(W - 14 * K, x)), Math.max(14 * K, Math.min(H - 14 * K, y))];
+      },
+      // 陣形（沒在尾巴上的狐火）：0 一個慢慢轉的大圓；1 左右兩列；2 散開各自飄
+      slot(i, n, T, o) {
+        if (this.form === 0) { const a = i * 6.283 / Math.max(1, n) + T * 0.12; return [W / 2 + Math.cos(a) * W * 0.36, H / 2 + Math.sin(a) * H * 0.33]; }
+        if (this.form === 1) { const half = Math.max(1, Math.ceil(n / 2)), j = i % half, side = i < half ? 0.1 : 0.9; return [W * side + Math.sin(T * 0.8 + i) * 14 * K, H * (0.12 + 0.76 * (j + 0.5) / half)]; }
+        return [W * (0.5 + 0.44 * Math.sin(o.ph * 3 + T * 0.09)), H * (0.5 + 0.4 * Math.sin(o.ph * 5 + T * 0.07))];
+      },
+      swap(T) { this.form = (this.form + 1) % 3; this.next = T + 16; for (const o of things) if (!o.tail) burst(o.x, o.y, '#FFFFFF'); },
+      // 狐仙出招：gather 狐火往牠身邊聚；cast 從牠身上噴出新的狐火；spin 狐尾繞著轉；meditate 尾巴更亮
+      foxfx(move, T) {
+        this.fx = { move, at: T };
+        if (move === 'cast' && petPos) for (let i = 0; i < 4; i++) {
+          const o = this.flame(T, false); o.born = T; o.x = petPos.x; o.y = petPos.y - 30 * K; const a = -Math.PI / 2 + (i - 1.5) * 0.6;
+          o.px = Math.cos(a) * 900 * K; o.py = Math.sin(a) * 900 * K; things.push(o);
+        }
+      },
+      alpha(o, T) {
+        if (T < o.born) return 0;
+        const inA = clamp((T - o.born) / 0.6);
+        if (o.tail) return inA * (0.72 + 0.28 * Math.sin(T * 6 + o.ph));   // 尾巴上的狐火不熄，只是一閃一閃
+        return inA * clamp((o.born + o.dur - T) / 0.8);
+      },
+      step(T, dt) {
+        if (T > this.next) this.swap(T);
+        const n = this.tails(T), tailNeed = n * 6;
+        const want = Math.min(this.max + tailNeed, 4 + Math.floor((T - this.t0) * 0.4) + tailNeed);
+        let tails = things.filter((o) => o.tail);
+        while (tails.length < tailNeed) { const o = this.flame(T, true); o.k = Math.floor(tails.length / 6); o.j = tails.length % 6; if (petPos) { o.x = petPos.x + rnd(-200, 200) * K; o.y = petPos.y - rnd(80, 300) * K; } things.push(o); tails.push(o); }
+        let free = things.filter((o) => !o.tail);
+        while (tails.length + free.length < want) { const o = this.flame(T, false); things.push(o); free.push(o); }
+        free.forEach((o, i) => {
+          if (T > o.born + o.dur) {   // 熄了：過一下在別的地方亮起來
+            o.born = T + rnd(0.3, 2); o.dur = rnd(4, 9); o.x = rnd(0.1, 0.9) * W; o.y = rnd(0.15, 0.85) * H; o.px = o.py = 0;
+          }
+          let [tx, ty] = this.slot(i, free.length, T, o);
+          if (this.fx && this.fx.move === 'gather' && T - this.fx.at < 3 && petPos) { const a = i * 2.4 + T * 2; tx = petPos.x + Math.cos(a) * 90 * K; ty = petPos.y - 60 * K + Math.sin(a) * 60 * K; }   // 被狐仙聚過去
+          const dx = o.x - mouse.x, dy = o.y - mouse.y, d = Math.hypot(dx, dy), R = 170 * K;
+          if (d < R && d > 0.1) { const f = (1 - d / R) * 1100 * K; o.px += dx / d * f * dt; o.py += dy / d * f * dt; }   // 逗你：一靠近就溜
+          o.px *= 1 - Math.min(1, dt * 2.5); o.py *= 1 - Math.min(1, dt * 2.5);
+          const pull = this.fx && this.fx.move === 'gather' && T - this.fx.at < 3 ? 2.2 : 0.6;
+          o.x += ((tx - o.x) * pull + o.px) * dt; o.y += ((ty - o.y) * pull + o.py + Math.sin(T * 2 + o.ph) * 6 * K) * dt;
+        });
+        if (petPos) for (const o of free) {   // 狐仙飛過：附近的狐火被撥開、冒火花
+          const dx = o.x - petPos.x, dy = o.y - (petPos.y - 30 * K), d = Math.hypot(dx, dy);
+          if (d < 110 * K && d > 0.1) { o.px += dx / d * 1400 * K * dt; o.py += dy / d * 1400 * K * dt; if (Math.random() < dt * 3) burst(o.x, o.y, '#9BE3FF'); }
+        }
+        for (const o of tails) {   // 飛向自己在尾巴上的位置
+          const spin = this.fx && this.fx.move === 'spin' && T - this.fx.at < 3.5 ? (T - this.fx.at) * 1.8 : 0;   // 轉尾：整把尾巴繞著狐仙轉
+          const [tx, ty] = this.tailSlot(o.k, n, o.j, T, spin), f = Math.min(1, dt * 5);
+          o.x += (tx - o.x) * f; o.y += (ty - o.y) * f;
+        }
+      },
+      draw(T) {
+        for (const o of things) {
+          const a = this.alpha(o, T); if (a <= 0.01) continue;
+          ctx.save(); ctx.globalAlpha *= a;
+          const glow = this.fx && this.fx.move === 'meditate' && T - this.fx.at < 5 ? 1.25 : 1;   // 打坐時尾巴更亮更大
+          const r = (o.tail ? (20 - o.j * 2) * K : o.r) * (o.tail ? glow : 1);
+          foxfire(o.x, o.y, r, T, o.ph);
+          ctx.restore();
+        }
+      },
+      hit(x, y, T) { return things.find((o) => this.alpha(o, T || now()) > 0.3 && near(o, x, y)) || null; },
+      click(h, T) {
+        burst(h.x, h.y, '#6FD3FF', true);
+        if (h.tail) return;   // 點到尾巴上的：閃一下就好
+        this.swap(T);   // 幻術：點到一團，全部換陣
+      },
+    },
+    // ── 玉兔「月宮桂落」──
+    rabbit: {
+      name: '月宮桂落',
+      init(T) { things = Array.from({ length: count(60000, 14, 40) }, () => mk(rnd(-18, 6), rnd(22, 46), rnd(6, 10))); this.t0 = T; this.shower = -9; this.man = null; this.drag = null; this.cat = ''; this.born = T;
+        this.tree = INFO.tree || null; this.treeHit = -9; this.rain = -9; this.watered = 0;
+        this.beat = null; this.pills = []; this.combo = 0; this.best = 0; this.judge = null;
+        const spots = [[0.14, 0.42, 'cloud'], [0.5, 0.34, 'cloud'], [0.82, 0.46, 'cloud'], [0.36, 0.93, 'grass'], [0.68, 0.94, 'grass']];
+        this.bunnies = spots.map(([fx, fy, kind], i) => ({ fx, fy, kind, i, found: 0, shake: 0, peek: rnd(3, 12) }));
+        this.allFound = 0;
+      },
+      // ── 種月桂：點地面種一顆桂子，每次螢幕保護長大一點（主程序記在存檔），點樹澆水；長滿就開花、下金色桂花雨
+      treePos() { return { x: W * (this.tree ? this.tree.x : 0.5), y: H - 26 * K }; },
+      drawTree(T) {
+        if (!this.tree) {   // 還沒種：地上一行小字
+          if (T - this.born > 2) { ctx.save(); ctx.globalAlpha *= 0.85; ctx.font = `600 ${Math.round(14 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+            ctx.strokeText('點地面，種一顆月桂', W * 0.5, H - 40 * K); ctx.fillText('點地面，種一顆月桂', W * 0.5, H - 40 * K); ctx.restore(); }
+          return;
+        }
+        const g = Math.max(0.06, Math.min(1, this.tree.grow)), bloom = g >= 1, b = this.treePos(), sway = Math.sin(T * 0.9) * 0.03 + (T - this.treeHit < 0.6 ? Math.sin((T - this.treeHit) * 30) * 0.05 * (1 - (T - this.treeHit) / 0.6) : 0);
+        const L0 = (36 + g * 120) * K, depth = 2 + Math.round(g * 4);
+        let seed = 7; const rr = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        const tips = [];
+        const branch = (x, y, a, len, d, w) => {
+          const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+          ctx.strokeStyle = '#6B4A2E'; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke();
+          if (d <= 0) { tips.push([x2, y2]); return; }
+          const n = 2 + (rr() < 0.35 ? 1 : 0);
+          for (let i = 0; i < n; i++) branch(x2, y2, a + (i - (n - 1) / 2) * 0.55 + (rr() - 0.5) * 0.3 + sway * (depth - d + 1), len * (0.68 + rr() * 0.12), d - 1, Math.max(1, w * 0.68));
+        };
+        ctx.save();
+        ctx.fillStyle = 'rgba(70,110,80,0.5)'; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4 * K, (18 + g * 40) * K, 6 * K, 0, 0, 6.283); ctx.fill();   // 小土丘
+        branch(b.x, b.y, -Math.PI / 2 + sway, L0, depth, (3 + g * 9) * K);
+        for (const [x, y] of tips) {   // 葉叢；開花時點點金黃
+          ctx.fillStyle = 'rgba(58,120,84,0.9)'; ctx.beginPath(); ctx.arc(x, y, (5 + g * 9) * K, 0, 6.283); ctx.fill();
+          ctx.fillStyle = 'rgba(92,160,110,0.9)'; ctx.beginPath(); ctx.arc(x - 3 * K, y - 3 * K, (3 + g * 5) * K, 0, 6.283); ctx.fill();
+          if (bloom) for (let j = 0; j < 4; j++) { const a = j * 1.7 + x; ctx.fillStyle = j % 2 ? '#FFD45A' : '#F5B82E'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 7 * K, y + Math.sin(a) * 6 * K, 2.2 * K, 0, 6.283); ctx.fill(); }
+        }
+        ctx.restore();
+        const label = bloom ? '月桂開花了（點樹下桂花雨）' : `月桂 ${Math.round(g * 100)}%`;
+        ctx.save(); ctx.font = `600 ${Math.round(12 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.9)'; ctx.strokeStyle = 'rgba(40,40,40,0.5)'; ctx.lineWidth = 3;
+        ctx.strokeText(label, b.x, b.y + 18 * K); ctx.fillText(label, b.x, b.y + 18 * K); ctx.restore();
+        this.treeTop = { x: b.x, y: b.y - L0 * 1.6, r: L0 * 1.1 };
+      },
+      clickTree(T) {
+        const b = this.treePos(); this.treeHit = T; play();
+        if (this.tree.grow >= 1) {   // 開花：一陣金色桂花雨
+          this.rain = T; flash = T;
+          for (let i = 0; i < 60 && things.length < 160; i++) things.push(mk(rnd(-60, 60), rnd(60, 140), rnd(7, 11), { x: rnd(0, W), y: rnd(-H * 0.3, 0), ttl: T + 12, gold: true }));
+          api.report && api.report({ kind: 'tree', op: 'rain' });
+        } else if (this.watered < 5) {   // 澆水：每次螢幕保護最多澆五下
+          this.watered += 1; this.tree.grow = Math.min(1, this.tree.grow + 0.02);
+          for (let i = 0; i < 6; i++) burst(b.x + rnd(-30, 30) * K, b.y - rnd(20, 80) * K, '#8FDCFF');
+          api.report && api.report({ kind: 'tree', op: 'water' });
+        } else burst(b.x, b.y - 40 * K, '#B8F5A0');
+      },
+      // ── 搗藥打拍子：點杵臼開始，月光圈一圈圈縮過來，剛好縮到杵臼時點下去
+      mortar() { const tx = this.tree ? this.tree.x : 0.5, fx = tx > 0.5 ? 0.2 : 0.8; return { x: W * fx, y: H - 54 * K, r: 30 * K }; },
+      ringPeriod() { return Math.max(0.75, 1.3 - this.combo * 0.04); },
+      tapMortar(T) {
+        const m = this.mortar(); play();
+        if (!this.beat) { this.beat = { start: T + 0.4, last: T }; this.combo = 0; return; }   // 第一下：開始
+        const per = this.ringPeriod(), ph = ((T - this.beat.start) / per) % 1, off = Math.min(ph, 1 - ph) * per;   // 離最近一次「到點」多遠
+        this.beat.last = T;
+        if (off < 0.14) {
+          this.combo += 1; this.best = Math.max(this.best, this.combo);
+          this.judge = { t: T, text: off < 0.06 ? '完美！咚！' : '咚！', good: true };
+          this.pills.push({ x: m.x, y: m.y - 20 * K, vx: rnd(-90, 90) * K, vy: -rnd(260, 360) * K, at: T, big: this.combo % 10 === 0 });
+          if (this.combo % 10 === 0) { burst(m.x, m.y - 30 * K, GOLD, true); api.report && api.report({ kind: 'pound', combo: this.combo }); }
+        } else { this.judge = { t: T, text: '差一點', good: false }; this.combo = 0; }
+      },
+      drawMortar(T, dt) {
+        const m = this.mortar();
+        if (this.beat && T - this.beat.last > 6) { this.beat = null; this.combo = 0; }   // 太久沒點：收工
+        // 月光圈
+        if (this.beat && T > this.beat.start) {
+          const per = this.ringPeriod(), ph = ((T - this.beat.start) / per) % 1, R = m.r + (1 - ph) * 120 * K;
+          ctx.save(); ctx.globalAlpha *= 0.35 + ph * 0.6; ctx.strokeStyle = '#FFF4C4'; ctx.lineWidth = (2 + ph * 4) * K; ctx.beginPath(); ctx.arc(m.x, m.y - 10 * K, R, 0, 6.283); ctx.stroke(); ctx.restore();
+          ctx.save(); ctx.globalAlpha *= 0.5; ctx.strokeStyle = '#F5B82E'; ctx.setLineDash([4 * K, 5 * K]); ctx.lineWidth = 2 * K; ctx.beginPath(); ctx.arc(m.x, m.y - 10 * K, m.r, 0, 6.283); ctx.stroke(); ctx.restore();
+        }
+        // 杵臼
+        const hitA = this.judge && T - this.judge.t < 0.18 ? 1 - (T - this.judge.t) / 0.18 : 0;
+        ctx.save(); ctx.translate(m.x, m.y);
+        ctx.fillStyle = '#C9B48A'; ctx.strokeStyle = '#6B5A44'; ctx.lineWidth = 2 * K;
+        ctx.beginPath(); ctx.moveTo(-26 * K, -14 * K); ctx.lineTo(26 * K, -14 * K); ctx.lineTo(18 * K, 14 * K); ctx.lineTo(-18 * K, 14 * K); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#8A7552'; ctx.beginPath(); ctx.ellipse(0, -14 * K, 26 * K, 6 * K, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+        ctx.save(); ctx.translate(8 * K, -30 * K + hitA * 14 * K); ctx.rotate(0.35); ctx.fillStyle = '#E8DCC0'; ctx.fillRect(-4 * K, -30 * K, 8 * K, 40 * K); ctx.strokeRect(-4 * K, -30 * K, 8 * K, 40 * K); ctx.restore();
+        ctx.restore();
+        // 跳出來的丹丸
+        this.pills = this.pills.filter((p) => T - p.at < 1.6);
+        for (const p of this.pills) { p.vy += 700 * K * dt; p.x += p.vx * dt; p.y += p.vy * dt; const r = (p.big ? 11 : 6) * K;
+          ctx.save(); ctx.globalAlpha *= Math.min(1, (1.6 - (T - p.at)) / 0.4); const g = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, 1, p.x, p.y, r);
+          g.addColorStop(0, p.big ? '#FFF6D0' : '#FFE0E8'); g.addColorStop(1, p.big ? '#F5B82E' : '#E58AA0'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.283); ctx.fill(); ctx.restore(); }
+        // 字
+        const tip = this.beat ? (this.combo ? `連搗 ${this.combo}` : '圈縮到杵臼時點下去') : '點杵臼，一起搗藥';
+        ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+        ctx.strokeText(tip, m.x, m.y + 32 * K); ctx.fillText(tip, m.x, m.y + 32 * K);
+        if (this.judge && T - this.judge.t < 0.7) { const q = (T - this.judge.t) / 0.7; ctx.globalAlpha *= 1 - q; ctx.font = `bold ${Math.round(22 * K)}px "DFKai-SB","KaiTi",serif`; ctx.fillStyle = this.judge.good ? '#FFE08A' : '#D8E0E6';
+          ctx.strokeText(this.judge.text, m.x, m.y - 70 * K - q * 20 * K); ctx.fillText(this.judge.text, m.x, m.y - 70 * K - q * 20 * K); }
+        ctx.restore();
+      },
+      // ── 找小月兔：五隻躲在雲後、草叢裡；游標靠近，藏身處會抖；點一下就找到
+      bunnyAt(b) { return { x: W * b.fx, y: H * b.fy }; },
+      drawBunny(x, y, s, T, wave) {
+        ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+        ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 1.6;
+        for (const dx of [-5, 5]) { ctx.save(); ctx.translate(dx, -18); ctx.rotate(dx * 0.03 + (wave ? Math.sin(T * 8 + dx) * 0.15 : 0)); ctx.beginPath(); ctx.ellipse(0, -8, 3.6, 10, 0, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#FFC9D4'; ctx.beginPath(); ctx.ellipse(0, -8, 1.6, 7, 0, 0, 6.283); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 12, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4A3A2A'; ctx.beginPath(); ctx.arc(-5, -1, 1.6, 0, 6.283); ctx.arc(5, -1, 1.6, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#FFB4A8'; ctx.beginPath(); ctx.arc(-8, 3, 2.2, 0, 6.283); ctx.arc(8, 3, 2.2, 0, 6.283); ctx.fill();
+        ctx.restore();
+      },
+      drawBunnies(T) {
+        let lined = 0;
+        for (const b of this.bunnies) {
+          const p = this.bunnyAt(b), near = Math.hypot(mouse.x - p.x, mouse.y - p.y) < 90 * K && !b.found;
+          if (near) b.shake = T;
+          const sh = T - b.shake < 0.3 ? Math.sin(T * 50) * 3 * K : 0;
+          if (b.found) {   // 找到了：跳到下面排排站揮手
+            const tx = W * 0.5 + (b.order - 2) * 46 * K, ty = H - 120 * K, q = Math.min(1, (T - b.found) / 0.9);
+            const x = p.x + (tx - p.x) * q, y = p.y + (ty - p.y) * q - Math.sin(q * Math.PI) * 80 * K;
+            this.drawBunny(x, y, 1.15 * K, T, q >= 1); lined += 1;
+          } else {
+            const peek = ((T + b.peek) % 9) < 1.2;   // 偶爾探出耳朵
+            if (peek) { ctx.save(); ctx.beginPath(); ctx.rect(p.x - 40 * K, p.y - 60 * K, 80 * K, 46 * K); ctx.clip(); this.drawBunny(p.x + 8 * K, p.y - 6 * K, 1 * K, T, false); ctx.restore(); }
+          }
+          if (!b.found) {   // 藏身處：雲或草叢
+            ctx.save(); ctx.translate(p.x + sh, p.y);
+            if (b.kind === 'cloud') { ctx.fillStyle = 'rgba(236,244,250,0.92)'; for (const [dx, dy, r] of [[-30, 4, 20], [-8, -8, 26], [18, -2, 22], [36, 6, 15], [0, 8, 26]]) { ctx.beginPath(); ctx.arc(dx * K, dy * K, r * K, 0, 6.283); ctx.fill(); } }
+            else { ctx.fillStyle = '#4E8A5C'; for (let i = -4; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(i * 7 * K - 5 * K, 14 * K); ctx.quadraticCurveTo(i * 9 * K, -20 * K - Math.abs(i) * -2 * K, i * 7 * K + 5 * K, 14 * K); ctx.fill(); } }
+            ctx.restore();
+          }
+        }
+        if (lined && T - this.born < 600) { ctx.save(); ctx.font = `600 ${Math.round(13 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.92)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 3;
+          const t = lined >= 5 ? '五隻小月兔全找到了！' : `找到小月兔 ${lined} / 5`; ctx.strokeText(t, W * 0.5, H - 160 * K); ctx.fillText(t, W * 0.5, H - 160 * K); ctx.restore(); }
+      },
+      findBunny(b, T) {
+        if (b.found) return;
+        b.found = T; b.order = this.bunnies.filter((x) => x.found).length - 1; play();
+        const p = this.bunnyAt(b); burst(p.x, p.y, '#FFFFFF');
+        if (this.bunnies.every((x) => x.found)) { this.allFound = T; burst(W * 0.5, H - 140 * K, GOLD, true); api.report && api.report({ kind: 'bunnies' }); }
+      },
+      // 月亮的位置決定月相：左邊新月 → 中間滿月 → 右邊又變細。可以拖著月亮走（拖過之後就停在你放的地方）
+      moon(T) {
+        const p = this.man != null ? this.man : ((T - this.t0) / 120 + 0.25) % 1;
+        return { x: W * (0.08 + 0.84 * p), y: H * 0.2 - Math.sin(p * Math.PI) * H * 0.1, r: (this.drag ? 50 : 44) * K, p };
+      },
+      phaseName(p) { return p < 0.07 || p > 0.93 ? '新月' : p < 0.22 ? '眉月' : p < 0.38 ? '上弦月' : p < 0.62 ? '滿月' : p < 0.78 ? '下弦月' : '殘月'; },
+      phaseCat(p) { return p < 0.07 || p > 0.93 ? 'new' : p > 0.4 && p < 0.6 ? 'full' : p >= 0.22 && p <= 0.78 ? 'half' : 'thin'; },
+      release(T) {
+        if (!this.drag) return;
+        const moved = this.drag.moved; this.drag = null;
+        if (!moved) { const m = this.moon(T); this.shower = T; burst(m.x, m.y, '#FFF4C4', true); for (let i = 0; i < 26 && things.length < 110; i++) things.push(mk(rnd(-70, 70), rnd(40, 110), rnd(6, 10), { x: m.x + rnd(-m.r, m.r), y: m.y + rnd(-m.r * 0.4, m.r), ttl: T + 14 })); return; }
+        const c = this.phaseCat(this.man);   // 放手：玉兔看月亮變了就有反應
+        if (c !== this.cat) { this.cat = c; api.report && api.report({ kind: 'moonphase', phase: c }); }
+        if (c === 'full') burst(this.moon(T).x, this.moon(T).y, '#FFF4C4', true);
+      },
+      // 畫月相：先畫暗的整顆，再畫亮的部分（右半或左半＋一個橢圓的明暗線）
+      litPath(m) {
+        const a = m.p, k = Math.cos(a * 2 * Math.PI), s = a < 0.5 ? 1 : -1;
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r, -Math.PI / 2, Math.PI / 2, s < 0);
+        ctx.ellipse(m.x, m.y, Math.max(0.01, m.r * Math.abs(k)), m.r, 0, Math.PI / 2, -Math.PI / 2, s > 0 ? k > 0 : k <= 0);
+        ctx.closePath();
+      },
+      step(T, dt) {
+        things = things.filter((o) => !o.ttl || T < o.ttl);   // 點月亮灑下來的那一陣，落完就沒了
+        if (this.drag) {   // 拖月亮：跟著游標左右走（高度照弧線）
+          const p = clamp((mouse.x / W - 0.08) / 0.84);
+          if (Math.abs(mouse.x - this.drag.x0) > 8 * K) this.drag.moved = true;
+          if (this.drag.moved) this.man = p;
+          if (T - (this.played || 0) > 2.5) { this.played = T; if (api.play) api.play(); }   // 拖著的時候螢幕保護別散
+        }
+        for (const o of things) if (drift(o, T, dt, 120, 900) && !o.ttl) reenter(o, T);   // 游標一攪，桂花繞著打轉
+      },
+      draw(T) {
+        const m = this.moon(T), glow = 1 + clamp(1 - (T - this.shower) / 1.5) * 0.6;
+        const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.8, m.x, m.y, m.r * 3 * glow); g.addColorStop(0, 'rgba(255,244,196,0.38)'); g.addColorStop(1, 'rgba(255,244,196,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 3 * glow, 0, 6.283); ctx.fill();
+        ctx.save(); ctx.fillStyle = 'rgba(255,244,196,0.16)'; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.283); ctx.fill();   // 暗的那一面
+        ctx.globalAlpha *= 0.94; ctx.fillStyle = '#FFF4C4'; this.litPath(m); ctx.fill(); this.litPath(m); ctx.clip();
+        // 月亮上搗藥的小兔子剪影（只在亮的那一面看得到）
+        ctx.fillStyle = 'rgba(190,165,115,0.75)'; ctx.beginPath(); ctx.ellipse(m.x - m.r * 0.05, m.y + m.r * 0.22, m.r * 0.26, m.r * 0.2, 0, 0, 6.283); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.18, m.y - m.r * 0.02, m.r * 0.15, m.r * 0.13, 0, 0, 6.283); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.13, m.y - m.r * 0.26, m.r * 0.045, m.r * 0.16, -0.2, 0, 6.283); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(m.x + m.r * 0.25, m.y - m.r * 0.25, m.r * 0.045, m.r * 0.16, 0.2, 0, 6.283); ctx.fill();
+        ctx.restore();
+        this.drawTree(T); this.drawBunnies(T); this.drawMortar(T, 1 / 60);
+        for (const o of things) if (T >= o.at) blade(o, T, false);
+        const label = this.drag && this.drag.moved ? this.phaseName(m.p) : T - this.born < 8 ? '拖動月亮，看月亮圓缺' : '';
+        if (label) { ctx.save(); ctx.globalAlpha *= this.drag ? 1 : clamp((10 - (T - this.born)) / 2); ctx.font = `600 ${Math.round((this.drag ? 20 : 15) * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,250,236,0.95)'; ctx.strokeStyle = 'rgba(40,40,40,0.55)'; ctx.lineWidth = 4; ctx.strokeText(label, m.x, m.y + m.r + 30 * K); ctx.fillText(label, m.x, m.y + m.r + 30 * K); ctx.restore(); }
+      },
+      hit(x, y, T) {
+        if (this.drag) return 'moon'; const m = this.moon(T); if (Math.hypot(x - m.x, y - m.y) < m.r * 1.15) return 'moon';
+        const mo = this.mortar(); if (Math.hypot(x - mo.x, y - (mo.y - 14 * K)) < 46 * K) return 'mortar';
+        for (const b of this.bunnies) { if (b.found) continue; const p = this.bunnyAt(b); if (Math.hypot(x - p.x, y - p.y) < 44 * K) return b; }
+        if (this.tree) { const tp = this.treePos(), top = this.treeTop; if ((Math.abs(x - tp.x) < 24 * K && y > tp.y - 120 * K && y < tp.y + 10 * K) || (top && Math.hypot(x - top.x, y - top.y) < top.r)) return 'tree'; }
+        else if (y > H - 90 * K && T - this.born > 2) return 'ground';
+        return things.find((o) => near(o, x, y)) || null;
+      },
+      click(h, T) {
+        if (h === 'moon') { this.drag = { x0: mouse.x, moved: false }; leaveAt = 0; if (this.man == null) this.man = this.moon(T).p; return; }   // 按住拖月亮；沒拖就放開＝灑一陣桂花
+        if (h === 'mortar') return this.tapMortar(T);
+        if (h === 'tree') return this.clickTree(T);
+        if (h === 'ground') { this.tree = { x: clamp(mouse.x / W, 0.1, 0.9), grow: 0.06 }; play(); burst(mouse.x, H - 30 * K, '#B8F5A0', true); api.report && api.report({ kind: 'tree', op: 'plant', x: this.tree.x }); return; }
+        if (h && h.fx != null) return this.findBunny(h, T);
+        else if (h.ttl) { burst(h.x, h.y, '#F5C95A'); h.ttl = T; }
+        else { burst(h.x, h.y, '#F5C95A'); reenter(h, T + rnd(1, 3)); }
+      },
+    },
+    // ── 熊貓「竹林灶火」──
+    panda: {
+      name: '竹林灶火',
+      init(T) {
+        this.t0 = T; this.stalks = []; this.eaten = 0;
+        for (const side of [0, 1]) for (let i = 0; i < 3; i++) this.stalks.push({ x: side ? W - (50 + i * 62) * K : (50 + i * 62) * K, h: H * rnd(0.34, 0.62), lean: (side ? -1 : 1) * rnd(0.03, 0.09), ph: rnd(0, 6), shake: -9 });
+        things = Array.from({ length: count(80000, 10, 28) }, () => mk(rnd(-22, 22), rnd(26, 52), rnd(12, 18)));
+        this.buns = Array.from({ length: 3 }, (_, i) => this.bun(T + i * 4));
+      },
+      top(s, T) { const g = clamp((T - this.t0) / 14), ds = T - s.shake, a = s.lean + Math.sin(T * 0.8 + s.ph) * 0.02 + (ds < 1.2 ? Math.sin(ds * 22) * 0.05 * (1 - ds / 1.2) : 0); return { x: s.x + Math.sin(a) * s.h * g, y: H - Math.cos(a) * s.h * g, a, g }; },
+      fromTop(o, T) { const t = this.top(this.stalks[Math.floor(Math.random() * this.stalks.length)], T); o.x = t.x + rnd(-30, 30) * K; o.y = t.y + rnd(-10, 30) * K; o.px = o.py = 0; },   // 新的一片從竹梢掉下來
+      bun(at) { return { id: Math.random().toString(36).slice(2, 8), x: rnd(W * 0.25, W * 0.75), y: H + 40, r: 24 * K, vy: rnd(-30, -20), ph: rnd(0, 6), at }; },
+      step(T, dt) {
+        for (const o of things) if (drift(o, T, dt, 500, 0)) { this.fromTop(o, T); o.at = T; }
+        for (const s of this.stalks) if (Math.abs(mouse.x - s.x) < 46 * K && mouse.y > H - s.h && T - s.shake > 1.2) s.shake = T;   // 游標掃過，竹子搖一搖
+        this.buns.forEach((b, i) => {
+          if (b.fly) {   // 被吃：飛進熊貓嘴裡
+            const p = clamp((T - b.fly.t0) / 0.35); b.x = b.fly.x0 + (b.fly.x - b.fly.x0) * p; b.y = b.fly.y0 + (b.fly.y - b.fly.y0) * p - Math.sin(p * Math.PI) * 40 * K;
+            if (p >= 1) { burst(b.x, b.y, '#FFFFFF', true); this.eaten += 1; this.buns[i] = this.bun(T + rnd(3, 6)); }
+            return;
+          }
+          if (b.stolen) return;
+          if (T < b.at) return; b.y += b.vy * K * dt; b.x += Math.sin(T * 0.6 + b.ph) * 10 * K * dt; if (b.y < -60) this.buns[i] = this.bun(T + rnd(2, 6)); });
+      },
+      draw(T) {
+        for (const s of this.stalks) {
+          const t = this.top(s, T); if (t.g <= 0.02) continue;
+          ctx.save(); ctx.translate(s.x, H); ctx.rotate(t.a); const h = s.h * t.g;
+          ctx.lineCap = 'round'; ctx.strokeStyle = '#3E7A45'; ctx.lineWidth = 15 * K; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -h); ctx.stroke();
+          ctx.strokeStyle = '#8FD18A'; ctx.lineWidth = 10.5 * K; ctx.stroke();
+          ctx.strokeStyle = '#3E7A45'; ctx.lineWidth = 2.2 * K; for (let y = 70 * K; y < h; y += 78 * K) { ctx.beginPath(); ctx.moveTo(-7 * K, -y); ctx.lineTo(7 * K, -y); ctx.stroke(); }
+          for (const [dy, a, l] of [[0, -0.6, 44], [4, 0.8, 48], [40, 1.1, 38], [78, -1.1, 34]]) { if (dy * K > h) continue; ctx.save(); ctx.translate(0, -h + dy * K); ctx.rotate(a + Math.sin(T * 1.6 + s.ph + dy) * 0.08); ctx.fillStyle = '#7CC878'; ctx.strokeStyle = '#3E7A45'; ctx.lineWidth = 1.8 * K; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(l * K * 0.5, -10 * K, l * K, 0); ctx.quadraticCurveTo(l * K * 0.5, 10 * K, 0, 0); ctx.fill(); ctx.stroke(); ctx.restore(); }
+          ctx.restore();
+        }
+        for (const o of things) if (T >= o.at) blade(o, T, true);
+        for (const b of this.buns) {
+          if (T < b.at) continue;
+          for (let i = 0; i < 3; i++) { const p = (T * 0.6 + i / 3 + b.ph) % 1, sx = b.x + (i - 1) * 12 * K; ctx.save(); ctx.globalAlpha *= (1 - p) * 0.7; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3 * K; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx, b.y - b.r - p * 30 * K); ctx.quadraticCurveTo(sx + 8 * K, b.y - b.r - 12 * K - p * 30 * K, sx, b.y - b.r - 24 * K - p * 30 * K); ctx.stroke(); ctx.restore(); }
+          ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.sin(T + b.ph) * 0.08); ctx.fillStyle = '#FFFDF4'; ctx.strokeStyle = LINE; ctx.lineWidth = 2.4 * K;
+          ctx.beginPath(); ctx.moveTo(-b.r, b.r * 0.5); ctx.quadraticCurveTo(-b.r * 1.1, -b.r * 0.9, 0, -b.r); ctx.quadraticCurveTo(b.r * 1.1, -b.r * 0.9, b.r, b.r * 0.5); ctx.quadraticCurveTo(0, b.r * 0.85, -b.r, b.r * 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.lineWidth = 1.6 * K; for (const a of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(0, -b.r * 0.96); ctx.quadraticCurveTo(Math.sin(a) * b.r * 0.5, -b.r * 0.6, Math.sin(a) * b.r * 0.7, -b.r * 0.2); ctx.stroke(); }
+          ctx.restore();
+        }
+      },
+      hit(x, y, T) { const b = this.buns.find((q) => T >= q.at && Math.hypot(x - q.x, y - q.y) < q.r * 1.2); if (b) return b; return things.find((o) => near(o, x, y)) || null; },
+      lowBun(T) { return this.buns.find((b) => T >= b.at && !b.fly && !b.stolen && b.y > H - 320 * K && b.y < H - 20 * K); },
+      eat(id, x, y, T) { const b = this.buns.find((q) => q.id === id && !q.fly && !q.stolen); if (b) b.fly = { t0: T, x0: b.x, y0: b.y, x, y }; },
+      click(h, T) {
+        const i = this.buns.indexOf(h);
+        if (i >= 0) { burst(h.x, h.y, '#FFFFFF', true); this.eaten += 1; this.buns[i] = this.bun(T + rnd(2, 5)); }   // 吃掉一顆包子
+        else { burst(h.x, h.y, '#7CC878'); this.fromTop(h, T); h.at = T + rnd(1, 3); }
+      },
+    },
+    // ── 小青龍「雲海聽雨」──
+    dragon: {
+      name: '雲海聽雨',
+      init(T) {
+        const nc = Math.max(3, Math.round(W / (460 * K)));
+        this.clouds = Array.from({ length: nc }, (_, i) => ({ x: (i + 0.5) * W / nc, y: (60 + (i % 3) * 36) * K, s: (1.1 + (i % 2) * 0.35) * K, v: rnd(10, 22), storm: -9 }));
+        things = Array.from({ length: count(110000, 8, 22) }, () => mk(rnd(-8, 8), rnd(-26, -10), rnd(9, 20)));
+        this.swim = T + 5;
+        this.pearl = { x: W * 0.5, y: H * 0.64, held: false, vy: 0, home: { x: W * 0.5, y: H * 0.64 } };
+        this.chase = null;
+      },
+      // 追龍珠：龍頭朝龍珠轉（有轉向上限，所以會繞、會盤），身體沿著龍頭走過的路
+      startChase(T) {
+        if (this.chase) { this.chase.end = 0; return; }
+        const BL = Math.min(W * 0.95, 1800 * K), y = H * 0.5, path = [];   // 和平常游過去的龍一樣長，玩龍珠時不會變小
+        for (let i = 0; i <= 30; i++) path.push([-BL * 1.3 + i / 30 * BL * 1.2, y]);   // 從畫面左外側游進來
+        this.chase = { head: { x: path[path.length - 1][0], y, ang: 0 }, path, BL, speed: 0, lastBite: -9, end: 0, caught: false, since: T };
+      },
+      stepPearl(T, dt) {
+        const pl = this.pearl;
+        if (pl.held) { pl.x += (mouse.x - pl.x) * Math.min(1, dt * 18); pl.y += (mouse.y - pl.y) * Math.min(1, dt * 18); }
+        else if (this.chase && !this.chase.caught) { pl.vy = Math.min(150 * K, pl.vy + 90 * K * dt); pl.y = Math.min(H * 0.86, pl.y + pl.vy * dt); }   // 放開了：慢慢往下飄
+        else { pl.x += (pl.home.x - pl.x) * Math.min(1, dt * 2); pl.y += (pl.home.y + Math.sin(T * 1.6) * 10 * K - pl.y) * Math.min(1, dt * 2); }
+        const c = this.chase;
+        if (!c) return;
+        const h = c.head, gone = c.end && T > c.end;
+        const tx = gone ? W + c.BL * 1.5 : pl.x, ty = gone ? H * 0.35 : pl.y;   // 叼到之後往右上游走
+        const dx = tx - h.x, dy = ty - h.y, dist = Math.hypot(dx, dy);
+        let want = Math.atan2(dy, dx), diff = want - h.ang;
+        while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+        const turn = 3.4 * dt; h.ang += Math.max(-turn, Math.min(turn, diff));
+        const target = Math.min(1100 * K, 320 * K + dist * 1.6);
+        c.speed += (target - c.speed) * Math.min(1, dt * 3);
+        h.x += Math.cos(h.ang) * c.speed * dt; h.y += Math.sin(h.ang) * c.speed * dt;
+        const last = c.path[c.path.length - 1];
+        if (Math.hypot(h.x - last[0], h.y - last[1]) > 6 * K) c.path.push([h.x, h.y]);
+        let len = 0;   // 路太長就把尾巴那端剪掉
+        for (let i = c.path.length - 1; i > 0; i--) { len += Math.hypot(c.path[i][0] - c.path[i - 1][0], c.path[i][1] - c.path[i - 1][1]); if (len > c.BL * 1.5) { c.path.splice(0, i - 1); break; } }
+        if (!gone && dist < 40 * K) {
+          if (pl.held) { if (T - c.lastBite > 1.1) { c.lastBite = T; burst(pl.x, pl.y, '#FFE9A8'); this.roarAt = T; } }   // 追上了：咬一口、冒火花
+          else if (!c.caught) {   // 接住掉下來的龍珠
+            c.caught = true; c.end = T + 0.6; burst(pl.x, pl.y, '#FFE9A8', true); flash = T; this.roarAt = T;
+            pl.x = pl.home.x; pl.y = H + 60 * K; pl.vy = 0;
+          }
+        }
+        if (gone && h.x > W + c.BL * 1.2) { this.chase = null; this.swim = T + rnd(8, 14); }
+        if (!pl.held && !c.caught && T - c.since > 40) { c.end = T; }   // 保險：太久就收
+      },
+      drawPearl(T) {
+        const pl = this.pearl, r = 15 * K * (pl.held ? 1.15 : 1);
+        ctx.save();
+        const g = ctx.createRadialGradient(pl.x, pl.y, 1, pl.x, pl.y, r * 3.2);
+        g.addColorStop(0, 'rgba(255,236,190,0.85)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(pl.x, pl.y, r * 3.2, 0, 6.283); ctx.fill();
+        ctx.translate(pl.x, pl.y); ctx.rotate(T * 0.8);
+        const cols = ['#FFF5DE', '#FFE29A', '#F5B82E', '#FFF1C4', '#E9B44C', '#FFFAEC'];
+        for (let i = 0; i < 6; i++) {   // 多面寶珠：六塊三角面，深淺交錯
+          const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a0) * r, Math.sin(a0) * r); ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r); ctx.closePath();
+          ctx.fillStyle = cols[i]; ctx.fill();
+        }
+        ctx.strokeStyle = 'rgba(74,58,42,0.7)'; ctx.lineWidth = 1.5 * K; ctx.beginPath();
+        for (let i = 0; i <= 6; i++) { const a = i * Math.PI / 3; i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.stroke();
+        ctx.rotate(-T * 1.6); ctx.strokeStyle = 'rgba(245,184,46,0.6)'; ctx.lineWidth = 1.2 * K;   // 外圈旋轉的六芒星線框
+        for (const off of [0, Math.PI / 6]) { ctx.beginPath(); for (let i = 0; i <= 3; i++) { const a = off + i * Math.PI * 2 / 3; i ? ctx.lineTo(Math.cos(a) * r * 1.9, Math.sin(a) * r * 1.9) : ctx.moveTo(Math.cos(a) * r * 1.9, Math.sin(a) * r * 1.9); } ctx.stroke(); }
+        ctx.restore();
+        if (!pl.held && !this.chase) { ctx.save(); ctx.font = `600 ${Math.round(14 * K)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,250,236,0.9)'; ctx.strokeStyle = 'rgba(74,58,42,0.6)'; ctx.lineWidth = 3; ctx.strokeText('點龍珠，讓青龍追你', pl.x, pl.y + r * 3); ctx.fillText('點龍珠，讓青龍追你', pl.x, pl.y + r * 3); ctx.restore(); }
+        if (this.roarAt && T - this.roarAt < 1) {
+          const p = T - this.roarAt; ctx.save(); ctx.globalAlpha *= 1 - p; ctx.font = `bold ${Math.round((26 + p * 20) * K)}px "DFKai-SB","KaiTi",serif`; ctx.textAlign = 'center';
+          ctx.fillStyle = '#E8FFF6'; ctx.strokeStyle = 'rgba(30,70,74,0.8)'; ctx.lineWidth = 4; const hx = this.chase ? this.chase.head.x : pl.x, hy = (this.chase ? this.chase.head.y : pl.y) - 50 * K;
+          ctx.strokeText('吼——！', hx, hy); ctx.fillText('吼——！', hx, hy); ctx.restore();
+        }
+      },
+      step(T, dt) {
+        for (const c of this.clouds) { c.x += c.v * K * dt; if (c.x > W + 140 * c.s) c.x = -140 * c.s; }
+        for (const o of things) if (drift(o, T, dt, 700, 0)) reenter(o, T);
+        if (T > this.swim + 14) this.swim = T + rnd(8, 16);
+        this.stepPearl(T, dt);
+        if (this.pearl.held && T - (this.played || 0) > 2.5) { this.played = T; if (api.play) api.play(); }   // 玩龍珠時請主程序先別收起螢幕保護
+      },
+      draw(T) {
+        // 雲下面的雨（平常疏疏的，打雷後一陣大雨）
+        for (const c of this.clouds) {
+          const heavy = clamp(1 - (T - c.storm) / 5), n = Math.round(9 + heavy * 26), fall = (300 + heavy * 420) * K, base = ctx.globalAlpha;
+          ctx.save(); ctx.strokeStyle = '#8FDCFF'; ctx.lineCap = 'round';
+          for (let i = 0; i < n; i++) { const p = (T * (1.1 + (i % 5) * 0.14) + i * 0.37) % 1, x = c.x + ((i * 53) % 170 - 85) * c.s, y = c.y + 34 * c.s + p * fall; ctx.globalAlpha = base * (1 - p) * (0.55 + heavy * 0.35); ctx.lineWidth = (1.8 + heavy) * K; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 4 * K, y + 18 * K); ctx.stroke(); }
+          ctx.restore();
+          const bolt = T - c.storm;
+          if (bolt >= 0 && bolt < 0.35) { ctx.save(); ctx.strokeStyle = '#FFFFFF'; ctx.shadowColor = '#B48CFF'; ctx.shadowBlur = 24; ctx.lineWidth = 4 * K; ctx.beginPath(); let x = c.x, y = c.y + 30 * c.s; ctx.moveTo(x, y); for (let i = 0; i < 7; i++) { x += Math.sin(c.storm * 7 + i * 2.3) * 44 * K; y += 46 * K; ctx.lineTo(x, y); } ctx.stroke(); ctx.restore(); }
+          ctx.save(); ctx.globalAlpha *= 0.9; cloudShape(c.x, c.y, c.s, heavy > 0.05 ? '#7E8CA3' : '#C9D6E2'); ctx.restore();
+        }
+        for (const o of things) if (T >= o.at) orb(o);
+        // 青龍偶爾從雲裡浮現：慢慢往上飄、淡入淡出（插畫還沒載好就用程式畫的小龍游過去）
+        if (this.chase && window.LOONG_SWIM) {
+          const c = this.chase, route = window.makeRoute(c.path);
+          window.drawSwimFx(ctx, route, route.total, c.BL, { t: T, v: c.speed, layer: 'back', n: 26, alpha: 0.8 });
+          window.drawShardSwim(ctx, route, route.total, c.BL, { t: T * 0.9, amp: 0.035, glint: 0.7 });
+          window.drawSwimFx(ctx, route, route.total, c.BL, { t: T, layer: 'front', pearl: false });
+          this.drawPearl(T);
+          return;
+        }
+        this.drawPearl(T);
+        const p = (T - this.swim) / 12;
+        const img = window.DRAGON_IMG;
+        if (p >= 0 && p <= 1 && img && img.complete && img.naturalWidth) {
+          if (this.swimX == null || this.swimAt !== this.swim) { this.swimAt = this.swim; this.swimX = W * (Math.random() < 0.5 ? 0.22 : 0.78); }
+          const h = H * 0.62, w = h * img.naturalWidth / img.naturalHeight, y = H * 0.5 + (0.5 - p) * 90 * K;
+          ctx.save(); ctx.globalAlpha *= Math.sin(p * Math.PI) * 0.85; ctx.drawImage(img, this.swimX - w / 2, y - h / 2, w, h); ctx.restore();
+        } else if (p >= 0 && p <= 1 && window.LOONG_SWIM && !window.DRAGON_ART) {
+          const BL = Math.min(W * 0.95, 1800 * K);   // 龍的全長（比半個螢幕還長，慢慢橫越）
+          if (!this.route || this.routeW !== W) { this.routeW = W; const pts = []; for (let i = 0; i <= 80; i++) { const x = -0.1 * W + i / 80 * (1.2 * W + BL); pts.push([x, H * 0.5 + Math.sin(i / 80 * 6) * H * 0.12]); } this.route = window.makeRoute(pts); }
+          const qh = p * (this.route.total + BL * 0.3), v = (this.route.total + BL * 0.3) / 12;
+          window.drawSwimFx(ctx, this.route, qh, BL, { t: T, v, layer: 'back', n: 26, alpha: 0.8 });
+          window.drawShardSwim(ctx, this.route, qh, BL, { t: T * 0.8, amp: 0.03, glint: 0.7 });
+          window.drawSwimFx(ctx, this.route, qh, BL, { t: T, layer: 'front' });
+        } else if (p >= 0 && p <= 1.35 && !(img && img.naturalWidth) && !window.LOONG_SWIM) {   // 只有碎片龍資料沒載到才用程式畫的舊龍
+          const pts = [];
+          for (let i = 0; i < 48; i++) { const q = p - i * 0.0062; pts.push([-120 * K + q * (W + 240 * K), H * 0.42 + Math.sin(q * 11) * 80 * K]); }
+          window.drawLoong(ctx, pts, 1.05 * K, T, { sg: 1 });
+        }
+      },
+      hit(x, y) { const pl = this.pearl; if (pl && Math.hypot(x - pl.x, y - pl.y) < 36 * K) return 'pearl'; const c = this.clouds.find((q) => Math.abs(x - q.x) < 100 * q.s && Math.abs(y - q.y) < 46 * q.s); if (c) return c; return things.find((o) => near(o, x, y)) || null; },
+      click(h, T) {
+        if (h === 'pearl') {   // 拿起來／放開龍珠
+          const pl = this.pearl;
+          if (!pl.held) { pl.held = true; pl.vy = 0; leaveAt = 0; this.startChase(T); this.played = 0; burst(pl.x, pl.y, GOLD); }
+          else { pl.held = false; pl.vy = 0; if (this.chase) this.chase.caught = false; }
+          return;
+        }
+        if (this.clouds.includes(h)) { h.storm = T; flash = T; } else { burst(h.x, h.y, '#BFEFFF'); reenter(h, T + rnd(1.5, 4)); } },   // 點雲：打雷、下一陣大雨
+    },
+  };
+
+  // ── 反派「黑風怪」：螢幕保護開了一陣子後，從畫面邊溜進來偷東西；靈寵會跑去打，你也可以點牠幫忙 ──
+  let villain = null, nextVillain = null, lastReport = 0, petPos = null, orbs = [];
+  // BOSS：心魔麾下的大將。比黑風怪大、血多、會朝靈寵丟黑氣彈；打不完 75 秒後會撤退
+  const BOSSES = {
+    lamp: { name: '燈影魔梟', type: 'owl', hp: 20, sc: 1.6, body: '#3A2A5C', dark: '#1A1030', eye: '#FFB03B', aura: 'rgba(255,176,59,0.45)', say: '師父的燈，歸心魔了！', every: 3.2 },
+    jiao: { name: '九幽黑蛟', type: 'jiao', hp: 28, sc: 1.9, body: '#1F3A4A', dark: '#0B1820', eye: '#5BF0FF', aura: 'rgba(91,240,255,0.4)', say: '九幽之水，淹沒青雲山！', every: 2.7 },
+    heart: { name: '心魔本尊', type: 'heart', hp: 40, sc: 2.2, body: '#2A0F1A', dark: '#12050A', eye: '#FF2D55', aura: 'rgba(255,45,85,0.45)', say: '你越累，我越強……', every: 2.2 },
+  };
+  const BOSS_ID = new URLSearchParams(location.search).get('boss');   // petPos：桌面上那隻靈寵（主程序每幾格告訴我們）
+  function villainStart(T, bossId) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const B = BOSSES[bossId || BOSS_ID];
+    if (B) {   // BOSS 從畫面邊緩緩走進來，站在中間開打
+      villain = { boss: B, type: B.type, name: B.name, x: side < 0 ? -140 * K : W + 140 * K, y: H - 74 * K, dir: -side, hp: B.hp, max: B.hp, state: 'come', t0: T, hitAt: -9, loot: null, tx: W * rnd(0.4, 0.6), nextShot: T + 3 };
+      return;
+    }
+    const MINOR = ['wolf', 'rat', 'crow', 'monkey'], type = MINOR[Math.floor(Math.random() * MINOR.length)];
+    const INFO = (window.VILLAIN_INFO || {})[type];
+    villain = { type, name: INFO ? INFO.name : '黑風怪', x: side < 0 ? -80 * K : W + 80 * K, y: H - 74 * K, dir: -side, hp: 6, max: 6, state: 'come', t0: T, hitAt: -9, said: T, loot: null,
+      tx: sp === 'panda' && S.lowBun ? null : W * rnd(0.35, 0.65) };
+    if (MODE_V) villain.tx = null;
+  }
+  function villainStep(T, dt) {
+    if (nextVillain == null) nextVillain = T + rnd(45, 75);
+    if (!villain && T > nextVillain && !leaveAt) { villainStart(T); nextVillain = MODE_V ? Infinity : T + rnd(150, 240); }
+    const v = villain; if (!v) return;
+    if (v.state === 'down') { if (T - v.downAt > 1.2) { villain = null; api.report && api.report({ kind: 'villain', state: 'gone', beaten: true, boss: v.boss ? (BOSS_ID || 'boss') : '' }); if (MODE_V) setTimeout(() => api.exit(), 600); } return; }
+    if (v.boss) {   // BOSS：走到定點、丟黑氣彈；時間到撤退
+      const sc = v.boss.sc;
+      if (v.state === 'come') { const dx = v.tx - v.x; v.dir = dx < 0 ? -1 : 1; v.x += Math.sign(dx) * Math.min(Math.abs(dx), 70 * K * dt); if (Math.abs(dx) < 4) v.state = 'fight'; }
+      else if (v.state === 'fight') {
+        if (petPos) v.dir = petPos.x < v.x ? -1 : 1;
+        if (T > v.nextShot) { v.nextShot = T + v.boss.every; orbs.push({ x: v.x + v.dir * 40 * K * sc, y: v.y - 80 * K * sc, t0: T, col: v.boss.eye }); }
+        if (T - v.t0 > 75) { v.state = 'flee'; v.dir = v.x < W / 2 ? -1 : 1; }
+      } else if (v.state === 'flee') {
+        v.x += v.dir * 160 * K * dt;
+        if (v.x < -200 * K * sc || v.x > W + 200 * K * sc) { villain = null; orbs = []; api.report && api.report({ kind: 'villain', state: 'gone', beaten: false, boss: BOSS_ID || 'boss' }); if (MODE_V) setTimeout(() => api.exit(), 600); return; }
+      }
+      // 黑氣彈：追著靈寵飛，碰到就告訴主程序「被打中」；被你點到會散掉
+      orbs = orbs.filter((o) => {
+        const tx = petPos ? petPos.x : W / 2, ty = petPos ? petPos.y - 20 * K : H - 100 * K, dx = tx - o.x, dy = ty - o.y, d = Math.hypot(dx, dy);
+        if (d < 36 * K) { burst(o.x, o.y, o.col, true); api.report && api.report({ kind: 'pethit' }); return false; }
+        const sp = (240 + (T - o.t0) * 60) * K; o.x += dx / d * sp * dt; o.y += dy / d * sp * dt;
+        return T - o.t0 < 6;
+      });
+      if (T - lastReport > 0.35 && api.report) { lastReport = T; api.report({ kind: 'villain', state: v.state === 'fight' ? 'come' : v.state, x: v.x, y: v.y, hp: v.hp, boss: true }); }
+      return;
+    }
+    if (v.state === 'come') {
+      let target = v.tx;
+      if (sp === 'panda' && S.lowBun) { const b = S.lowBun(T); target = b ? b.x : W * 0.5; v.bun = b || null; }
+      if (MODE_V) target = petPos ? petPos.x + (v.x < petPos.x ? -70 : 70) * K : W * 0.5;   // 平時：直接找靈寵要東西
+      const dx = target - v.x; v.dir = dx < 0 ? -1 : 1;
+      v.x += Math.sign(dx) * Math.min(Math.abs(dx), 95 * K * dt);
+      if (Math.abs(dx) < 16 * K && T - v.t0 > (MODE_V ? 12 : 6)) {   // 走到了：偷東西就跑（平時多給靈寵一點時間打）
+        if (v.bun) { v.bun.stolen = true; v.loot = v.bun; }
+        v.state = 'flee'; v.fleeAt = T; v.dir = v.x < W / 2 ? -1 : 1;
+      }
+    } else if (v.state === 'flee') {
+      v.x += v.dir * 210 * K * dt;
+      if (v.loot) { v.loot.x = v.x; v.loot.y = v.y - 70 * K; }
+      if (v.x < -120 * K || v.x > W + 120 * K) {
+        if (v.loot && S.buns) { const i = S.buns.indexOf(v.loot); if (i >= 0) S.buns[i] = S.bun(T + rnd(3, 6)); }
+        villain = null; api.report && api.report({ kind: 'villain', state: 'gone', beaten: false }); if (MODE_V) setTimeout(() => api.exit(), 600);
+        return;
+      }
+    }
+    if (T - lastReport > 0.35 && api.report) { lastReport = T; api.report({ kind: 'villain', state: v.state, x: v.x, y: v.y, hp: v.hp }); }
+  }
+  function villainHit(dmg, T) {
+    const v = villain; if (!v || v.state === 'down') return;
+    v.hp -= dmg; v.hitAt = T; burst(v.x, v.y - 40 * K, '#B48CFF', true); flash = T - 0.1;
+    if (v.hp <= 0) { v.state = 'down'; v.downAt = T; if (v.loot) { v.loot.stolen = false; v.loot.y = v.y - 60 * K; v.loot = null; } }
+    else if (!v.boss && v.state === 'come' && v.hp <= 2) { v.state = 'flee'; v.fleeAt = T; v.dir = v.x < W / 2 ? -1 : 1; }   // 打怕了：丟下東西逃跑（BOSS 不會）
+    if (v.hp <= 0) orbs = [];
+  }
+  function villainOver(x, y) {
+    const v = villain; if (!v || v.state === 'down') return false;
+    const sc = v.boss ? v.boss.sc : 1;
+    return Math.abs(x - v.x) < 46 * K * sc && y > v.y - 110 * K * sc && y < v.y + 14 * K * sc;
+  }
+  function orbOver(x, y) { return orbs.find((o) => Math.hypot(x - o.x, y - o.y) < 22 * K); }
+  function villainDraw(T) {
+    const v = villain; if (!v) return;
+    const B = v.boss, k = K * (B ? B.sc : 1), bob = Math.abs(Math.sin(T * (v.state === 'flee' ? 16 : B ? 3 : 8))) * 6 * k, hurt = T - v.hitAt < 0.25;
+    const COL = B ? { body: B.body, dark: B.dark, head: B.body, eye: B.eye } : { body: '#2B2238', dark: '#120C1A', head: '#3A2F4C', eye: '#FF3B3B' };
+    const fade = v.state === 'down' ? 1 - clamp((T - v.downAt) / 1.1) : 1;
+    if (window.drawVillain && v.type) {   // 新的反派造型（villains.js）：可愛但壞壞的動物
+      ctx.save(); ctx.globalAlpha *= fade; ctx.translate(v.x + (hurt ? Math.sin(T * 90) * 3 * k : 0), v.y); ctx.scale(k, k);
+      window.drawVillain(ctx, v.type, { t: T, st: T - (v.state === 'down' ? v.downAt : v.state === 'flee' ? (v.fleeAt || v.t0) : v.t0), dir: v.dir, state: v.state, hurt, hp: v.hp, max: v.max });
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.globalAlpha *= fade; ctx.translate(v.x + (hurt ? Math.sin(T * 90) * 4 * k : 0), v.y - bob); ctx.scale(v.dir, 1);
+      // 影子
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(0, 12 * k + bob, 30 * k, 6 * k, 0, 0, 6.283); ctx.fill();
+      // 破斗篷
+      if (B) {   // BOSS 身後一圈會轉的光環
+        ctx.save(); ctx.strokeStyle = B.aura; ctx.lineWidth = 5 * k;
+        for (let i = 0; i < 2; i++) { const a = T * (1.2 + i) ; ctx.beginPath(); ctx.arc(0, -55 * k, (62 + i * 14) * k, a, a + 4.2); ctx.stroke(); }
+        ctx.restore();
+      }
+      ctx.fillStyle = hurt ? '#FFFFFF' : COL.body; ctx.strokeStyle = COL.dark; ctx.lineWidth = 2.5 * k;
+      ctx.beginPath(); ctx.moveTo(-26 * k, 6 * k); ctx.lineTo(-18 * k, 4 * k); ctx.lineTo(-12 * k, 10 * k); ctx.lineTo(-4 * k, 3 * k); ctx.lineTo(4 * k, 10 * k); ctx.lineTo(12 * k, 3 * k); ctx.lineTo(22 * k, 9 * k);
+      ctx.quadraticCurveTo(30 * k, -40 * k, 6 * k, -78 * k); ctx.quadraticCurveTo(-30 * k, -76 * k, -26 * k, 6 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // 頭、角、紅眼
+      ctx.fillStyle = hurt ? '#FFFFFF' : COL.head; ctx.beginPath(); ctx.arc(2 * k, -80 * k, 20 * k, 0, 6.283); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5A4A6E';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo((2 + s * 10) * k, -96 * k); ctx.lineTo((2 + s * 18) * k, -116 * k); ctx.lineTo((2 + s * 4) * k, -98 * k); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = COL.eye; ctx.shadowColor = COL.eye; ctx.shadowBlur = 8;
+      for (const ex of [4, 14]) { ctx.beginPath(); ctx.ellipse(ex * k, -82 * k, 3.4 * k, 2.4 * k, 0.3, 0, 6.283); ctx.fill(); }
+      ctx.shadowBlur = 0;
+      if (B) {   // BOSS 拿的東西：燈影魔將提著師父的燈；九幽蛟魔一條蛟尾；心魔本尊頭上一頂黑冠
+        if (B.name === '燈影魔梟') { ctx.strokeStyle = '#7A5A3A'; ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.moveTo(22 * k, -40 * k); ctx.lineTo(30 * k, -10 * k); ctx.stroke(); ctx.fillStyle = '#FFB03B'; ctx.shadowColor = '#FFB03B'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.ellipse(30 * k, 0, 9 * k, 12 * k, 0, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; }
+        else if (B.name === '九幽黑蛟') { ctx.strokeStyle = '#0B1820'; ctx.lineWidth = 10 * k; ctx.beginPath(); ctx.moveTo(-20 * k, 0); ctx.quadraticCurveTo(-70 * k, 10 * k, -80 * k, -30 * k + Math.sin(T * 3) * 10 * k); ctx.stroke(); ctx.strokeStyle = '#2F6A7A'; ctx.lineWidth = 6 * k; ctx.stroke(); }
+        else { ctx.fillStyle = '#12050A'; ctx.beginPath(); ctx.moveTo(-16 * k, -98 * k); for (let i = 0; i < 5; i++) { ctx.lineTo((-16 + i * 8 + 4) * k, -118 * k); ctx.lineTo((-16 + (i + 1) * 8) * k, -100 * k); } ctx.closePath(); ctx.fill(); }
+      } else {   // 背上的麻袋
+        ctx.fillStyle = '#8B6A3E'; ctx.strokeStyle = '#4A3A2A'; ctx.beginPath(); ctx.ellipse(-24 * k, -44 * k, 13 * k, 16 * k, -0.3, 0, 6.283); ctx.fill(); ctx.stroke();
+      }
+      // 黑風：身邊繞的黑氣
+      ctx.strokeStyle = 'rgba(80,60,110,0.55)'; ctx.lineWidth = 3 * k;
+      for (let i = 0; i < 3; i++) { const a = T * 4 + i * 2.1; ctx.beginPath(); ctx.arc(0, -40 * k, (40 + i * 8) * k, a, a + 1.3); ctx.stroke(); }
+      ctx.restore();
+    }
+    // 血條、台詞
+    for (const o of orbs) {   // 黑氣彈
+      ctx.save(); const g = ctx.createRadialGradient(o.x, o.y, 1, o.x, o.y, 20 * K); g.addColorStop(0, o.col); g.addColorStop(1, 'rgba(20,8,30,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, 20 * K, 0, 6.283); ctx.fill(); ctx.fillStyle = '#12050A'; ctx.beginPath(); ctx.arc(o.x, o.y, 7 * K, 0, 6.283); ctx.fill(); ctx.restore();
+    }
+    if (B && v.state !== 'down') {
+      ctx.save(); const bw = Math.min(W * 0.5, 620 * K), x0 = W / 2 - bw / 2, y0 = 70 * K;
+      ctx.fillStyle = 'rgba(18,5,10,0.65)'; ctx.fillRect(x0 - 4, y0 - 4, bw + 8, 22 * K + 8);
+      ctx.fillStyle = B.eye; ctx.fillRect(x0, y0, bw * Math.max(0, v.hp) / v.max, 22 * K);
+      ctx.font = `bold ${Math.round(18 * K)}px "DFKai-SB","KaiTi",serif`; ctx.textAlign = 'center'; ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 4;
+      ctx.strokeText(`BOSS・${B.name}　${Math.max(0, v.hp)}／${v.max}`, W / 2, y0 + 17 * K); ctx.fillText(`BOSS・${B.name}　${Math.max(0, v.hp)}／${v.max}`, W / 2, y0 + 17 * K);
+      ctx.font = `${Math.round(15 * K)}px "Microsoft JhengHei"`; const line = v.state === 'flee' ? '哼，下次再戰！' : B.say;
+      ctx.strokeText(line, v.x, v.y - 150 * k); ctx.fillStyle = '#FFE9F0'; ctx.fillText(line, v.x, v.y - 150 * k);
+      ctx.restore();
+    } else if (v.state !== 'down') {
+      ctx.save(); const bw = 70 * k, x0 = v.x - bw / 2, y0 = v.y - 140 * k;
+      ctx.fillStyle = 'rgba(20,12,26,0.6)'; ctx.fillRect(x0, y0, bw, 7 * k); ctx.fillStyle = '#B48CFF'; ctx.fillRect(x0, y0, bw * Math.max(0, v.hp) / v.max, 7 * k);
+      ctx.font = `bold ${Math.round(15 * k)}px "Microsoft JhengHei"`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.fillStyle = '#2B2238';
+      const WANT = { cat: '小魚乾拿來！', fox: '狐火借我玩玩！', rabbit: '月餅是我的！', panda: '包子拿來！', dragon: '龍珠歸我了！' };
+      const line = v.state === 'flee' ? (v.loot || MODE_V ? '嘿嘿，到手了！' : '下次再來！') : (WANT[sp] || '這裡歸我了！');
+      ctx.strokeText(v.name || '黑風怪', v.x, y0 - 22 * k); ctx.fillText(v.name || '黑風怪', v.x, y0 - 22 * k);
+      ctx.font = `${Math.round(13 * k)}px "Microsoft JhengHei"`; ctx.strokeText(line, v.x, y0 - 6 * k); ctx.fillText(line, v.x, y0 - 6 * k);
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.globalAlpha *= fade; ctx.font = `bold ${Math.round(22 * K)}px "DFKai-SB","KaiTi",serif`; ctx.textAlign = 'center'; ctx.fillStyle = '#F5B82E'; ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 4;
+      const win = B ? `${B.name}，敗！` : '邪不勝正！';
+      ctx.strokeText(win, v.x, v.y - 120 * k); ctx.fillText(win, v.x, v.y - 120 * k); ctx.restore();
+    }
+  }
+  if (api.onCmd) api.onCmd((c) => {
+    const T = now();
+    if (c.kind === 'pet') petPos = { x: c.x, y: c.y, dir: c.dir };
+    else if (c.kind === 'foxfx') { if (S && S.foxfx) S.foxfx(c.move, T); }
+    else if (c.kind === 'hit') villainHit(c.dmg || 1, T);
+    else if (c.kind === 'eat' && S && S.eat) S.eat(c.id, c.x, c.y, T);
+  });
+
+  let last = now();
+  function frame(t) {
+    if (clock == null) requestAnimationFrame(frame);
+    const T = t / 1000, dt = Math.max(0, Math.min(0.05, T - last)); last = T;   // 時間不會倒退（測試時兩個時鐘交錯也不會讓龍反著游）
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); ctx.clearRect(0, 0, W, H);
+    if (!S) return;
+    let A = Math.min(1, (T - born) / 3);   // 慢慢飄出來
+    if (leaveAt) { const left = leaveAt + LINGER - T; if (left <= 0) { leaveAt = 0; S = null; api.exit(); return; } A = Math.min(A, left / FADE); }
+    S.step(T, dt);
+    villainStep(T, dt);
+    if (sp === 'panda' && S.lowBun && api.report && T - (S.bunReport || 0) > 0.6) { S.bunReport = T; const b = S.lowBun(T); if (b) api.report({ kind: 'bun', id: b.id, x: b.x, y: b.y }); }
+    ctx.save(); ctx.globalAlpha = A; ctx.lineJoin = 'round';
+    S.draw(T);
+    villainDraw(T);
+    bursts = bursts.filter((b) => T - b.at < 0.9);
+    for (const b of bursts) { const p = (T - b.at) / 0.9, n = b.big ? 14 : 9; for (let i = 0; i < n; i++) { const a = i * 6.283 / n + b.at; spark(b.x + Math.cos(a) * p * (b.big ? 110 : 64) * K, b.y + Math.sin(a) * p * (b.big ? 110 : 64) * K, (b.big ? 9 : 6) * K * (1 - p * 0.5), 1 - p, i % 2 ? b.color : '#FFFFFF'); } }
+    if (T - flash < 0.18) { ctx.globalAlpha = A * 0.22 * (1 - (T - flash) / 0.18); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H); }
+    ctx.restore();
+    // 游標在可點的東西上，才接住滑鼠（其餘地方點擊照樣穿透到桌面）
+    const on = !!S.hit(mouse.x, mouse.y, T) || overBar(mouse.x, mouse.y) || villainOver(mouse.x, mouse.y) || !!orbOver(mouse.x, mouse.y);
+    if (on !== hot) { hot = on; api.clickable(on); }
+    const cur = villainOver(mouse.x, mouse.y) ? SWORD_CUR : on ? 'pointer' : 'default';   // 游標在反派身上：變成劍
+    if (cur !== curNow) { curNow = cur; document.body.style.cursor = cur; }   // 只在要換時才換（一直重設會讓視窗以為滑鼠離開）
+    drawSlash();
+  }
+  addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; watchSlash(e.clientX, e.clientY); });
+  // 在反派／BOSS 身上來回揮：方向一換、這一趟走了 30 以上，就砍一劍（留下劍痕）
+  let slashX = null, slashDir = 0, slashFrom = 0, slashT = 0, slashTrail = [];
+  function watchSlash(x, y) {
+    const t = performance.now();
+    if (villainOver(x, y)) slashTrail.push({ x, y, t });
+    slashTrail = slashTrail.filter((p) => t - p.t < 260).slice(-30);
+    if (!villainOver(x, y)) { slashX = null; return; }
+    if (slashX === null || t - slashT > 400) { slashX = x; slashFrom = x; slashDir = 0; slashT = t; return; }
+    const d = x - slashX; if (Math.abs(d) < 2) return;
+    const dir = d > 0 ? 1 : -1;
+    if (slashDir && dir !== slashDir) { if (Math.abs(slashX - slashFrom) >= 30) { villainHit(1, now()); slashFx = t; } slashFrom = slashX; }
+    slashDir = dir; slashX = x; slashT = t;
+  }
+  let slashFx = 0, curNow = '';
+  function drawSlash() {
+    const t = performance.now();
+    if (slashTrail.length > 1) {
+      ctx.save(); ctx.lineCap = 'round';
+      for (let i = 1; i < slashTrail.length; i++) { const a = 1 - (t - slashTrail[i].t) / 260; ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 1 + a * 7; ctx.beginPath(); ctx.moveTo(slashTrail[i - 1].x, slashTrail[i - 1].y); ctx.lineTo(slashTrail[i].x, slashTrail[i].y); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+  const SWORD_CUR = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.translate(4, 4); g.rotate(Math.PI / 4);
+    g.fillStyle = '#E8F4F8'; g.strokeStyle = '#4A3A2A'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -2); g.lineTo(26, -2); g.lineTo(30, 0); g.lineTo(26, 2); g.lineTo(0, 2); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#F5B82E'; g.fillRect(-3, -6, 4, 12); g.strokeRect(-3, -6, 4, 12); return `url(${c.toDataURL()}) 4 4, crosshair`; })();
+  // 收起／關閉的按鈕：游標在上面時視窗接住滑鼠
+  const bar = document.getElementById('bar');
+  function overBar(x, y) { const r = bar.getBoundingClientRect(); return x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6; }
+  document.getElementById('close').addEventListener('click', (e) => { e.stopPropagation(); api.exit(); });
+  document.getElementById('off').addEventListener('click', (e) => { e.stopPropagation(); if (api.off) api.off(); else api.exit(); });
+  addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
+  addEventListener('mousedown', (e) => { if (!S) return; const T = now(); const ob = orbOver(e.clientX, e.clientY); if (ob) { burst(ob.x, ob.y, '#FFFFFF'); orbs = orbs.filter((o) => o !== ob); return; } if (villainOver(e.clientX, e.clientY)) { villainHit(1, T); return; } const h = S.hit(e.clientX, e.clientY, T); if (h) S.click(h, T); });
+  addEventListener('mouseup', () => { if (S && S.release) S.release(now()); });
+  api.onLeave(() => { if (S && ((S.pearl && S.pearl.held) || S.drag)) return; if (!leaveAt) leaveAt = now(); });
+  if (api.onStay) api.onStay(() => { leaveAt = 0; });
+  // ?mode=villain：平時（不是螢幕保護）黑風怪來找麻煩，畫面上只有牠，打完或牠跑了就自己關掉
+  const MODE_V = new URLSearchParams(location.search).get('mode') === 'villain';
+  if (MODE_V) { const b = document.getElementById('bar'); if (b) b.style.display = 'none'; }
+  const BLANK = { name: '', init() {}, step() {}, draw() {}, hit() { return null; }, click() {} };
+  window.saverReady = api.info().then((d) => {
+    INFO = d || {};
+    sp = SCENES[(d.outfit || {}).species] ? d.outfit.species : 'cat'; born = now();
+    if (MODE_V) { S = BLANK; nextVillain = now() + 0.4; return; }
+    SCENES[sp].init(born); S = SCENES[sp];
+  })
+    .catch((e) => { console.error(e); api.exit(); });   // 起不來就收掉，不要留一層空的透明視窗
+  // 測試用：看現在演哪一套、戳一下那一套的招牌物件
+  window.saverPeek = () => ({ scene: S && S.name, sp, n: things.length, leaving: !!leaveAt, hot });
+  window.saverPoke = () => {
+    const T = now();
+    if (sp === 'cat') { S.click('bell', T); return S.rings.length; }
+    if (sp === 'fox') { const f = S.form; S.click(things[0], T); return S.form !== f; }
+    if (sp === 'rabbit') { const n = things.length; S.click('moon', T); return things.length - n; }
+    if (sp === 'panda') { S.buns[0].at = 0; S.buns[0].y = H / 2; S.click(S.buns[0], T); return S.eaten; }
+    if (sp === 'dragon') { S.click(S.clouds[0], T); return S.clouds[0].storm === T; }
+  };
+  // 預告片算圖用：自己一格一格畫（不跟著真實時間跑）
+  window.saverManual = (species, pre) => { clock = 0; sp = species; things = []; bursts = []; leaveAt = 0; flash = -9; hot = false; mouse = { x: -9999, y: -9999 }; size(); SCENES[sp].init(-(pre || 12)); S = SCENES[sp]; born = -9; last = 0; };
+  window.saverDraw = (T, mx, my) => { clock = T; if (mx != null) mouse = { x: mx, y: my }; frame(T * 1000); };
+  window.saverSpot = () => { const T = clock || 0; if (sp === 'cat') return S.bell(); if (sp === 'fox') return things[0]; if (sp === 'rabbit') return S.moon(T); if (sp === 'panda') return S.buns.find((b) => T >= b.at && b.y < H - 80 && b.y > 120) || S.buns[0]; return S.clouds[0]; };
+  window.saverPet = (x, y, dir) => { petPos = { x, y, dir }; };
+  window.saverFoe = () => villain && { x: villain.x, y: villain.y, hp: villain.hp, state: villain.state, type: villain.type };   // 測試用   // 測試／預告片：指定靈寵位置
+  window.saverVillain = (bossId) => { villainStart(clock || now(), bossId); return !!villain; };
+  window.saverScene = () => S; window.saverThings = () => things; window.saverUp = () => { if (S && S.release) S.release(clock || 0); }; window.saverClick = (x, y) => { const h = S.hit(x, y, clock || 0); if (h) S.click(h, clock || 0); return !!h; };
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+{
+  "name": "desk-pet",
+  "version": "1.0.0",
+  "description": "桌面寵物",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis portable --x64 --publish never",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64 --publish never",
+    "art": "electron build/art/make.js"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.deskpet.app",
+    "productName": "DeskPet",
+    "files": [
+      "main.js",
+      "poems.js",
+      "quotes.js",
+      "preload.js",
+      "ui-preload.js",
+      "pet.html",
+      "pet.js",
+      "draw.js",
+      "villains.js",
+      "note.html",
+      "scroll.html",
+      "records.html",
+      "iching.js",
+      "lore.js",
+      "game-preload.js",
+      "cups.html",
+      "duel.html",
+      "omen.html",
+      "wish.html",
+      "fx-preload.js",
+      "arena.html",
+      "fx.html",
+      "fx-geo.js",
+      "wheel.html",
+      "saver.html",
+      "loong-shards.js",
+      "loong-swim.js",
+      "assets/**"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "DeskPet-${version}-win.exe"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.entertainment",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    },
+    "dmg": {
+      "artifactName": "DeskPet-${version}-mac-${arch}.dmg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "桌面靈寵",
+      "uninstallDisplayName": "桌面靈寵",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerLanguages": [
+        "zh_TW"
+      ],
+      "language": "1028",
+      "include": "build/installer.nsh",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "DeskPet-Setup-${version}.exe"
+    }
+  }
+}
