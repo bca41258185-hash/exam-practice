@@ -239,8 +239,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
       <div class="act-item"><b>雙擊</b><p>出招。金丹起是自己的絕技，化神起還會降龍十八掌。</p></div>
       <div class="act-item"><b>滑鼠中鍵</b><p>施展本命奧義。</p></div>
       <div class="act-item"><b>按住半秒</b><p>頭上展開快捷輪盤，數字鍵 1–8 也能選。</p></div>
-      <div class="act-item"><b>連點五下</b><p>比法術：游標變黃符，雷、火、冰輪流射出。連擊、暴擊、格擋都有音效。</p></div>
-      <div class="act-item"><b>身上來回揮</b><p>比劍：游標變劍，揮過留下劍痕，牠滿螢幕輕功、瞬移、御劍閃躲。</p></div>
+      <div class="act-item"><b>身上來回揮</b><p>比劍：游標變劍，揮過留下劍痕，牠滿螢幕輕功、瞬移、御劍閃躲。比劍時螢幕蓋上一層淡淡的擂台，點中金色「破綻」是重擊；點偏也不會點到桌面上的東西。</p></div>
       <div class="act-item"><b>滾輪</b><p>御劍追著你的游標飛十秒。</p></div>
       <div class="act-item"><b>拖曳甩出</b><p>撞牆、撞天花板、轉暈；丟得夠高，牠會召出飛劍接住自己。</p></div>
       <div class="act-item"><b>游標畫三圈</b><p>縮地成寸，牠出現在圈的中心。</p></div>
@@ -254,9 +253,10 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
     </div>
     <div class="cats">
       <div class="cat"><h3>陪我做事</h3><p>早上問你今天三件事，寫成卷軸留在桌角，做完蓋「成」字印。傳音符定時提醒開會、交圖。喝水、護眼、久坐了打一套太極叫你起來。</p></div>
-      <div class="cat"><h3>聽牠說</h3><p>唐詩宋詞元曲一句一句唸，最後報出處；勵志古句；牠自己的身世，照境界一段一段解鎖。</p></div>
+      <div class="cat"><h3>聽牠說</h3><p>每位靈寵負責一個朝代、各 50 首以上：小青龍先秦兩漢、熊貓魏晉南北朝、靈貓唐詩、狐仙宋詞、玉兔元曲與明清，一句一句唸，最後報出處。還有勵志古句和牠自己的身世。</p></div>
       <div class="cat"><h3>玩耍</h3><p>躲貓貓、三仙歸洞猜杯、擂台比劍、每日一卦：搖三枚銅錢起易經卦象，白話解卦給今天的建議。流星許的願收在願望簿。</p></div>
-      <div class="cat hot"><h3>螢幕保護</h3><p>你離開座位，牠飄出來佔滿整個螢幕：狐仙修煉狐火、踩著飛劍穿過火海；熊貓跑去吃包子；你可以拿起小青龍的龍珠讓牠追你。</p></div>
+      <div class="cat hot"><h3>螢幕保護</h3><p>你離開座位，牠飄出來佔滿整個螢幕：靈貓抓螢火蟲收進燈籠；玉兔種月桂、跟你打拍子搗藥、找五隻小月兔；狐仙修煉狐火、御劍穿火海；熊貓去吃包子；拿起小青龍的龍珠讓牠追你。</p></div>
+      <div class="cat"><h3>召喚同門</h3><p>兩隻會一起對詩、切磋、玩追逐、擊掌，餵靈丹時分一半；黑風怪和 BOSS 來了，同門跑到另一邊幫忙夾擊。</p></div>
       <div class="cat"><h3>宵禁燈籠</h3><p>過了設定的時間還在用電腦，牠挑著紅燈籠，說今天用了幾小時，溫和勸你收工。熬夜不會升得比較快。</p></div>
       <div class="cat"><h3>小意外</h3><p>心魔冒出來說「圖明天再改」，點三下打散牠。很少見的錦鯉、仙鶴、彩虹、流星。按 Win+L 牠立刻打坐，回來說你下山了幾分鐘。</p></div>
     </div>
@@ -2431,6 +2431,233 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   // 八卦：每卦三爻，1 陽（整條）0 陰（中間斷）
   const TRIGRAMS = [[1, 1, 1], [0, 1, 1], [1, 0, 1], [0, 0, 1], [1, 1, 0], [0, 1, 0], [1, 0, 0], [0, 0, 0]];
 
+  // ════════ 九命貓影用的零件：低多邊形貓 ════════
+  // 每隻貓由約六十片大三角組成（身體三列×六欄、頭一圈八片、耳、腿、尾巴一串），每格依骨架直接算出來，
+  // 所以跑步、撲擊都是連續動作；片與片之間留縫，和碎片青龍同一套語言。
+  // 圖框座標：KW×KH，貓頭朝右，腳底在 y=KFOOT，(KPX,KPY) 是錨點（畫到畫面上時 x,y 就是這一點）。
+  const KW = 380, KH = 240, KFOOT = 226, KPX = 190, KPY = 150;
+  const hexRGB = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const mixHex = (a, b, t) => { const A = hexRGB(a), B = hexRGB(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * clamp(t)).toString(16).padStart(2, '0')).join(''); };
+  const shadeHex = (h, f) => f > 0 ? mixHex(h, '#FFFFFF', f) : mixHex(h, '#000000', -f);
+  const hexA = (h, a) => { const c = hexRGB(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+  // 九種貓都從同一個色調家族取色（偏墨青、略減飽和），金色只留給眼睛、爪痕、命燈和終幕
+  const KBASE = { hr: 1, cheek: 1, bt: 1, leg: 1, tw: 15, tailLen: 1, ear: 1, eyeS: 1, sz: 1, pupil: 0.8, earIn: '#C99AA0' };
+  const BREEDS = [
+    { dark: '#A9622F', mid: '#CF8A4C', light: '#EADBC2', stripe: '#9A5428', socks: true, brow: true, eye: ['#EDC35A', '#EDC35A'], hr: 1.12, cheek: 1.18, bt: 1.14 },                       // 一命 橘貓：橘白、條紋、圓胖臉
+    { dark: '#C4C3BA', mid: '#E6E2D7', light: '#F4F1EA', calico: ['#CF8A4C', '#2C3238'], eye: ['#A9C76E', '#A9C76E'] },                                                       // 二命 三花：白底，橘黑兩組色塊
+    { dark: '#1C2229', mid: '#272F38', light: '#323C47', rim: '#6FA3A8', eye: ['#F2C14E', '#F2C14E'], eyeS: 1.22, pupil: 0.45, earIn: '#3E4A55' },                            // 三命 黑貓：背上一道冷光
+    { dark: '#C2CECC', mid: '#E6EBE8', light: '#F6F7F4', eye: ['#78B8DA', '#F2C14E'], eyeS: 1.1 },                                                                          // 四命 白貓：異色瞳
+    { dark: '#C7B69B', mid: '#E2D6C0', light: '#F1E9DA', point: '#4A3B34', eye: ['#78B8DA', '#78B8DA'], hr: 0.94, bt: 0.9, tw: 12, leg: 0.92, earIn: '#4A3B34' },               // 五命 暹羅：臉、耳、腳、尾深色
+    { dark: '#6E6655', mid: '#8F8571', light: '#CBC2AE', stripe: '#3B3833', M: true, eye: ['#B9C85E', '#B9C85E'] },                                                          // 六命 虎斑：條紋＋額頭 M
+    { dark: '#626E7B', mid: '#7D8996', light: '#97A2AD', eye: ['#E39A48', '#E39A48'], eyeS: 1.16, pupil: 0.55, hr: 1.2, cheek: 1.24, bt: 1.24, leg: 1.18, tw: 19, tailLen: 0.8, ear: 0.72 }, // 七命 英短：藍灰圓臉、銅眼
+    { dark: '#5F4C39', mid: '#8A6C4F', light: '#E1D4BD', stripe: '#4E3B2B', ruff: true, tuft: true, bushy: true, eye: ['#CDBF55', '#CDBF55'], ear: 1.18, sz: 1.14, tw: 23, tailLen: 0.92 }, // 八命 緬因：大、圍脖、耳尖簇毛、蓬尾
+    { dark: '#B4A182', mid: '#D6C4A4', light: '#F0E6D3', stripe: '#BFA77F', fold: true, eye: ['#EDC35A', '#EDC35A'], eyeS: 1.36, pupil: 0.4, hr: 1.16, cheek: 1.1 },           // 九命 折耳：耳朵往前摺、大圓眼
+    { dark: '#C98A1E', mid: '#EDB13C', light: '#FFE4A0', stripe: '#FFD36B', eye: ['#FFF6DA', '#FFF6DA'], earIn: '#FFD36B', hr: 1.06, cheek: 1.08 },                          // 終幕：九命合一的金貓
+  ].map((b) => Object.assign({}, KBASE, b));
+  const KGOLD = ['#FFE7A6', '#F5C451', '#E9A21E', '#C98A12'];
+
+  // 姿勢：腿的角度從垂直往下量，正＝往前；[大腿, 小腿]。tl＝尾巴三個控制點（相對尾根）
+  const KGAL = [
+    { bx: KPX, by: 140, tilt: -0.04, st: 1.1, arch: -0.05, fn: [1.2, 1.5], ff: [1.0, 1.3], bn: [-1.1, -1.55], bf: [-0.9, -1.35], hd: [24, -30], tl: [[-28, -10], [-62, -26], [-96, -46]] },   // 騰空伸展
+    { bx: KPX, by: 150, tilt: 0.08, st: 1.0, arch: 0, fn: [0.3, 0.05], ff: [0.7, 0.85], bn: [-0.55, -1.05], bf: [-0.25, -0.75], hd: [24, -26], tl: [[-26, -16], [-56, -42], [-80, -70]] },     // 前腳著地
+    { bx: KPX, by: 146, tilt: 0.02, st: 0.88, arch: 0.3, fn: [-0.6, -0.9], ff: [-0.35, -0.55], bn: [0.7, 0.2], bf: [0.95, 0.5], hd: [22, -30], tl: [[-22, -24], [-38, -62], [-22, -96]] },  // 四腳收攏、背拱
+    { bx: KPX, by: 144, tilt: -0.1, st: 1.0, arch: 0.05, fn: [0.7, 1.05], ff: [0.4, 0.7], bn: [-0.3, -0.2], bf: [-0.6, -0.65], hd: [26, -32], tl: [[-26, -18], [-58, -40], [-84, -70]] },   // 後腳蹬地
+  ];
+  const KPOSE = {
+    pounce: { bx: KPX, by: 132, tilt: -0.42, st: 1.08, arch: 0, fn: [1.5, 1.75], ff: [1.25, 1.6], bn: [-0.25, -0.35], bf: [-0.45, -0.55], hd: [24, -28], tl: [[-30, 6], [-64, 2], [-96, -22]] },   // 撲：前爪往前伸
+    crouch: { bx: KPX, by: 168, tilt: 0.08, st: 0.95, arch: 0.12, fn: [0.9, -0.6], ff: [1.05, -0.45], bn: [1.0, -0.25], bf: [1.15, -0.1], hd: [30, -16], tl: [[-30, -4], [-62, -4], [-92, -14]] }, // 伏低
+    sit: { bx: KPX, by: 170, tilt: -0.55, st: 0.86, arch: 0.05, fn: [0.42, 0.5], ff: [0.55, 0.62], bn: [1.45, -0.9], bf: [1.55, -0.8], hd: [10, -34], tl: [[-24, 4], [-58, 4], [-94, -8]] },        // 坐下
+    leap: Object.assign({}, KGAL[0], { st: 1.16, by: 136, tl: [[-30, -6], [-66, -14], [-104, -24]] }),
+  };
+  const mixPose = (a, b, t) => Array.isArray(a) ? a.map((v, i) => mixPose(v, b[i], t)) : typeof a === 'number' ? a + (b - a) * t : (a && typeof a === 'object') ? Object.fromEntries(Object.keys(a).map((k) => [k, b && k in b ? mixPose(a[k], b[k], t) : a[k]])) : a;
+  const smooth = (x) => x * x * (3 - 2 * x);
+  // 跑步：相位連續，四個關鍵姿勢之間平順內插
+  const gallop = (ph) => { const x = ((ph % 1) + 1) % 1 * 4, i = Math.floor(x); return mixPose(KGAL[i], KGAL[(i + 1) % 4], smooth(x - i)); };
+
+  // 依品種與姿勢組出一隻貓的三角片（圖框座標）。回傳 { F: [{p:[3點], c:色}], eyes }
+  function catMesh(B, p) {
+    const ct = Math.cos(p.tilt), st = Math.sin(p.tilt), rx = 74 * p.st, ry = 26 * B.bt, g = p.look || 1, ar = (p.arch || 0) * 22;
+    const L = (lx, ly) => [p.bx + lx * ct - ly * st, p.by + lx * st + ly * ct];
+    const F = [], add = (a, b, c, col) => F.push({ p: [a, b, c], c: col });
+    const quad = (a, b, c, d, c1, c2, flip) => { if (flip) { add(a, b, d, c1); add(b, c, d, c2 || c1); } else { add(a, b, c, c1); add(a, c, d, c2 || c1); } };
+    const off = (q, n, s) => [q[0] + n[0] * s, q[1] + n[1] * s];
+    const nrm = (u, v, w) => { const dx = v[0] - u[0], dy = v[1] - u[1], d = Math.hypot(dx, dy) || 1; return [-dy / d * w, dx / d * w]; };
+    const dk = B.dark, md = B.mid, lt = B.light, pt = B.point, belly = B.rim ? shadeHex(md, 0.06) : lt;
+    // ── 腿：大腿、小腿各一個楔形（兩片），腳掌一片尖三角 ──
+    const l1 = 34, l2 = 37, legPts = (o, a) => { const kn = [o[0] + Math.sin(a[0]) * l1, o[1] + Math.cos(a[0]) * l1]; return [o, kn, [kn[0] + Math.sin(a[1]) * l2, kn[1] + Math.cos(a[1]) * l2]]; };
+    const sh = L(rx * 0.6, ry * 0.25), hip = L(-rx * 0.62, ry * 0.15);
+    const legs = { fn: legPts(sh, p.fn), ff: legPts([sh[0] - 8, sh[1] - 4], p.ff), bn: legPts(hip, p.bn), bf: legPts([hip[0] + 8, hip[1] - 4], p.bf) };
+    const leg = (Lg, w1, cU, cL) => {
+      const [a, b, c] = Lg, n1 = nrm(a, b, w1 * B.leg), n2 = nrm(a, c, 8.5 * B.leg), n3 = nrm(b, c, 6.5 * B.leg);
+      quad(off(a, n1, 1), off(b, n2, 1), off(b, n2, -1), off(a, n1, -1), cU, shadeHex(cU, -0.07));
+      quad(off(b, n2, 1), off(c, n3, 1), off(c, n3, -1), off(b, n2, -1), cL, shadeHex(cL, -0.09));
+      add(off(c, n3, 1.25), off(c, n3, -1.25), [c[0] + 13 * B.leg, c[1] + 1], shadeHex(cL, 0.07));
+    };
+    const lowCol = (near) => pt ? (near ? pt : shadeHex(pt, -0.25)) : B.socks ? (near ? lt : shadeHex(lt, -0.18)) : (near ? md : dk);
+    leg(legs.ff, 11, dk, lowCol(false)); leg(legs.bf, 13, dk, lowCol(false));
+    // ── 尾巴：一串逐漸變細的楔形 ──
+    const tr = L(-rx * 0.95, -ry * 0.3), tl = p.tl.map(([a, b]) => { const x = a * B.tailLen, y = b * B.tailLen; return [tr[0] + x * ct - y * st, tr[1] + x * st + y * ct]; });
+    const bez = (t) => { const m = 1 - t, P0 = tr, [P1, P2, P3] = tl; return [0, 1].map((k) => m * m * m * P0[k] + 3 * m * m * t * P1[k] + 3 * m * t * t * P2[k] + t * t * t * P3[k]); };
+    const TN = 6, tq = [], tn = [];
+    for (let j = 0; j <= TN; j++) tq.push(bez(j / TN));
+    for (let j = 0; j <= TN; j++) { const t = j / TN, w = B.bushy ? B.tw * (0.62 + 0.5 * Math.sin(Math.PI * Math.min(1, 0.2 + t))) : B.tw * 0.55 * (1 - 0.62 * t); tn.push(nrm(tq[Math.max(0, j - 1)], tq[Math.min(TN, j + 1)], w)); }
+    for (let j = 0; j < TN; j++) {
+      let c = B.stripe && j % 2 ? B.stripe : md;
+      if (pt) c = pt; if (B.calico && j >= 3) c = B.calico[1];
+      if (j < TN - 1) quad(off(tq[j], tn[j], 1), off(tq[j + 1], tn[j + 1], 1), off(tq[j + 1], tn[j + 1], -1), off(tq[j], tn[j], -1), shadeHex(c, 0.05), shadeHex(c, -0.08));
+      else add(off(tq[j], tn[j], 1), tq[TN], off(tq[j], tn[j], -1), shadeHex(c, 0.03));
+      if (B.bushy && j > 0 && j < TN - 1) for (const s of [1, -1]) { const m = [(tq[j][0] + tq[j + 1][0]) / 2, (tq[j][1] + tq[j + 1][1]) / 2], n = [(tn[j][0] + tn[j + 1][0]) / 2, (tn[j][1] + tn[j + 1][1]) / 2]; add(off(tq[j], tn[j], s * 0.9), off(m, n, s * 1.65), off(tq[j + 1], tn[j + 1], s * 0.9), shadeHex(c, s > 0 ? 0.1 : -0.12)); }
+    }
+    // ── 身體：上中下三列 × 六欄 ──
+    const xs = [-1.02, -0.74, -0.42, -0.08, 0.26, 0.6, 0.92], ty = [-0.3, -1.0, -1.08, -1.02, -1.0, -0.95, -0.72], by_ = [0.5, 0.95, 0.9, 0.72, 0.82, 0.95, 0.62];
+    const ta = [0.2, 0.7, 1, 1, 0.8, 0.5, 0.2], ba = [0, 0.1, 0.3, 0.5, 0.3, 0.1, 0];
+    const T = xs.map((x, i) => L(x * rx + (i % 6 ? (hash(i, 7) - 0.5) * 8 : 0), ty[i] * ry - ar * ta[i])), Bt = xs.map((x, i) => L(x * rx + (i % 6 ? (hash(i, 8) - 0.5) * 10 : 0), by_[i] * ry - ar * ba[i] * 0.5));
+    const M = T.map((q, i) => [q[0] + (Bt[i][0] - q[0]) * (0.4 + hash(i, 4) * 0.14) + (hash(i, 9) - 0.5) * 12, q[1] + (Bt[i][1] - q[1]) * (0.4 + hash(i, 4) * 0.14)]);
+    for (let i = 0; i < 6; i++) {
+      let cTop = shadeHex(dk, (i % 2) * 0.05), cMid = shadeHex(md, ((i + 1) % 2) * 0.05), cBot = shadeHex(belly, -(i % 2) * 0.05);
+      if (B.stripe && i % 2 === 0) { cTop = B.stripe; cMid = shadeHex(B.stripe, 0.12); }
+      if (B.calico) { if (i === 1 || i === 2) { cTop = B.calico[0]; cMid = shadeHex(B.calico[0], 0.08); } if (i === 4) cTop = B.calico[1]; }
+      if (B.socks && i >= 4) cBot = lt;
+      quad(T[i], T[i + 1], M[i + 1], M[i], cTop, shadeHex(cTop, -0.07), i % 2);
+      quad(M[i], M[i + 1], Bt[i + 1], Bt[i], cMid, shadeHex(cMid, -0.06), (i + 1) % 2);
+      add(Bt[i], Bt[i + 1], L((xs[i] + xs[i + 1]) / 2 * rx, (by_[i] + by_[i + 1]) / 2 * ry + 7), cBot);   // 肚子下緣一片
+      if (B.rim) add(T[i], T[i + 1], [(T[i][0] + T[i + 1][0]) / 2, (T[i][1] + T[i + 1][1]) / 2 + 5], B.rim);   // 黑貓背上冷光
+    }
+    add(T[0], M[0], L(-rx * 1.16, ry * 0.05), shadeHex(dk, 0.04));   // 屁股
+    // ── 近側兩條腿 ──
+    leg(legs.bn, 15, md, lowCol(true)); leg(legs.fn, 12, md, lowCol(true));
+    // ── 頭：一圈八片，耳朵兩片 ──
+    const neck = L(rx * 0.78, -ry * 0.5), hr = 36 * B.hr, hd = [neck[0] + p.hd[0] + 2, neck[1] + p.hd[1] - 2], H = (x, y) => [hd[0] + g * x * hr, hd[1] + y * hr];
+    const ring = [[-0.86, -0.22], [-0.48, -0.82], [0.16, -0.94], [0.8, -0.52], [B.cheek, 0.1], [0.6, 0.62], [-0.06, 0.78], [-0.86 * B.cheek, 0.38]].map(([x, y]) => H(x, y)), fc = H(0.14, 0.04);
+    quad(T[5], T[6], ring[6], ring[7], shadeHex(md, -0.04), dk);                     // 脖子
+    add(T[6], Bt[6], ring[6], B.ruff ? lt : (B.socks ? lt : md));
+    const ear = (a, b, tip, inner) => { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; add(a, tip, m, dk); add(m, tip, b, inner); };
+    const earIn = pt || B.earIn;
+    if (!B.fold) {
+      ear(ring[0], ring[1], H(-0.7, -1.0 - 0.55 * B.ear), shadeHex(earIn, -0.15));
+      ear(ring[2], ring[3], H(0.62, -1.02 - 0.62 * B.ear), earIn);
+      if (B.tuft) { const t1 = H(-0.7, -1.0 - 0.55 * B.ear), t2 = H(0.62, -1.02 - 0.62 * B.ear); for (const q of [t1, t2]) add([q[0] - 3, q[1] + 2], [q[0] + 3, q[1] + 2], [q[0] + g * 2, q[1] - 0.42 * hr], '#2A2018'); }
+    }
+    const fcol = [md, shadeHex(md, 0.07), shadeHex(md, 0.12), md, lt, shadeHex(lt, -0.06), shadeHex(md, -0.06), dk];
+    if (B.rim) { fcol[4] = shadeHex(md, 0.1); fcol[5] = md; }
+    if (pt) { fcol[3] = shadeHex(pt, 0.08); fcol[4] = pt; fcol[5] = shadeHex(pt, -0.1); fcol[2] = mixHex(md, pt, 0.35); }
+    if (B.calico) { fcol[0] = B.calico[1]; fcol[1] = shadeHex(B.calico[1], 0.08); fcol[7] = shadeHex(B.calico[1], -0.05); fcol[3] = B.calico[0]; }
+    for (let i = 0; i < 8; i++) add(fc, ring[i], ring[(i + 1) % 8], fcol[i]);
+    if (B.fold) { add(H(0.02, -0.96), H(0.78, -0.6), H(0.46, -0.42), dk); add(H(-0.78, -0.36), H(-0.3, -0.9), H(-0.22, -0.52), shadeHex(dk, -0.08)); }   // 折耳：兩片往前摺的小楔
+    const sliver = (x, col) => add(H(x - 0.07, -0.86), H(x + 0.07, -0.86), H(x + 0.02, -0.5), col);
+    if (B.M) { sliver(-0.18, B.stripe); sliver(0.08, B.stripe); sliver(0.34, B.stripe); add(H(-0.12, -0.5), H(0.32, -0.5), H(0.1, -0.36), B.stripe); }
+    if (B.brow) { sliver(-0.12, B.stripe); sliver(0.16, B.stripe); }
+    if (B.ruff) for (let j = 0; j < 5; j++) { const a = mixPose(ring[6], Bt[6], j / 4), b = mixPose(ring[6], Bt[6], (j + 0.7) / 4); add(a, b, [(a[0] + b[0]) / 2 + 3, (a[1] + b[1]) / 2 + 13 + (j % 2) * 5], j % 2 ? lt : shadeHex(lt, -0.08)); }
+    const es = B.eyeS;
+    return { F, eyes: [{ c: H(0.5, -0.1), r: 0.23 * hr * es, col: B.eye[0] }, { c: H(-0.17, -0.12), r: 0.19 * hr * es, col: B.eye[1] }], legs };
+  }
+
+  // 寶石貓眼：四片菱形，瞳孔是一道細細的深色菱形；open 0 閉～1 開，slit 0 圓～1 一條縫
+  function gemEye(ctx, x, y, r, col, open, slit, glow) {
+    if (glow > 0) { const gr = ctx.createRadialGradient(x, y, 0, x, y, r * 3.2); gr.addColorStop(0, hexA(col, 0.45 * glow)); gr.addColorStop(1, hexA(col, 0)); ctx.fillStyle = gr; ctx.fillRect(x - r * 3.2, y - r * 3.2, r * 6.4, r * 6.4); }
+    const sy = 0.74 * Math.max(0.06, open);
+    gem(ctx, x, y, r, 0, [shadeHex(col, 0.28), shadeHex(col, -0.05), shadeHex(col, -0.3), shadeHex(col, 0.06)], 4, sy);
+    if (open < 0.15) return;
+    const ph = r * sy * 0.92, pw = r * (0.42 - 0.34 * slit);
+    ctx.fillStyle = '#0D1418'; ctx.beginPath(); ctx.moveTo(x, y - ph); ctx.lineTo(x + pw, y); ctx.lineTo(x, y + ph); ctx.lineTo(x - pw, y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.08); ctx.lineTo(x - r * 0.2, y - r * 0.36 * sy / 0.74); ctx.lineTo(x - r * 0.24, y - r * 0.02); ctx.closePath(); ctx.fill();
+  }
+
+  // 畫一隻貓。o：{ a 拼起來 0～1, d 散成光點 0～1（飛向 to）, e 炸開 0～1, glow, slit, eyeOpen, seed }
+  function drawCat(ctx, B, pose, x, y, S, dir, th, o) {
+    o = o || {};
+    const M = catMesh(B, pose), s = S / KH, rot = -dir * th, cr = Math.cos(rot), sr = Math.sin(rot);
+    const W2 = (q) => { const lx = (q[0] - KPX) * s * dir, ly = (q[1] - KPY) * s; return [x + lx * cr - ly * sr, y + lx * sr + ly * cr]; };
+    const a = o.a == null ? 1 : o.a, d = o.d || 0, e = o.e || 0, gap = Math.max(1.1, S * 0.0065), base = ctx.globalAlpha, seed = o.seed || 0;
+    M.F.forEach((f, i) => {
+      const h = hash(i + seed * 17, 5), P = f.p.map(W2), cx = (P[0][0] + P[1][0] + P[2][0]) / 3, cy = (P[0][1] + P[1][1] + P[2][1]) / 3;
+      let gx = cx, gy = cy, rr = 0, sc = 1, al = 1, col = f.c;
+      if (a < 1) {   // 拼起來：每片錯開時間，從四周旋轉飛進來
+        const q = clamp((a - h * 0.45) / 0.55); if (q <= 0) return;
+        const eq = ease(q), an = h * TAU * 3.1 + seed; gx += (1 - eq) * (Math.cos(an) * S * 0.32); gy += (1 - eq) * (Math.sin(an) * S * 0.22 - S * 0.12); rr = (1 - eq) * (h - 0.5) * 6; sc = 0.35 + 0.65 * eq; al = eq;
+      }
+      if (d > 0) {   // 散成光點：一片片沿弧線飛向命燈，越飛越小、越金
+        const q = clamp((d - h * 0.35) / 0.65); if (q >= 1) return;
+        const eq = q * q * (3 - 2 * q), tx = o.to ? o.to[0] : cx, ty = o.to ? o.to[1] : cy - S, kx = x + (cx - x) * 0.3 + (h - 0.5) * S * 0.12, ky = y - S * 0.55, m = 1 - eq;
+        gx = m * m * cx + 2 * m * eq * kx + eq * eq * tx; gy = m * m * cy + 2 * m * eq * ky + eq * eq * ty; rr = eq * (h - 0.5) * 6; sc = Math.max(0.12, 1 - 1.7 * Math.sqrt(eq)); al *= 1 - Math.pow(q, 3); col = mixHex(col, KGOLD[i % 3], eq * 3);
+      }
+      if (e > 0) {   // 炸開：往外噴、轉、落、淡
+        const an = h * TAU * 3.7 + seed, dist = e * (0.35 + h * 0.9) * S * 1.1; gx += Math.cos(an) * dist + (cx - x) * e * 0.6; gy += Math.sin(an) * dist + (cy - y) * e * 0.6 + e * e * S * 0.3; rr = e * (h - 0.5) * 8; al *= 1 - e; sc = 1 - e * 0.3;
+      }
+      if (al <= 0.01) return;
+      const rc = Math.cos(rr), rs = Math.sin(rr);
+      ctx.globalAlpha = base * al; ctx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        let vx = P[j][0] - cx, vy = P[j][1] - cy; const dd = Math.hypot(vx, vy) || 1, ff = Math.max(0, 1 - gap / dd) * sc; vx *= ff; vy *= ff;
+        const X = gx + vx * rc - vy * rs, Y = gy + vx * rs + vy * rc; j ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      }
+      ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    });
+    const ea = clamp((a - 0.7) / 0.3) * (1 - clamp(d / 0.18)) * (1 - e);
+    if (ea > 0) { ctx.globalAlpha = base * ea; M.eyes.forEach((E) => { const w = W2(E.c); gemEye(ctx, w[0], w[1], E.r * s, E.col, o.eyeOpen == null ? 1 : o.eyeOpen, o.slit == null ? B.pupil : o.slit, o.glow || 0); }); }
+    ctx.globalAlpha = base;
+    return { M, W2 };
+  }
+
+  // 肉球：扁六角掌墊＋四顆小菱形趾頭
+  function pawHex(ctx, x, y, r, rot, sy, c1, c2) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, sy); ctx.rotate(rot);
+    gem(ctx, 0, r * 0.28, r * 0.5, Math.PI / 6, [c1, c2, c1, c2, c1, c2], 6, 0.8);
+    for (let j = 0; j < 4; j++) { const an = -Math.PI / 2 + (j - 1.5) * 0.55; gem(ctx, Math.cos(an) * r * 0.74, Math.sin(an) * r * 0.62 + r * 0.04, r * 0.2, Math.PI / 2, [c2, c1], 4, 1.3); }
+    ctx.restore();
+  }
+  // 三道金色爪痕：每道是兩片尖楔；f＝劃下後幾秒：一劃而下、停一下、斷開飛散
+  function clawWedges(ctx, x, y, ang, len, f, seed) {
+    if (f <= 0 || f >= 0.8) return;
+    const ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux, drawn = ease(f / 0.08), brk = clamp((f - 0.24) / 0.5), base = ctx.globalAlpha;
+    if (f < 0.2) { ctx.globalAlpha = base * (1 - f / 0.2); star4(ctx, x, y, len * 0.42 * (0.5 + drawn * 0.5), '#FFF4CF'); }
+    for (let s = -1; s <= 1; s++) {
+      const sl = len * (s ? 0.8 : 1) * drawn, o = s * len * 0.2, A = [x + nx * o - ux * len * 0.5 + ux * Math.abs(s) * len * 0.08, y + ny * o - uy * len * 0.5 + uy * Math.abs(s) * len * 0.08];
+      const E = [A[0] + ux * sl, A[1] + uy * sl], Mx = A[0] + ux * sl * 0.42 + nx * len * 0.05, My = A[1] + uy * sl * 0.42 + ny * len * 0.05, w = len * 0.085;
+      const parts = [[A, [Mx + nx * w, My + ny * w], [Mx - nx * w * 0.35, My - ny * w * 0.35], KGOLD[0]], [[Mx + nx * w, My + ny * w], E, [Mx - nx * w * 0.35, My - ny * w * 0.35], KGOLD[1]]];
+      parts.forEach((q, j) => {
+        const h = hash(seed * 5 + s + 2, j), cx = (q[0][0] + q[1][0] + q[2][0]) / 3, cy = (q[0][1] + q[1][1] + q[2][1]) / 3, bb = ease(brk);
+        const gx = cx + (nx * s * 0.6 + (h - 0.5)) * len * 0.55 * bb, gy = cy + (ny * s * 0.6) * len * 0.55 * bb + len * 0.35 * brk * brk, rr = (h - 0.5) * 4 * bb, rc = Math.cos(rr), rs = Math.sin(rr);
+        ctx.globalAlpha = base * (1 - brk); ctx.beginPath();
+        q.slice(0, 3).forEach((v, k) => { let vx = v[0] - cx, vy = v[1] - cy; const dd = Math.hypot(vx, vy) || 1, ff = Math.max(0, 1 - 1.6 / dd); vx *= ff; vy *= ff; const X = gx + vx * rc - vy * rs, Y = gy + vx * rs + vy * rc; k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+        ctx.closePath(); ctx.fillStyle = q[3]; ctx.fill();
+      });
+    }
+    ctx.globalAlpha = base;
+    spray(ctx, x, y, brk, 12, len * 0.7, seed * 13, KGOLD, { size: len * 0.045, fall: len * 0.4 });
+  }
+  // 命燈：六角寶石燈，點亮後轉成金色切面，燈心一個六角肉球
+  function lifeLantern(ctx, x, y, R, lit, flare, u, i) {
+    ctx.save(); ctx.translate(x, 0); ctx.rotate(Math.sin(u * 2.1 + i * 1.3) * 0.05); ctx.translate(0, y);
+    const base = ctx.globalAlpha;
+    ctx.strokeStyle = 'rgba(120,150,150,0.45)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -y); ctx.lineTo(0, -R * 1.25); ctx.stroke();
+    if (lit > 0) { const gr = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * (2.4 + flare * 1.4)); gr.addColorStop(0, `rgba(255,200,100,${0.3 * lit + 0.3 * flare})`); gr.addColorStop(1, 'rgba(255,200,100,0)'); ctx.fillStyle = gr; ctx.fillRect(-R * 4, -R * 4, R * 8, R * 8); }
+    const pop = 1 + 0.18 * flare; ctx.scale(pop, pop);
+    gem(ctx, 0, -R * 1.2, R * 0.26, Math.PI / 2, ['#3B5560', '#2A4049'], 4, 1);
+    gem(ctx, 0, 0, R, -Math.PI / 2, ['#2F4A54', '#28414B', '#20363F', '#1B2F37', '#20363F', '#28414B'], 6, 1.15);
+    if (lit > 0) { ctx.globalAlpha = base * lit; gem(ctx, 0, 0, R, -Math.PI / 2, ['#FFE7A6', '#F5C451', '#E9A21E', '#C98A12', '#E9A21E', '#F5C451'], 6, 1.15); ctx.globalAlpha = base; }
+    pawHex(ctx, 0, R * 0.04, R * 0.5, 0, 1, lit > 0.5 ? '#9A6516' : '#152730', lit > 0.5 ? '#B47A1E' : '#1A2E37');
+    ctx.fillStyle = lit > 0.5 ? KGOLD[2] : '#2A4049'; ctx.beginPath(); ctx.moveTo(-R * 0.18, R * 1.2); ctx.lineTo(R * 0.18, R * 1.2); ctx.lineTo(0, R * 1.85); ctx.closePath(); ctx.fill();
+    if (flare > 0.05) { ctx.globalAlpha = base * flare; star4(ctx, 0, 0, R * 1.6, '#FFF4CF'); }
+    ctx.restore();
+  }
+  // 天上的大貓眼：杏仁形，虹膜一圈金色切面，瞳孔由圓收成直縫
+  function skyEye(c, x, y, w, h, open, slit) {
+    const a = w / 2, b = h / 2 * open;
+    const almond = (aa, bb) => { c.beginPath(); c.moveTo(x - aa, y); c.lineTo(x - aa * 0.45, y - bb * 0.92); c.lineTo(x + aa * 0.45, y - bb * 0.92); c.lineTo(x + aa, y); c.lineTo(x + aa * 0.45, y + bb * 0.92); c.lineTo(x - aa * 0.45, y + bb * 0.92); c.closePath(); };
+    if (open <= 0.04) { c.fillStyle = '#0E1A20'; almond(a, h * 0.03); c.fill(); return; }
+    c.fillStyle = '#0E1A20'; almond(a + h * 0.1, b + h * 0.08); c.fill();
+    c.save(); almond(a, b); c.clip();
+    c.fillStyle = '#B9780E'; c.fillRect(x - a, y - h, w, h * 2);
+    gem(c, x, y, h * 0.66, 0.3, ['#FFE7A6', '#F5C451', '#E9A21E', '#FFD36B', '#F5C451', '#C98A12', '#FFF0C0', '#E9A21E', '#F5C451', '#FFD36B'], 10);
+    gem(c, x, y, h * 0.36, 0.0, ['#F5C451', '#E9A21E', '#C98A12', '#E9A21E', '#FFD36B', '#E9A21E', '#C98A12', '#E9A21E'], 8);
+    const pw = h * 0.3 * (1 - 0.86 * slit) + 1.5, ph = h * (0.4 + 0.08 * slit);
+    c.fillStyle = '#0D1418'; c.beginPath(); c.moveTo(x, y - ph); c.lineTo(x + pw, y); c.lineTo(x, y + ph); c.lineTo(x - pw, y); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.92)'; c.beginPath(); c.moveTo(x - h * 0.32, y - h * 0.2); c.lineTo(x - h * 0.15, y - h * 0.3); c.lineTo(x - h * 0.2, y - h * 0.1); c.closePath(); c.fill();
+    c.restore();
+  }
+  const skyEyeShards = () => shardify('k9:eye2', 400, 200, 22, (c) => skyEye(c, 200, 100, 380, 170, 1, 1), 0.04);
+
   root.GeoFx = { hash, shardify, drawShards, gem, tri, lowCloud, star4, spray, ngon, brokenRing, get, PAL };
 
   // G 由 fx.html 每一格更新：{ ctx, P, W, H }
@@ -2456,30 +2683,124 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
         ctx.restore();
       },
 
-      // ── 靈貓．九命貓影：九隻碎片貓貼地衝出去再折回，身後拖著殘影；最後一隻巨大貓影躍過頭頂、碎成金屑 ──
+      // ── 靈貓．九命貓影（以 4.2 秒排時間，D 不同就等比伸縮）──
+      // 開場：夜色暗下，九對寶石貓眼沿著一道拱依序睜開（由中間往兩側），瞳孔由圓收成直縫。
+      // 九命：每 0.2 秒一隻，由碎片拼出來、跑兩步、撲上拱上自己那一點，留下三道金爪痕；
+      //       撲完一片片化成金光飛回頂上自己那盞命燈。一隻在中間、之後左右交替往外，像一把扇子打開。
+      // 終幕：命燈依序一亮（喘一口氣），光流下來拼成金色大貓，從角色頭上躍過、落地坐起抬頭；
+      //       天上睜開一隻大貓眼、眨一下，全部碎成金屑。
       shadows(u, A, k, D) {
-        const { ctx, P, W } = G, CAT = get('cat'), LO = get('catLo');
-        ctx.save(); ctx.globalAlpha *= A;
+        const { ctx, P, W, H } = G, T = u * 4.2 / D;
+        const S0 = Math.min(330 * k, H * 0.44), gyOf = (s) => P.ground - (KFOOT - KPY) / KH * s;
+        const LS = Math.min(112 * k, (W - 40) / 9), LR = Math.min(LS * 0.24, 17 * k), lan = (i) => [W / 2 + (i - 4) * LS, 16 * k + hash(i, 31) * 12 * k + LR * 1.3];
+        const lanBot = 28 * k + LR * 3.2 + 6 * k;
+        // 拱上九個撲擊點：中間最高，兩端貼近地面
+        const cx = clamp(P.x, W * 0.42, W * 0.58), rxA = Math.max(60 * k, Math.min(cx, W - cx) - 0.5 * S0), ay = Math.max(lanBot + 0.34 * S0, H * 0.3), byA = P.ground - 0.62 * S0;
+        const slot = (a) => { const an = Math.PI + a / 8 * Math.PI; return [cx + rxA * Math.cos(an), byA + (byA - ay) * Math.sin(an)]; };
+        // 出場順序：中、左中、右中、最左、最右……相鄰兩隻總在不同區；靠中間的兩點從外側往內撲，其餘從內側往外撲
+        const cats = [4, 3, 5, 0, 8, 2, 6, 1, 7].map((a, i) => {
+          const B = BREEDS[i], S = S0 * B.sz, K = slot(a), d = a === 4 ? (P.x < W / 2 ? 1 : -1) : (a === 3 || a === 5) ? (a < 4 ? 1 : -1) : (a < 4 ? -1 : 1);
+          const pv = [K[0] - d * 0.45 * S, K[1] + 0.12 * S], xt = pv[0] - d * 0.4 * S;   // 每隻就在自己那一點底下現身，短跑一段就撲，彼此不擠
+          return { i, B, S, K, d, pv, xt, xs: clamp(xt - d * 0.25 * S, 0.5 * S, W - 0.5 * S), gy: gyOf(S), t0: 0.36 + 0.2 * i };
+        });
+        const RUN = 0.26, HIT = 0.5;
+        const stateOf = (c, t) => {
+          const S = c.S; let x, y, th = 0, pose;
+          if (t < RUN) { const q = t / RUN; x = c.xs + (c.xt - c.xs) * q * (0.6 + 0.4 * q); y = c.gy - Math.sin(t * 3.3 * TAU) * 0.015 * S; pose = gallop(t * 3.3); }
+          else if (t < HIT) {
+            const q = (t - RUN) / (HIT - RUN); x = c.xt + (c.pv[0] - c.xt) * (1 - (1 - q) * (1 - q)); y = c.gy + (c.pv[1] - c.gy) * Math.sin(q * Math.PI / 2) - 0.1 * S * Math.sin(Math.PI * q);
+            pose = mixPose(gallop(RUN * 3.3 + q * 0.35), KPOSE.pounce, smooth(clamp(q / 0.55))); th = Math.atan2(c.gy - c.pv[1], Math.abs(c.pv[0] - c.xt)) * 0.45 * (1 - q);
+          } else { const q = t - HIT; x = c.pv[0] + c.d * 0.07 * S * ease(q / 0.25); y = c.pv[1] + 0.04 * S * ease(q / 0.3); pose = mixPose(KPOSE.pounce, KPOSE.leap, smooth(clamp(q / 0.3)) * 0.5); th = -0.12 * ease(q / 0.3); }
+          return { x, y, th, pose, a: clamp(t / 0.2), d: clamp((t - 0.54) / 0.27) };
+        };
+        const eyesOf = (B, st, S, dir) => { const s = S / KH, rot = -dir * st.th, cr = Math.cos(rot), sr = Math.sin(rot); return catMesh(B, st.pose).eyes.map((E) => { const lx = (E.c[0] - KPX) * s * dir, ly = (E.c[1] - KPY) * s; return { x: st.x + lx * cr - ly * sr, y: st.y + lx * sr + ly * cr, r: E.r * s, col: E.col }; }); };
+        // 終幕：大貓、天眼
+        const Sb = Math.min(H * 0.6, 480 * k), gyb = gyOf(Sb), bdir = P.x < W / 2 ? 1 : -1;
+        const bx0 = clamp(P.x - bdir * 0.7 * Sb, 0.8 * Sb, W - 0.8 * Sb), bx1 = clamp(P.x + bdir * 1.0 * Sb, 0.75 * Sb, W - 0.75 * Sb);
+        const apex = Math.max(lanBot + 0.42 * Sb, Math.min(P.y - 120 * k - 0.33 * Sb, gyb - 0.3 * Sb));
+        const EW = Math.min(W * 0.32, 520 * k, H * 0.72), EH = EW * 170 / 380, ex = clamp(bx1 + (bx1 < W / 2 ? 1 : -1) * (0.6 * Sb + EW * 0.55), EW * 0.55, W - EW * 0.55), ey = Math.max(lanBot + EH * 0.62 + 10 * k, H * 0.28);
+        const shat = clamp((T - 3.8) / 0.38), FB = 2.88;
+        const bigState = (fb) => {
+          const st = { x: bx0, y: gyb, th: 0, pose: KPOSE.crouch };
+          if (fb >= 0.22 && fb < 0.52) {
+            const q = (fb - 0.22) / 0.3; st.x = bx0 + (bx1 - bx0) * smooth(q); st.y = gyb - Math.sin(Math.PI * q) * (gyb - apex);
+            st.th = Math.atan2(Math.PI * Math.cos(Math.PI * q) * (gyb - apex), Math.max(1, Math.abs(bx1 - bx0))) * 0.5;
+            st.pose = q < 0.5 ? mixPose(gallop(0.75), KPOSE.leap, smooth(q / 0.5)) : mixPose(KPOSE.leap, KGAL[1], smooth((q - 0.5) / 0.5));
+          } else if (fb >= 0.52) { const q = fb - 0.52; st.x = bx1 + bdir * 0.06 * Sb * ease(q / 0.2); st.pose = mixPose(KGAL[1], KPOSE.sit, smooth(clamp(q / 0.16))); if (q > 0.1) st.pose = Object.assign({}, st.pose, { look: -1, hd: [-6, -46] }); }   // 落地坐下、回頭望天眼
+          return st;
+        };
+
+        if (T < 0.5) skyEyeShards();   // 天眼碎片趁開場先切好（只切一次），免得終幕卡一下
+        ctx.save(); ctx.globalAlpha *= A; const A0 = ctx.globalAlpha;
+        // 夜色：墨青，天眼睜開時再沉一點
+        ctx.globalAlpha = A0 * (0.3 * ease(T / 0.3) + 0.1 * clamp((T - 3.3) / 0.2)); ctx.fillStyle = '#04111A'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = A0;
+
+        // 命燈
         for (let i = 0; i < 9; i++) {
-          const side = i % 2 ? 1 : -1, reach = (0.25 + (i / 9) * 0.75) * Math.max(P.x, W - P.x);
-          const ph = clamp((u - i * 0.07) / (D - 1.1)) * TAU, off = Math.sin(ph) * reach * side, dir = Math.cos(ph) * side >= 0 ? 1 : -1;
-          const x = P.x + off, hop = Math.abs(Math.sin(u * 9 + i)) * 24 * k, S = (92 + (i % 3) * 10) * k, y = P.ground - S * 0.42 - hop;
-          const fade = 1 - clamp((u - (D - 1.1)) / 0.4);
-          if (fade <= 0) continue;
-          for (let j = 2; j >= 1; j--) drawShards(ctx, LO, x - dir * j * 42 * k, y, S, { flip: dir < 0, alpha: fade * 0.14 * (3 - j), color: '#A9A7BC', gap: 0 });
-          drawShards(ctx, CAT, x, y, S, { flip: dir < 0, alpha: fade * 0.92 });
-          ctx.globalAlpha = A * fade; ctx.fillStyle = '#F5B82E';
-          const ex = x + dir * 0.52 * S, ey = y - 0.12 * S; ctx.beginPath(); ctx.moveTo(ex - dir * 4 * k, ey - 3 * k); ctx.lineTo(ex + dir * 5 * k, ey); ctx.lineTo(ex - dir * 4 * k, ey + 3 * k); ctx.closePath(); ctx.fill();
-          for (let j = 0; j < 3; j++) { const q = ((u * 2.4 + i * 0.37 + j / 3) % 1); ctx.globalAlpha = A * fade * (1 - q) * 0.8; tri(ctx, x - dir * (20 + q * 70) * k, P.ground - 6 * k - q * 30 * k, (5 + j * 2) * k, q * 5 + i, i * 7 + j, j % 2 ? '#F5B82E' : '#8C8AA0'); }
-          ctx.globalAlpha = A;
+          const c = cats[i], [lx, ly] = lan(i), lit = ease((T - c.t0) / 0.16);
+          const fl = Math.max(clamp(1 - Math.abs(T - (c.t0 + 0.84)) / 0.12), 0.7 * clamp(1 - Math.abs(T - (2.66 + 0.028 * i)) / 0.09));
+          if (shat < 1) { ctx.globalAlpha = A0 * (1 - shat); lifeLantern(ctx, lx, ly, LR, lit, fl, T, i); }
+          ctx.globalAlpha = A0; spray(ctx, lx, ly, shat, 9, 80 * k, 500 + i * 17, KGOLD, { size: 7 * k, fall: 50 * k });
         }
-        // 終幕：巨大貓影從角色身後躍過，到最高點碎開
-        const f = (u - (D - 1.25)) / 1.15;
-        if (f > 0 && f < 1) {
-          const dir = P.x < W / 2 ? 1 : -1, S = 300 * k, x = P.x + dir * (f - 0.35) * 620 * k, y = P.y - 120 * k - Math.sin(clamp(f / 0.7) * Math.PI) * 140 * k;
-          const sc = clamp((f - 0.45) / 0.55);
-          drawShards(ctx, CAT, x, y, S, { flip: dir < 0, rot: -0.2 * dir + f * 0.3 * dir, scatter: sc, spread: 1.6, lift: 0.2, alpha: Math.min(1, f * 5) * 0.9 });
-          if (sc > 0 && root.drawHexBurst) root.drawHexBurst(ctx, x, y, 260 * k, sc, { palette: 'mojin', alpha: 0.85 });
+
+        // 天上的大貓眼
+        const eo = ease((T - 3.36) / 0.16);
+        if (eo > 0) {
+          const blink = clamp(1 - Math.abs(T - 3.68) / 0.06), open = eo * (1 - 0.97 * blink), slit = ease((T - 3.42) / 0.18);
+          ctx.globalAlpha = A0 * 0.6 * eo * (1 - shat); brokenRing(ctx, ex, ey, EW * 0.6, 12, T * 0.35, 0.5, '#E9A21E', 2.5 * k, 0.04 + shat * 0.3);
+          ctx.globalAlpha = A0 * 0.35 * eo * (1 - shat); brokenRing(ctx, ex, ey, EW * 0.7, 12, -T * 0.25 + 0.13, 0.46, '#6FA3A8', 1.5 * k, 0.04);
+          ctx.globalAlpha = A0; spray(ctx, ex, ey, (T - 3.36) / 0.5, 18, EW * 0.65, 777, KGOLD, { size: 8 * k });
+          if (shat <= 0) skyEye(ctx, ex, ey, EW, EH, open, slit);
+          else drawShards(ctx, skyEyeShards(), ex, ey, EH * 200 / 170, { scatter: shat, spread: 1.5, lift: 0.1, seed: 9, gap: Math.max(1.2, EH * 0.012) });
+        }
+
+        // 肉球腳印（跑步時一路蓋下，起跳時一對）
+        for (const c of cats) {
+          for (let j = 0; j < 5; j++) {
+            const tj = j < 4 ? 0.04 + j * 0.065 : RUN, age = T - c.t0 - tj; if (age < 0 || age > 0.8) continue;
+            const st = stateOf(c, tj), pop = 1 + 0.5 * Math.max(0, 1 - age / 0.07);
+            ctx.globalAlpha = A0 * (1 - age / 0.8) * 0.9;
+            pawHex(ctx, st.x + c.d * (j % 2 ? 0.3 : -0.16) * c.S, P.ground + (j % 2 ? 3 : -3) * k, 0.062 * c.S * pop, c.d * Math.PI / 2, 0.5, '#C98896', '#E2A9B4');
+          }
+        }
+        const fbL = T - FB - 0.52;
+        if (fbL > 0 && fbL < 0.9) { ctx.globalAlpha = A0 * (1 - fbL / 0.9) * (1 - shat); for (const s of [-1, 1]) pawHex(ctx, bx1 + bdir * (0.1 + s * 0.22) * Sb, P.ground + s * 4 * k, 0.055 * Sb, bdir * Math.PI / 2, 0.5, KGOLD[2], KGOLD[1]); }
+
+        // 開場：九對眼睛在拱上依序睜開；輪到那隻貓時，那對眼睛滑到牠臉上
+        for (const c of cats) {
+          const e0 = 0.02 + 0.034 * c.i, t = T - c.t0; if (T < e0 || t > 0.16) continue;
+          const st = stateOf(c, 0), E = eyesOf(c.B, st, c.S, c.d), mx = (E[0].x + E[1].x) / 2, my = (E[0].y + E[1].y) / 2;
+          const g = ease(clamp((t + 0.14) / 0.22)), m = 1.6 - 0.6 * g;
+          ctx.globalAlpha = A0 * (1 - clamp((t - 0.06) / 0.1));
+          E.forEach((e) => { const ox = (e.x - mx) * m, oy = (e.y - my) * m, x = c.K[0] + ox + (e.x - c.K[0] - ox) * g, y = c.K[1] + oy + (e.y - c.K[1] - oy) * g; gemEye(ctx, x, y, e.r * m, e.col, ease((T - e0) / 0.1), ease((T - e0 - 0.08) / 0.3) * 0.9, 1); });
+        }
+        ctx.globalAlpha = A0;
+
+        // 九隻貓
+        for (const c of cats) {
+          const t = T - c.t0; if (t < 0 || t > 0.82) continue;
+          const st = stateOf(c, t);
+          drawCat(ctx, c.B, st.pose, st.x, st.y, c.S, c.d, st.th, { a: st.a, d: st.d, to: lan(c.i), glow: clamp(1 - t / 0.3) * 0.8, seed: c.i });
+        }
+        // 爪痕
+        for (const c of cats) clawWedges(ctx, c.K[0], c.K[1], Math.atan2(1, -c.d * 0.5), 0.42 * c.S, T - c.t0 - HIT, c.i + 1);
+
+        // 終幕：九盞燈的光流下來，拼成金色大貓
+        const tx = bx0, ty = gyb - 0.15 * Sb;
+        for (let i = 0; i < 9; i++) {
+          const [lx, ly] = lan(i), kx = (lx + tx) / 2, ky = ly + (ty - ly) * 0.15;
+          for (let j = 0; j < 7; j++) {
+            const q = ease(clamp((T - 2.74 - i * 0.012 - j * 0.02) / 0.3)); if (q <= 0 || q >= 1) continue;
+            const m = 1 - q, x = m * m * lx + 2 * m * q * kx + q * q * tx, y = m * m * ly + 2 * m * q * ky + q * q * ty;
+            ctx.globalAlpha = A0 * (0.5 + 0.5 * (1 - q)); tri(ctx, x, y, (9 - j * 0.7) * k, T * 9 + j + i, i * 30 + j, KGOLD[(i + j) % 4]);
+          }
+        }
+        ctx.globalAlpha = A0;
+        const fb = T - FB;
+        if (fb > 0) {
+          const st = bigState(fb);
+          drawCat(ctx, BREEDS[9], st.pose, st.x, st.y, Sb, bdir, st.th, { a: clamp(fb / 0.28), e: shat, glow: 0.5, slit: fb > 0.52 ? 0.3 + 0.6 * clamp((T - 3.42) / 0.2) : 0.85, seed: 3 });
+          if (shat > 0 && root.drawHexBurst) root.drawHexBurst(ctx, st.x, st.y - 0.15 * Sb, 240 * k, shat, { palette: 'qingci', alpha: 0.8 });
         }
         ctx.restore();
       },
@@ -3883,7 +4204,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
   const cur = { sp: 'fox', realm: 4, hat: 'mask', robe: 'fei', gear: 'fan', state: 'idle', t0: 0, until: 0, move: '', bubble: null, look: { x: 0, y: 0 } };
   const ACTS = [
     ['摸頭', 'happy', 1.4, 0], ['笑穴', 'laugh', 2.4, 0], ['打坐', 'sleep', 5, 0], ['打太極', 'taichi', 5, 0],
-    ['御劍飛行', 'roll', 5, 2], ['比劍', 'sword', 4, 0], ['比法術', 'spell', 4, 0], ['喝口水', 'drink', 4, 0],
+    ['御劍飛行', 'roll', 5, 2], ['比劍', 'sword', 4, 0], ['喝口水', 'drink', 4, 0],
     ['求一卦', 'divine', 4, 0], ['轉暈了', 'dizzy', 2.6, 0], ['絕技', 'sig', 3.2, 2], ['奧義', 'ult', 4.2, 6],
     ['偷偷變身', 'disguise', 25, 0, 'fox'], ['修煉狐火', 'foxtrain', 15, 0, 'fox'], ['御劍穿火', 'foxride', 6, 2, 'fox'],
   ];
@@ -3930,7 +4251,7 @@ footer { padding-block: 48px 36px; color: var(--ink-soft); font-size: 14px; text
     if (key === 'sig' || key === 'ult') { const s = SK[cur.sp][key === 'sig' ? 0 : 1]; cur.state = 'strike'; cur.move = s[0];
       cur.until = T + (key === 'ult' ? 4.2 : 2.3); playStageFx(s[0], key === 'ult' ? 4200 : 2300); cur.bubble = { text: s[1] + '！', at: T }; sayEl.textContent = `${key === 'sig' ? '絕技' : '奧義'}「${s[1]}」。在桌面上${key === 'ult' ? '用滑鼠中鍵點牠' : '雙擊牠'}施展，特效會蓋滿整個螢幕。`; return; }
     cur.state = key; cur.move = ''; cur.bubble = { text: text || SAY[key](), at: T };
-    sayEl.textContent = { happy: '在桌面上點一下就是摸頭，修為 +2。', laugh: '每位都藏一個笑穴，點到會笑到打滾。', sleep: '你離開座位時牠會自己閉關修煉。', taichi: '坐太久了，牠打一套太極叫你起來。', roll: '在桌面上滾滾輪，牠就御劍追著游標飛。', sword: '在牠身上來回揮滑鼠就是比劍，手上會換成劍。', spell: '快速連點五下就是比法術，手上換成黃符。', drink: '每用電腦一小時，牠喝一口，提醒你喝水。', divine: '每天一卦，搖三枚銅錢起易經卦象。', dizzy: '甩太大力，牠會轉暈。' }[key] || '';
+    sayEl.textContent = { happy: '在桌面上點一下就是摸頭，修為 +2。', laugh: '每位都藏一個笑穴，點到會笑到打滾。', sleep: '你離開座位時牠會自己閉關修煉。', taichi: '坐太久了，牠打一套太極叫你起來。', roll: '在桌面上滾滾輪，牠就御劍追著游標飛。', sword: '在牠身上來回揮滑鼠就是比劍，手上會換成劍。', drink: '每用電腦一小時，牠喝一口，提醒你喝水。', divine: '每天一卦，搖三枚銅錢起易經卦象。', dizzy: '甩太大力，牠會轉暈。' }[key] || '';
   }
   let puffAt = -9; function puff(T) { puffAt = T; }
   const stageFires = Array.from({ length: 9 }, (_, i) => ({ x: 20 + (i * 37) % 170, ph: i * 0.7 }));
